@@ -1,4 +1,3 @@
-# %%
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -8,7 +7,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from collections import defaultdict
 from model_cnnlstm import CNN_LSTM
 
-# %%
+
 # Load .pkl data
 # Paths to .pkl files
 X_path = "./dataset/pkl_data/DX_I_X.pkl"
@@ -61,7 +60,7 @@ class IMUDataset(Dataset):
 dataset = IMUDataset(X, Y)
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-# %%
+
 def train_model(model, train_loader, criterion, optimizer, device, epoch, num_epochs):
     model.train()
     running_loss = 0.0
@@ -224,7 +223,7 @@ def loso_cross_validation(X, Y, config):
 
     return all_metrics
 
-# %%
+
 # Configuration parameters
 config = {
     "sequence_length": 128,
