@@ -6,7 +6,7 @@
 
 **Promotor**: Bart Vanrumste
 
-**Institution**: Group T, KU Leuven  
+**Institution**: KU Leuven  
 
 ## Project Overview
 This repository contains the code and resources for the master's thesis project titled: *"A Generic AI-Based Framework for IMU-Based Food Intake Gesture Detection."*
