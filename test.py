@@ -1,80 +1,130 @@
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, random_split
 import numpy as np
+import pickle
 import matplotlib.pyplot as plt
-from evaluation_function import segment_f1_drinking
+from model_mstcn import MSTCN
+from utils import IMUDataset, segment_f1_drinking
 
-def generate_test_data(num_samples=5):
-    """
-    Generate test data for segment_f1 function.
-    
-    Each sample is a sequence of labels where:
-    0 = Background
-    1 = Drinking
-    
-    Parameters:
-    -----------
-    num_samples : int, optional (default=5)
-        Number of samples to generate
-    
-    Returns:
-    --------
-    y_pre_list : list of numpy arrays
-        Predicted labels
-    y_gt_list : list of numpy arrays
-        Ground truth labels
-    """
-    y_pre_list = []
-    y_gt_list = []
-    
-    for _ in range(num_samples):
-        # Sample length between 50 and 200
-        sample_length = np.random.randint(5000, 20001)
-        
-        # Ground truth labels
-        y_true = np.zeros(sample_length, dtype=int)
-        
-        # Generate drinking segments
-        num_drink_segments = np.random.randint(0, 2)
-        for _ in range(num_drink_segments):
-            drink_start = np.random.randint(0, sample_length - 10)
-            drink_length = np.random.randint(5, 16)
-            # Ensure no overlap with eating segments
-            if np.all(y_true[drink_start:drink_start + drink_length] == 0):
-                y_true[drink_start:drink_start + drink_length] = 2
-        
-        # Predicted labels (with some intentional errors)
-        y_pred = y_true.copy()
-        
-        # Introduce some false positives and false negatives
-        error_rate = 0.1
-        noise_mask = np.random.random(sample_length) < error_rate
-        y_pred[noise_mask] = np.random.choice([0, 1], size=np.sum(noise_mask))
-        
-        y_pre_list.append(y_pred)
-        y_gt_list.append(y_true)
-    
-    return y_pre_list, y_gt_list
+# Hyperparameters
+num_stages = 2
+num_layers = 9
+num_classes = 2
+input_dim = 6
+num_filters = 128
+kernel_size = 3
+dropout = 0.3
+lambda_coef = 0.15
+tau = 4
 
-# Example usage
-y_pre_list, y_gt_list = generate_test_data(num_samples=5)
+# Load data
+X_path = "./dataset/pkl_data/DX_I_X.pkl"
+Y_path = "./dataset/pkl_data/DX_I_Y.pkl"
+with open(X_path, "rb") as f:
+    X = pickle.load(f)
+with open(Y_path, "rb") as f:
+    Y = pickle.load(f)
 
+# Prepare datasets
+full_dataset = IMUDataset(X, Y)
+print(f"Dataset size: {len(full_dataset)}")
+train_size = int(0.7 * len(full_dataset))
+val_size = int(0.15 * len(full_dataset))
+test_size = len(full_dataset) - train_size - val_size
 
-def plot_test_data(y_pre_list, y_gt_list):
-    fig, axs = plt.subplots(len(y_pre_list), 2, figsize=(12, 3*len(y_pre_list)))
-    
-    for i, (y_pred, y_true) in enumerate(zip(y_pre_list, y_gt_list)):
-        axs[i, 0].imshow(y_true.reshape(1, -1), aspect='auto', cmap='viridis')
-        axs[i, 0].set_title(f'Ground Truth Sample {i+1}')
-        axs[i, 0].set_yticks([])
+train_dataset, val_dataset, test_dataset = random_split(full_dataset, [train_size, val_size, test_size])
+
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+# Device configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Testing model
+model = MSTCN(num_stages=num_stages, num_layers=num_layers, 
+                      num_classes=num_classes, input_dim=input_dim, 
+                      num_filters=num_filters, kernel_size=kernel_size, 
+                      dropout=dropout)
+model.load_state_dict(torch.load("models/mstcn_model.pth", weights_only=True))
+model.to(device)
+model.eval()
+all_predictions = []
+all_labels = []
+with torch.no_grad():
+    for i, (batch_x, batch_y) in enumerate(test_loader):
+        batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
         
-        axs[i, 1].imshow(y_pred.reshape(1, -1), aspect='auto', cmap='viridis')
-        axs[i, 1].set_title(f'Predicted Sample {i+1}')
-        axs[i, 1].set_yticks([])
-    
-    plt.tight_layout()
-    plt.show()
+        # Get the outputs from the model
+        outputs = model(batch_x)
 
-# Uncomment to visualize the test data
-plot_test_data(y_pre_list, y_gt_list)
+        # Use the output from the last stage
+        final_output = outputs[-1]  # Assuming we want to use the last stage's output
+        
+        # Convert logits to probabilities using softmax
+        probabilities = F.softmax(final_output, dim=1)  # Shape: [batch_size, num_classes, seq_len]
 
-# Evaluate the test data
-segment_f1_drinking(y_pre_list, y_gt_list)
+        # Get the predicted class (class with the highest probability)
+        predicted_classes = torch.argmax(probabilities, dim=1)  # Shape: [batch_size, seq_len]
+
+        # Move predictions and true labels to CPU for evaluation and flatten the arrays
+        all_predictions.append(predicted_classes.cpu().numpy().flatten())
+        all_labels.append(batch_y.cpu().numpy().flatten().astype(int))
+
+# Calculate the precision, recall, and F1 score
+fp = 0
+fn = 0
+tp = 0
+for i in range(len(all_predictions)):
+    fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
+    fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
+    tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
+precision = tp / (tp + fp)
+recall = tp / (tp + fn)
+f1 = 2 * precision * recall / (precision + recall)
+print(f"Test - Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}")
+
+segment_metrics = segment_f1_drinking(all_predictions, all_labels)
+print(f"Test - F1 (Segment): {segment_metrics}")
+
+# Test model with augmentation
+model.load_state_dict(torch.load("models/mstcn_model_aug.pth", weights_only=True))
+model.eval()
+all_predictions = []
+all_labels = []
+with torch.no_grad():
+    for i, (batch_x, batch_y) in enumerate(test_loader):
+        batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
+        
+        # Get the outputs from the model
+        outputs = model(batch_x)
+
+        # Use the output from the last stage
+        final_output = outputs[-1]  # Assuming we want to use the last stage's output
+        
+        # Convert logits to probabilities using softmax
+        probabilities = F.softmax(final_output, dim=1)  # Shape: [batch_size, num_classes, seq_len]
+
+        # Get the predicted class (class with the highest probability)
+        predicted_classes = torch.argmax(probabilities, dim=1)  # Shape: [batch_size, seq_len]
+
+        # Move predictions and true labels to CPU for evaluation and flatten the arrays
+        all_predictions.append(predicted_classes.cpu().numpy().flatten())
+        all_labels.append(batch_y.cpu().numpy().flatten().astype(int))
+
+# Calculate the precision, recall, and F1 score
+fp = 0
+fn = 0
+tp = 0
+for i in range(len(all_predictions)):
+    fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
+    fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
+    tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
+precision = tp / (tp + fp)
+recall = tp / (tp + fn)
+f1 = 2 * precision * recall / (precision + recall)
+print(f"Test (Augmented) - Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}")
+
+segment_metrics = segment_f1_drinking(all_predictions, all_labels)
+print(f"Test (Augmented) - F1 (Segment): {segment_metrics}")

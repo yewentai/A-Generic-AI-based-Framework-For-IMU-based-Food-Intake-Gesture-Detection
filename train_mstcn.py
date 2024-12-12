@@ -3,9 +3,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 import numpy as np
 import pickle
+import matplotlib.pyplot as plt
 from model_mstcn import MSTCN, MSTCN_Loss
 from utils import IMUDataset, segment_f1_drinking
-import matplotlib.pyplot as plt
+from augmentation import augment_orientation
 
 # Hyperparameters
 num_stages = 2
@@ -66,6 +67,10 @@ for epoch in range(num_epochs):
     model.train()
     training_loss = 0.0
     for i, (batch_x, batch_y) in enumerate(train_loader):
+
+        # Data augmentation
+        batch_x = augment_orientation(batch_x)
+
         batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
         optimizer.zero_grad()
         
@@ -114,7 +119,7 @@ for epoch in range(num_epochs):
         best_f1 = current_f1
         best_model_state = model.state_dict()
         print("Saving the best model...")
-        torch.save(best_model_state, "models/mstcn_model.pth")
+        torch.save(best_model_state, "models/mstcn_model_aug.pth")
 
 # Save the loss curve
 plt.figure(figsize=(10, 6))

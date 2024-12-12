@@ -167,11 +167,7 @@ def segment_f1_drinking(y_pre_list, y_gt_list):
             t_p_d = num_true_id_drink - FN_d_thre[i]
         else:
             t_p_d = (num_true_id_drink - FN_d_thre[i-1]) - (FN_d_thre[i] - FN_d_thre[i-1]) - (FP_d_thre[i] - FP_d_thre[i-1])
-        # avoid division by zero
-        if 2 * t_p_d + FN_d_thre[i] + FP_d_thre[i] == 0:
-            f1_d = 0
-        else:
-            f1_d = 2 * t_p_d / (2 * t_p_d + FN_d_thre[i] + FP_d_thre[i])
+        f1_d = 2 * t_p_d / (2 * t_p_d + FN_d_thre[i] + FP_d_thre[i])
         TP_d_thre.append(t_p_d)
         F1_d_thre.append(f1_d)
         total_d_FN.append(sum(FN_d_thre[i]))

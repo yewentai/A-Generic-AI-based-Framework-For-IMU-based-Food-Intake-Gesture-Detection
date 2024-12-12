@@ -30,12 +30,15 @@ def augment_orientation(batch_x, probability=0.5):
             Q_z = rotation_matrix_z(theta_z)
 
             # Randomly choose transformation
-            transformation = np.random.choice([
-                Q_x,
-                Q_z,
-                np.dot(Q_x, Q_z),
-                np.dot(Q_z, Q_x)
-            ])
+            transformation_choice = np.random.choice([0, 1, 2, 3])
+            if transformation_choice == 0:
+                transformation = Q_x
+            elif transformation_choice == 1:
+                transformation = Q_z
+            elif transformation_choice == 2:
+                transformation = np.dot(Q_x, Q_z)
+            else:
+                transformation = np.dot(Q_z, Q_x)
 
             # Create the full transformation matrix
             full_transformation = np.block([
@@ -45,7 +48,7 @@ def augment_orientation(batch_x, probability=0.5):
 
             # Apply transformation
             augmented_batch[i] = torch.tensor(
-                np.dot(full_transformation, augmented_batch[i].T).T,
+                np.dot(full_transformation, augmented_batch[i].numpy().T).T,
                 dtype=torch.float32
             )
 
