@@ -1,130 +1,120 @@
-import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, random_split
 import numpy as np
-import pickle
 import matplotlib.pyplot as plt
-from model_mstcn import MSTCN
-from utils import IMUDataset, segment_f1_drinking
 
-# Hyperparameters
-num_stages = 2
-num_layers = 9
-num_classes = 2
-input_dim = 6
-num_filters = 128
-kernel_size = 3
-dropout = 0.3
-lambda_coef = 0.15
-tau = 4
-
-# Load data
-X_path = "./dataset/pkl_data/DX_I_X.pkl"
-Y_path = "./dataset/pkl_data/DX_I_Y.pkl"
-with open(X_path, "rb") as f:
-    X = pickle.load(f)
-with open(Y_path, "rb") as f:
-    Y = pickle.load(f)
-
-# Prepare datasets
-full_dataset = IMUDataset(X, Y)
-print(f"Dataset size: {len(full_dataset)}")
-train_size = int(0.7 * len(full_dataset))
-val_size = int(0.15 * len(full_dataset))
-test_size = len(full_dataset) - train_size - val_size
-
-train_dataset, val_dataset, test_dataset = random_split(full_dataset, [train_size, val_size, test_size])
-
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-
-# Device configuration
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Testing model
-model = MSTCN(num_stages=num_stages, num_layers=num_layers, 
-                      num_classes=num_classes, input_dim=input_dim, 
-                      num_filters=num_filters, kernel_size=kernel_size, 
-                      dropout=dropout)
-model.load_state_dict(torch.load("models/mstcn_model.pth", weights_only=True))
-model.to(device)
-model.eval()
-all_predictions = []
-all_labels = []
-with torch.no_grad():
-    for i, (batch_x, batch_y) in enumerate(test_loader):
-        batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
+def nonzero_intervals(x):
+    """Extract start and end indices of nonzero intervals."""
+    # Find the indices where the segments change
+    idxs = np.array([0] + (np.nonzero(np.diff(x))[0] + 1).tolist() + [len(x)])
+    
+    # Prepare a list to collect results
+    results = []
+    
+    # Iterate through segments and find those with non-zero labels
+    for i in range(len(idxs) - 1):
+        start_idx = idxs[i]
+        end_idx = idxs[i + 1] - 1
         
-        # Get the outputs from the model
-        outputs = model(batch_x)
+        # Add the start index and end index
+        results.append([start_idx, end_idx])
+    
+    # Convert the results list to a NumPy array
+    return np.array(results, dtype=int)
+    
 
-        # Use the output from the last stage
-        final_output = outputs[-1]  # Assuming we want to use the last stage's output
+def segment_f1_binary(pred, gt, threshold=0.5):
+    f_n, f_p, t_p = 0, 0, 0
+    union = np.logical_or(pred, gt).astype(int)
+    union_intervals = nonzero_intervals(union)
+
+    for start_idx, end_idx in union_intervals:
+        # Find the corresponding intervals in the ground truth and prediction
+        gt_interval = nonzero_intervals(gt[start_idx:end_idx + 1])
+        pred_interval = nonzero_intervals(pred[start_idx:end_idx + 1])
         
-        # Convert logits to probabilities using softmax
-        probabilities = F.softmax(final_output, dim=1)  # Shape: [batch_size, num_classes, seq_len]
+        # Adjust intervals to be relative to the current union interval
+        gt_interval = gt_interval + start_idx
+        pred_interval = pred_interval + start_idx
 
-        # Get the predicted class (class with the highest probability)
-        predicted_classes = torch.argmax(probabilities, dim=1)  # Shape: [batch_size, seq_len]
+        # Process ground truth intervals
+        for gt_start, gt_end in gt_interval:
+            matched = False
+            for pred_start, pred_end in pred_interval:
+                intersection = min(gt_end, pred_end) - max(gt_start, pred_start) + 1
+                union = max(gt_end, pred_end) - min(gt_start, pred_start) + 1
+                iou = intersection / union
 
-        # Move predictions and true labels to CPU for evaluation and flatten the arrays
-        all_predictions.append(predicted_classes.cpu().numpy().flatten())
-        all_labels.append(batch_y.cpu().numpy().flatten().astype(int))
+                if iou >= threshold:
+                    t_p += 1
+                    matched = True
+                    break
+            
+            if not matched:
+                f_n += 1
 
-# Calculate the precision, recall, and F1 score
-fp = 0
-fn = 0
-tp = 0
-for i in range(len(all_predictions)):
-    fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
-    fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
-    tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
+        # Process prediction intervals
+        for pred_start, pred_end in pred_interval:
+            matched = False
+            for gt_start, gt_end in gt_interval:
+                intersection = min(gt_end, pred_end) - max(gt_start, pred_start) + 1
+                union = max(gt_end, pred_end) - min(gt_start, pred_start) + 1
+                iou = intersection / union
+
+                if iou >= threshold:
+                    matched = True
+                    break
+            
+            if not matched:
+                f_p += 1
+
+    # Calculate F1 score
+    precision = t_p / (t_p + f_p) if (t_p + f_p) > 0 else 0
+    recall = t_p / (t_p + f_n) if (t_p + f_n) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return f1
+        
+
+# Generate two random 0-1 sequences
+np.random.seed(7)  # for reproducibility
+length = 100
+gt = np.random.randint(0, 2, length)
+pred = np.random.randint(0, 2, length)
+
+# Calculate segement F1 score
+f1_score_seg_1 = segment_f1_binary(pred, gt, threshold=0.1)
+print(f"F1 Score (Segment) with threshold 0.1: {f1_score_seg_1:.4f}")
+f1_score_seg_2 = segment_f1_binary(pred, gt, threshold=0.5)
+print(f"F1 Score (Segment) with threshold 0.5: {f1_score_seg_2:.4f}")
+f1_score_seg_3 = segment_f1_binary(pred, gt, threshold=0.9)
+print(f"F1 Score (Segment) with threshold 0.9: {f1_score_seg_3:.4f}")
+
+
+# Calculate sample F1 score
+tp = np.sum((pred == 1) & (gt == 1))
+fp = np.sum((pred == 1) & (gt == 0))
+fn = np.sum((pred == 0) & (gt == 1))
 precision = tp / (tp + fp)
 recall = tp / (tp + fn)
-f1 = 2 * precision * recall / (precision + recall)
-print(f"Test - Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}")
+f1_score_sample = 2 * precision * recall / (precision + recall)
+print(f"F1 Score (Sample): {f1_score_sample:.4f}")
 
-segment_metrics = segment_f1_drinking(all_predictions, all_labels)
-print(f"Test - F1 (Segment): {segment_metrics}")
+# Plot the sequences in separate plots
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
-# Test model with augmentation
-model.load_state_dict(torch.load("models/mstcn_model_aug.pth", weights_only=True))
-model.eval()
-all_predictions = []
-all_labels = []
-with torch.no_grad():
-    for i, (batch_x, batch_y) in enumerate(test_loader):
-        batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
-        
-        # Get the outputs from the model
-        outputs = model(batch_x)
+# Plot predictions
+ax1.step(range(len(pred)), pred, where='post', label='Predictions', color='red')
+ax1.set_ylabel('State')
+ax1.set_ylim(-0.1, 1.1)
+ax1.legend()
+ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-        # Use the output from the last stage
-        final_output = outputs[-1]  # Assuming we want to use the last stage's output
-        
-        # Convert logits to probabilities using softmax
-        probabilities = F.softmax(final_output, dim=1)  # Shape: [batch_size, num_classes, seq_len]
+# Plot ground truth (labels)
+ax2.step(range(len(gt)), gt, where='post', label='Labels', color='blue')
+ax2.set_xlabel('Time')
+ax2.set_ylabel('State')
+ax2.set_ylim(-0.1, 1.1)
+ax2.legend()
+ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-        # Get the predicted class (class with the highest probability)
-        predicted_classes = torch.argmax(probabilities, dim=1)  # Shape: [batch_size, seq_len]
-
-        # Move predictions and true labels to CPU for evaluation and flatten the arrays
-        all_predictions.append(predicted_classes.cpu().numpy().flatten())
-        all_labels.append(batch_y.cpu().numpy().flatten().astype(int))
-
-# Calculate the precision, recall, and F1 score
-fp = 0
-fn = 0
-tp = 0
-for i in range(len(all_predictions)):
-    fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
-    fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
-    tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
-precision = tp / (tp + fp)
-recall = tp / (tp + fn)
-f1 = 2 * precision * recall / (precision + recall)
-print(f"Test (Augmented) - Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}")
-
-segment_metrics = segment_f1_drinking(all_predictions, all_labels)
-print(f"Test (Augmented) - F1 (Segment): {segment_metrics}")
+plt.tight_layout()
+plt.show()

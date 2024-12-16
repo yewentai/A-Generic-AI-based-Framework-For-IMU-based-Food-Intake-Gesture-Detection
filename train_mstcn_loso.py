@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader, Subset
 import numpy as np
 import pickle
 from model_mstcn import MSTCN, MSTCN_Loss
-from utils import IMUDataset, segment_f1_drinking
+from utils import IMUDataset, segment_f1_binary
 import matplotlib.pyplot as plt
 
 # Hyperparameters
@@ -96,13 +96,41 @@ for fold, test_subject in enumerate(unique_subjects):
             final_output = outputs[-1]
             probabilities = F.softmax(final_output, dim=1)
             predicted_classes = torch.argmax(probabilities, dim=1)
-            all_predictions.extend(predicted_classes.cpu().numpy())
-            all_labels.extend(batch_y.cpu().numpy())
+            all_predictions.extend(predicted_classes.view(-1).cpu().numpy())
+            all_labels.extend(batch_y.view(-1).cpu().numpy())
+    all_predictions = np.array(all_predictions)
+    all_labels = np.array(all_labels)
+
+    # Plot the sequences in separate plots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    # Plot predictions
+    ax1.step(range(len(all_predictions)), all_predictions, where='post', label='Predictions', color='red')
+    ax1.set_ylabel('State')
+    ax1.set_ylim(-0.1, 1.1)
+    ax1.legend()
+    ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
+    # Plot ground truth (labels)
+    ax2.step(range(len(all_labels)), all_labels, where='post', label='Labels', color='blue')
+    ax2.set_xlabel('Time')
+    ax2.set_ylabel('State')
+    ax2.set_ylim(-0.1, 1.1)
+    ax2.legend()
+    ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.tight_layout()
+    plt.savefig(f"figs/result_{fold + 1}.png")
 
     # Calculate metrics
-    segment_metrics = segment_f1_drinking(all_predictions, all_labels)
-    print(f"Fold {fold + 1} - F1 (Segment): {segment_metrics}")
-    loso_f1_scores.append(segment_metrics[-1])  # Using the last F1 score (0.75 overlap)
+    fp, fn, tp = 0, 0, 0
+    for i in range(len(all_predictions)):
+        fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
+        fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
+        tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    f1_sample = 2 * precision * recall / (precision + recall)
+    f1_segment = segment_f1_binary(all_predictions, all_labels)
+    print(f"Fold {fold + 1} - F1 (Segment): {f1_segment} - F1 (Sample): {f1_sample:.4f}")
+    loso_f1_scores.append(f1_segment)  # Using the last F1 score (0.75 overlap)
 
 # Print overall results
 print("\nLOSO Cross-Validation Results:")
