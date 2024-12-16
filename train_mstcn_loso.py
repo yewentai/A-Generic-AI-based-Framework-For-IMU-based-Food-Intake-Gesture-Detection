@@ -19,7 +19,7 @@ dropout = 0.3
 lambda_coef = 0.15
 tau = 4
 learning_rate = 0.0005
-debug_plot = False
+debug_plot = True
 
 # Load data
 X_path = "./dataset/pkl_data/DX_I_X.pkl"
@@ -69,6 +69,9 @@ for fold, test_subject in enumerate(unique_subjects):
     best_f1 = 0.0
     best_model_state = None
 
+    if fold != 6:
+        continue
+
     for epoch in range(num_epochs):
         model.train()
         training_loss = 0.0
@@ -115,11 +118,9 @@ for fold, test_subject in enumerate(unique_subjects):
     precision = tp / (tp + fp)
     recall = tp / (tp + fn)
     f1_sample = 2 * precision * recall / (precision + recall)
-    if fold == 1:
-        debug_plot = True
-    f1_segment_1 = segment_f1_binary(all_predictions, all_labels, 0.1, debug_plot)
-    f1_segment_2 = segment_f1_binary(all_predictions, all_labels, 0.25, debug_plot)
-    f1_segment_3 = segment_f1_binary(all_predictions, all_labels, 0.5, debug_plot)
+    f1_segment_1 = segment_f1_binary(all_predictions, all_labels, 0.1, debug_plot, fold)
+    f1_segment_2 = segment_f1_binary(all_predictions, all_labels, 0.25, debug_plot, fold)
+    f1_segment_3 = segment_f1_binary(all_predictions, all_labels, 0.5, debug_plot, fold)
     print(f"Fold {fold + 1} - F1 (Sample): {f1_sample:.4f}")
     print(f"Fold {fold + 1} - F1 (Segment 0.1): {f1_segment_1:.4f}")
     print(f"Fold {fold + 1} - F1 (Segment 0.25): {f1_segment_2:.4f}")

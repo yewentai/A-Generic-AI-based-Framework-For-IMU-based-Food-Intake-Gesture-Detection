@@ -206,7 +206,7 @@ def nonzero_intervals(x):
     return np.array(results, dtype=int)
     
 
-def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
+def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False, fold=0):
     f_n, f_p, t_p = 0, 0, 0
     union = np.logical_or(pred, gt).astype(int)
     union_intervals = nonzero_intervals(union)
@@ -307,6 +307,10 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
                         ax3.text((pred_start + pred_end) / 2, 0.9, 'FN', color='blue', ha='center')
         else:
             print("Case not handled")
+            # save the data to text file
+            np.savetxt('data.txt', union_intervals, fmt='%d')
+            np.savetxt('gt.txt', gt_interval, fmt='%d')
+            np.savetxt('pred.txt', pred_interval, fmt='%d')
             
 
     precision = t_p / (t_p + f_p) if (t_p + f_p) > 0 else 0
@@ -319,6 +323,6 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
             ax.legend()
         ax3.set_xlabel('Time')
         plt.tight_layout()
-        plt.show()
+        plt.savefig(f'figs/segment_f1_{fold}_{threshold}.png')
 
     return f1
