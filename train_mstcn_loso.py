@@ -5,7 +5,8 @@ import numpy as np
 import pickle
 from model_mstcn import MSTCN, MSTCN_Loss
 from utils import IMUDataset, segment_f1_binary
-import matplotlib.pyplot as plt
+from augmentation import augment_orientation
+
 
 # Hyperparameters
 num_stages = 2
@@ -18,6 +19,7 @@ dropout = 0.3
 lambda_coef = 0.15
 tau = 4
 learning_rate = 0.0005
+debug_plot = False
 
 # Load data
 X_path = "./dataset/pkl_data/DX_I_X.pkl"
@@ -50,8 +52,8 @@ for fold, test_subject in enumerate(unique_subjects):
     train_dataset = Subset(full_dataset, train_indices)
     test_dataset = Subset(full_dataset, test_indices)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, pin_memory=True)
 
     # Model initialization
     model = MSTCN(num_stages=num_stages, num_layers=num_layers, 
@@ -71,6 +73,9 @@ for fold, test_subject in enumerate(unique_subjects):
         model.train()
         training_loss = 0.0
         for i, (batch_x, batch_y) in enumerate(train_loader):
+            # Data augmentation
+            batch_x = augment_orientation(batch_x)  
+
             batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
             optimizer.zero_grad()
             
@@ -101,24 +106,6 @@ for fold, test_subject in enumerate(unique_subjects):
     all_predictions = np.array(all_predictions)
     all_labels = np.array(all_labels)
 
-    # Plot the sequences in separate plots
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-    # Plot predictions
-    ax1.step(range(len(all_predictions)), all_predictions, where='post', label='Predictions', color='red')
-    ax1.set_ylabel('State')
-    ax1.set_ylim(-0.1, 1.1)
-    ax1.legend()
-    ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
-    # Plot ground truth (labels)
-    ax2.step(range(len(all_labels)), all_labels, where='post', label='Labels', color='blue')
-    ax2.set_xlabel('Time')
-    ax2.set_ylabel('State')
-    ax2.set_ylim(-0.1, 1.1)
-    ax2.legend()
-    ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig(f"figs/result_{fold + 1}.png")
-
     # Calculate metrics
     fp, fn, tp = 0, 0, 0
     for i in range(len(all_predictions)):
@@ -128,9 +115,16 @@ for fold, test_subject in enumerate(unique_subjects):
     precision = tp / (tp + fp)
     recall = tp / (tp + fn)
     f1_sample = 2 * precision * recall / (precision + recall)
-    f1_segment = segment_f1_binary(all_predictions, all_labels)
-    print(f"Fold {fold + 1} - F1 (Segment): {f1_segment} - F1 (Sample): {f1_sample:.4f}")
-    loso_f1_scores.append(f1_segment)  # Using the last F1 score (0.75 overlap)
+    if fold == 1:
+        debug_plot = True
+    f1_segment_1 = segment_f1_binary(all_predictions, all_labels, 0.1, debug_plot)
+    f1_segment_2 = segment_f1_binary(all_predictions, all_labels, 0.25, debug_plot)
+    f1_segment_3 = segment_f1_binary(all_predictions, all_labels, 0.5, debug_plot)
+    print(f"Fold {fold + 1} - F1 (Sample): {f1_sample:.4f}")
+    print(f"Fold {fold + 1} - F1 (Segment 0.1): {f1_segment_1:.4f}")
+    print(f"Fold {fold + 1} - F1 (Segment 0.25): {f1_segment_2:.4f}")
+    print(f"Fold {fold + 1} - F1 (Segment 0.5): {f1_segment_3:.4f}")
+    loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2, f1_segment_3])
 
 # Print overall results
 print("\nLOSO Cross-Validation Results:")
