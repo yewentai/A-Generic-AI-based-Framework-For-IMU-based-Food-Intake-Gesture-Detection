@@ -52,6 +52,16 @@ plt.suptitle(f"Ground Truth vs Prediction")
 plt.tight_layout()
 plt.show()
 
+# Calculate F1 score sample-wise
+t_p = np.sum(np.logical_and(pred == 1, gt == 1))
+f_p = np.sum(np.logical_and(pred == 1, gt == 0))
+f_n = np.sum(np.logical_and(pred == 0, gt == 1))
+precision = t_p / (t_p + f_p)
+recall = t_p / (t_p + f_n)
+f1_score = 2 * precision * recall / (precision + recall)
+print(f"F1 Score (sample): {f1_score:.4f}")
+
 # Calculate F1 score segment-wise
 f1_score_seg = segment_f1_binary(pred, gt, 0.3, debug_plot=True)
-print(f"F1 Score: {f1_score_seg:.4f}")
+print(f"F1 Score (seg): {f1_score_seg:.4f}")
+
