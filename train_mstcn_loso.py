@@ -69,9 +69,6 @@ for fold, test_subject in enumerate(unique_subjects):
     best_f1 = 0.0
     best_model_state = None
 
-    if fold != 6:
-        continue
-
     for epoch in range(num_epochs):
         model.train()
         training_loss = 0.0
