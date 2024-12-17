@@ -42,14 +42,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 unique_subjects = np.unique(full_dataset.subject_indices)
 loso_f1_scores = []
 
-# Open CSV file for writing
-with open("result/training_log.csv", mode='w', newline='') as csvfile:
-    csv_writer = csv.writer(csvfile)
-    csv_writer.writerow(['Date', 'Time', 'Fold', 'Epoch', 'Training Loss', 
-                         'F1 Sample', 'F1 Segment 0.1', 
-                         'F1 Segment 0.25', 'F1 Segment 0.5'])
+# Open CSV files for writing
+with open("result/training_log.csv", mode='w', newline='') as train_csvfile, \
+     open("result/testing_log.csv", mode='w', newline='') as test_csvfile:
 
-    for fold, test_subject in enumerate(tqdm(unique_subjects, desc="LOSO Folds")):
+    train_csv_writer = csv.writer(train_csvfile)
+    test_csv_writer = csv.writer(test_csvfile)
+
+    # Write headers
+    train_csv_writer.writerow(['Date', 'Time', 'Fold', 'Epoch', 'Training Loss'])
+    test_csv_writer.writerow(['Date', 'Time', 'Fold', 'F1 Sample', 
+                              'F1 Segment 0.1', 'F1 Segment 0.25', 'F1 Segment 0.5'])
+
+    for fold, test_subject in enumerate(tqdm(unique_subjects, desc="LOSO Folds", leave=True)):
         # Create train and test indices
         train_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject != test_subject]
         test_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject == test_subject]
@@ -74,12 +79,12 @@ with open("result/training_log.csv", mode='w', newline='') as csvfile:
         num_epochs = 20
         best_f1 = 0.0
 
-        for epoch in tqdm(range(num_epochs), desc=f"Training Fold {fold + 1}"):
+        for epoch in tqdm(range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False):
             model.train()
             training_loss = 0.0
             for i, (batch_x, batch_y) in enumerate(train_loader):
                 # Data augmentation
-                batch_x = augment_orientation(batch_x)  
+                batch_x = augment_orientation(batch_x)
 
                 batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
                 optimizer.zero_grad()
@@ -96,16 +101,15 @@ with open("result/training_log.csv", mode='w', newline='') as csvfile:
 
             # Save training data into CSV
             now = datetime.now()
-            csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
-                                 fold + 1, epoch + 1, avg_train_loss, 
-                                 "N/A", "N/A", "N/A", "N/A"])  # F1 scores will be added after testing
+            train_csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
+                                       fold + 1, epoch + 1, avg_train_loss])
 
         # Testing
         model.eval()
         all_predictions = []
         all_labels = []
         with torch.no_grad():
-            for i, (batch_x, batch_y) in enumerate(tqdm(test_loader, desc=f"Testing Fold {fold + 1}")):
+            for i, (batch_x, batch_y) in enumerate(test_loader):
                 batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
                 outputs = model(batch_x)
                 final_output = outputs[-1]
@@ -113,7 +117,7 @@ with open("result/training_log.csv", mode='w', newline='') as csvfile:
                 predicted_classes = torch.argmax(probabilities, dim=1)
                 all_predictions.extend(predicted_classes.view(-1).cpu().numpy())
                 all_labels.extend(batch_y.view(-1).cpu().numpy())
-                
+
         all_predictions = np.array(all_predictions)
         all_labels = np.array(all_labels)
 
@@ -134,10 +138,9 @@ with open("result/training_log.csv", mode='w', newline='') as csvfile:
 
         # Save the F1 scores after testing
         now = datetime.now()
-        csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
-                             fold + 1, "Test", "N/A", 
-                             f1_sample, f1_segment_1, 
-                             f1_segment_2, f1_segment_3])
+        test_csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
+                                  fold + 1, f1_sample, 
+                                  f1_segment_1, f1_segment_2, f1_segment_3])
 
         # Save the best model
         if f1_segment_3 > best_f1:
