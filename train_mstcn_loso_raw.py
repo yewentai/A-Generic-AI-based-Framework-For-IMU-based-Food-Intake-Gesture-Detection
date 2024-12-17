@@ -78,8 +78,6 @@ with open("result/training_log.csv", mode='w', newline='') as train_csvfile, \
 
         # Training loop
         num_epochs = 20
-        best_f1 = 0.0
-
         for epoch in tqdm(range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False):
             model.train()
             training_loss = 0.0
@@ -144,6 +142,4 @@ with open("result/training_log.csv", mode='w', newline='') as train_csvfile, \
                                   f1_segment_1, f1_segment_2, f1_segment_3])
 
         # Save the best model
-        if f1_segment_3 > best_f1:
-            best_f1 = f1_segment_3
-            torch.save(model.state_dict(), f"models/best_model_fold_{fold}.pth")
+        # torch.save(model.state_dict(), f"models/best_model_fold_{fold}.pth")
