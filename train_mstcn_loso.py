@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader, Subset
 import numpy as np
 import pickle
 from model_mstcn import MSTCN, MSTCN_Loss
-from utils import IMUDataset, segment_f1_binary
+from utils import IMUDataset, segment_f1_binary, post_process_predictions
 from augmentation import augment_orientation
 import csv
 from datetime import datetime
@@ -24,8 +24,8 @@ learning_rate = 0.0005
 debug_plot = False
 
 # Load data
-X_path = "./dataset/pkl_data/DX_I_X.pkl"
-Y_path = "./dataset/pkl_data/DX_I_Y.pkl"
+X_path = "./dataset/pkl_data/DX_I_X_raw.pkl"
+Y_path = "./dataset/pkl_data/DX_I_Y_raw.pkl"
 
 with open(X_path, "rb") as f:
     X = pickle.load(f)
@@ -44,8 +44,8 @@ unique_subjects = np.unique(full_dataset.subject_indices)
 loso_f1_scores = []
 
 # Open CSV files for writing
-with open("result/training_log.csv", mode='w', newline='') as train_csvfile, \
-     open("result/testing_log.csv", mode='w', newline='') as test_csvfile:
+with open("result/training_log_raw.csv", mode='w', newline='') as train_csvfile, \
+     open("result/testing_log_raw.csv", mode='w', newline='') as test_csvfile:
 
     train_csv_writer = csv.writer(train_csvfile)
     test_csv_writer = csv.writer(test_csvfile)
@@ -119,6 +119,8 @@ with open("result/training_log.csv", mode='w', newline='') as train_csvfile, \
 
         all_predictions = np.array(all_predictions)
         all_labels = np.array(all_labels)
+        # Post-processing predictions
+        all_predictions = post_process_predictions(all_predictions)
 
         # Calculate metrics
         fp, fn, tp = 0, 0, 0

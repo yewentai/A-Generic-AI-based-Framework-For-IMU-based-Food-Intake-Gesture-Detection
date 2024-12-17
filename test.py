@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import segment_f1_binary
+from utils import segment_f1_binary, post_process_predictions
 
 # Ground Truth sequence
 gt = np.array([
@@ -60,6 +60,9 @@ precision = t_p / (t_p + f_p)
 recall = t_p / (t_p + f_n)
 f1_score = 2 * precision * recall / (precision + recall)
 print(f"F1 Score (sample): {f1_score:.4f}")
+
+# Post-processing predictions
+# pred = post_process_predictions(pred, 2, 1)
 
 # Calculate F1 score segment-wise
 f1_score_seg = segment_f1_binary(pred, gt, 0.3, debug_plot=True)
