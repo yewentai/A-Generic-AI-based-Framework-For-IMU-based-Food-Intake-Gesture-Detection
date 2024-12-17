@@ -37,6 +37,7 @@ full_dataset = IMUDataset(X, Y)
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 # LOSO cross-validation
 unique_subjects = np.unique(full_dataset.subject_indices)

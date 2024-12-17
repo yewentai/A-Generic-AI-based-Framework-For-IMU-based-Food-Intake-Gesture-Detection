@@ -21,6 +21,9 @@ models/
 # Figures and plots
 figs/
 
+# Result
+result/
+
 # Slurm job outputs
 *.out
 *.err
