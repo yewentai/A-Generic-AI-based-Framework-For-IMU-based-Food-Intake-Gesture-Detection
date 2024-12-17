@@ -1,16 +1,9 @@
 # Python cache and temporary files
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.tmp
-*.log
-
-# Byte-compiled files
-*.so
 
 # Dataset folders (customize based on what should/shouldn't be included)
-dataset/
+*.csv
+*.pkl
 
 # Model checkpoints and outputs
 models/
@@ -25,18 +18,12 @@ figs/
 result/
 
 # Slurm job outputs
+*.slurm
 *.out
 *.err
 
 # Miscellaneous system files
 .DS_Store
-Thumbs.db
-desktop.ini
-*.swp
-*.swo
-
-# Ignore specific sensitive files (if needed)
-project1.slurm
 
 # Ignore VSCode settings
 .vscode/

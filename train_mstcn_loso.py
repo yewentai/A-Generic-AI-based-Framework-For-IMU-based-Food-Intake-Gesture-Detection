@@ -126,7 +126,7 @@ for fold, test_subject in enumerate(unique_subjects):
     # Save the best model
     if f1_segment_3 > best_f1:
         best_f1 = f1_segment_3
-        torch.save(model.state_dict(), f"models/best_model_fold_{fold}.pt")
+        torch.save(model.state_dict(), f"models/best_model_fold_{fold}.pth")
 
 
 # Print overall results
