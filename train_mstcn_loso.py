@@ -19,11 +19,11 @@ dropout = 0.3
 lambda_coef = 0.15
 tau = 4
 learning_rate = 0.0005
-debug_plot = True
+debug_plot = False
 
 # Load data
-X_path = "./dataset/pkl_data/DX_I_X.pkl"
-Y_path = "./dataset/pkl_data/DX_I_Y.pkl"
+X_path = "./dataset/pkl_data/DX_I_X_raw.pkl"
+Y_path = "./dataset/pkl_data/DX_I_Y_raw.pkl"
 
 with open(X_path, "rb") as f:
     X = pickle.load(f)
@@ -67,7 +67,6 @@ for fold, test_subject in enumerate(unique_subjects):
     # Training loop
     num_epochs = 20
     best_f1 = 0.0
-    best_model_state = None
 
     for epoch in range(num_epochs):
         model.train()
@@ -115,14 +114,20 @@ for fold, test_subject in enumerate(unique_subjects):
     precision = tp / (tp + fp)
     recall = tp / (tp + fn)
     f1_sample = 2 * precision * recall / (precision + recall)
-    f1_segment_1 = segment_f1_binary(all_predictions, all_labels, 0.1, debug_plot, fold)
-    f1_segment_2 = segment_f1_binary(all_predictions, all_labels, 0.25, debug_plot, fold)
-    f1_segment_3 = segment_f1_binary(all_predictions, all_labels, 0.5, debug_plot, fold)
+    f1_segment_1 = segment_f1_binary(all_predictions, all_labels, 0.1, debug_plot)
+    f1_segment_2 = segment_f1_binary(all_predictions, all_labels, 0.25, debug_plot)
+    f1_segment_3 = segment_f1_binary(all_predictions, all_labels, 0.5, debug_plot)
     print(f"Fold {fold + 1} - F1 (Sample): {f1_sample:.4f}")
     print(f"Fold {fold + 1} - F1 (Segment 0.1): {f1_segment_1:.4f}")
     print(f"Fold {fold + 1} - F1 (Segment 0.25): {f1_segment_2:.4f}")
     print(f"Fold {fold + 1} - F1 (Segment 0.5): {f1_segment_3:.4f}")
     loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2, f1_segment_3])
+
+    # Save the best model
+    if f1_segment_3 > best_f1:
+        best_f1 = f1_segment_3
+        torch.save(model.state_dict(), f"models/best_model_fold_{fold}.pt")
+
 
 # Print overall results
 print("\nLOSO Cross-Validation Results:")
