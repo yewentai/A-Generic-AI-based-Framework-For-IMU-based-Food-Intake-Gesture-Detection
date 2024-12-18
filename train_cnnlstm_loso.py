@@ -1,15 +1,25 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, Subset
 import numpy as np
 import pickle
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from collections import defaultdict
+import csv
+from datetime import datetime
+from tqdm import tqdm
+from augmentation import augment_orientation
 from model_cnnlstm import CNN_LSTM
+from utils import IMUDataset, post_process_predictions
 
+# Hyperparameters
+sequence_length = 128
+downsample_factor = 4
+batch_size = 32
+learning_rate = 1e-3
+num_epochs = 20
+criterion = nn.BCELoss()
 
 # Load .pkl data
-# Paths to .pkl files
 X_path = "./dataset/pkl_data/DX_I_X.pkl"
 Y_path = "./dataset/pkl_data/DX_I_Y.pkl"
 with open(X_path, "rb") as f:
@@ -17,221 +27,101 @@ with open(X_path, "rb") as f:
 with open(Y_path, "rb") as f:
     Y = pickle.load(f)  # List of numpy arrays
 
-# Dataset class
-class IMUDataset(Dataset):
-    def __init__(self, X, Y, sequence_length=128, downsample_factor=4):
-        self.data = []
-        self.labels = []
-        self.sequence_length = sequence_length
-        self.downsample_factor = downsample_factor
-        self.subject_indices = []  # Record which subject each sample belongs to
+# Create the full dataset
+full_dataset = IMUDataset(X, Y)
 
-        # Processing data for each session
-        for subject_idx, (imu_data, labels) in enumerate(zip(X, Y)):
-            # imu_data = self.normalize(imu_data)
-            num_samples = len(labels)
+# LOSO cross-validation
+unique_subjects = np.unique(full_dataset.subject_indices)
+loso_f1_scores = []
 
-            for i in range(0, num_samples, sequence_length):
-                imu_segment = imu_data[i : i + sequence_length]
-                label_segment = labels[i : i + sequence_length]
+# Open CSV files for writing
+with open("result/training_log_dxi_mirrored_cnnlstm.csv", mode='w', newline='') as train_csvfile, \
+     open("result/testing_log_dxi_mirrored_cnnlstm.csv", mode='w', newline='') as test_csvfile:
 
-                if len(imu_segment) == sequence_length:
-                    self.data.append(imu_segment)
-                    downsampled_labels = label_segment[:: self.downsample_factor]
-                    self.labels.append(downsampled_labels)
-                    self.subject_indices.append(subject_idx)
+    train_csv_writer = csv.writer(train_csvfile)
+    test_csv_writer = csv.writer(test_csvfile)
 
-    def normalize(self, data):
-        mean = np.mean(data, axis=0)
-        std = np.std(data, axis=0)
-        return (data - mean) / (std + 1e-5)
+    # Write headers
+    train_csv_writer.writerow(['Date', 'Time', 'Fold', 'Epoch', 'Training Loss'])
+    test_csv_writer.writerow(['Date', 'Time', 'Fold', 'F1 Sample'])
 
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        x = self.data[idx]
-        y = self.labels[idx]
-        x = torch.tensor(x, dtype=torch.float32)
-        y = torch.tensor(y, dtype=torch.float32)
-        return x, y
-
-# Prepare dataset and dataloader
-dataset = IMUDataset(X, Y)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-
-def train_model(model, train_loader, criterion, optimizer, device, epoch, num_epochs):
-    model.train()
-    running_loss = 0.0
-    all_predictions = []
-    all_labels = []
-
-    for batch_x, batch_y in train_loader:
-        batch_x = batch_x.permute(0, 2, 1).to(device)
-        batch_y = batch_y.to(device)
-
-        outputs = model(batch_x)
-        outputs = outputs.squeeze(-1)
-
-        loss = criterion(outputs, batch_y)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        running_loss += loss.item()
-
-        # Collect predictions and labels for calculating metrics
-        predictions = (outputs > 0.5).float().cpu().numpy()
-        all_predictions.extend(predictions.flatten())
-        all_labels.extend(batch_y.cpu().numpy().flatten())
-
-    # Calculating training metrics
-    metrics = calculate_metrics(all_labels, all_predictions)
-
-    avg_loss = running_loss / len(train_loader)
-    print(f"Epoch [{epoch+1}/{num_epochs}]")
-    print(
-        f"Training - Loss: {avg_loss:.4f}, Accuracy: {metrics['accuracy']:.4f}, "
-        f"Precision: {metrics['precision']:.4f}, Recall: {metrics['recall']:.4f}, "
-        f"F1: {metrics['f1']:.4f}"
-    )
-
-    return metrics
-
-
-def evaluate_model(model, test_loader, criterion, device):
-    model.eval()
-    running_loss = 0.0
-    all_predictions = []
-    all_labels = []
-
-    with torch.no_grad():
-        for batch_x, batch_y in test_loader:
-            batch_x = batch_x.permute(0, 2, 1).to(device)
-            batch_y = batch_y.to(device)
-
-            outputs = model(batch_x)
-            outputs = outputs.squeeze(-1)
-
-            loss = criterion(outputs, batch_y)
-            running_loss += loss.item()
-
-            predictions = (outputs > 0.5).float().cpu().numpy()
-            all_predictions.extend(predictions.flatten())
-            all_labels.extend(batch_y.cpu().numpy().flatten())
-
-    metrics = calculate_metrics(all_labels, all_predictions)
-    avg_loss = running_loss / len(test_loader)
-
-    print(
-        f"Testing - Loss: {avg_loss:.4f}, Accuracy: {metrics['accuracy']:.4f}, "
-        f"Precision: {metrics['precision']:.4f}, Recall: {metrics['recall']:.4f}, "
-        f"F1: {metrics['f1']:.4f}"
-    )
-
-    return metrics
-
-
-def calculate_metrics(y_true, y_pred):
-    return {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "precision": precision_score(y_true, y_pred, zero_division=0),
-        "recall": recall_score(y_true, y_pred, zero_division=0),
-        "f1": f1_score(y_true, y_pred, zero_division=0),
-    }
-
-
-# LOSO cross validation main function
-def loso_cross_validation(X, Y, config):
-    num_subjects = len(X)
-    all_metrics = defaultdict(list)
+    # Device configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-    for test_subject in range(num_subjects):
-        print(f"\nTesting on subject {test_subject + 1}/{num_subjects}")
+    for fold, test_subject in enumerate(tqdm(unique_subjects, desc="LOSO Folds", leave=True)):
+        # Create train and test indices
+        train_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject != test_subject]
+        test_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject == test_subject]
 
-        # Preparing training and testing data
-        train_X = [x for i, x in enumerate(X) if i != test_subject]
-        train_Y = [y for i, y in enumerate(Y) if i != test_subject]
-        test_X = [X[test_subject]]
-        test_Y = [Y[test_subject]]
+        # Create Subset datasets
+        train_dataset = Subset(full_dataset, train_indices)
+        test_dataset = Subset(full_dataset, test_indices)
 
-        # Creating a dataset and data loader
-        train_dataset = IMUDataset(
-            train_X,
-            train_Y,
-            sequence_length=config["sequence_length"],
-            downsample_factor=config["downsample_factor"],
-        )
-        test_dataset = IMUDataset(
-            test_X,
-            test_Y,
-            sequence_length=config["sequence_length"],
-            downsample_factor=config["downsample_factor"],
-        )
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, pin_memory=True)
 
-        train_loader = DataLoader(
-            train_dataset, batch_size=config["batch_size"], shuffle=True
-        )
-        test_loader = DataLoader(
-            test_dataset, batch_size=config["batch_size"], shuffle=False
-        )
-
-        # Initialize the model and optimizer
+        # Model initialization
         model = CNN_LSTM().to(device)
-        criterion = nn.BCELoss()
-        optimizer = torch.optim.RMSprop(model.parameters(), lr=config["learning_rate"])
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
 
-        # Training the model
-        best_f1 = 0
-        best_metrics = None
+        # Training loop
+        num_epochs = 20
+        for epoch in tqdm(range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False):
+            model.train()
+            training_loss = 0.0
+            for i, (batch_x, batch_y) in enumerate(train_loader):
+                # Data augmentation
+                batch_x = augment_orientation(batch_x)
 
-        for epoch in range(config["num_epochs"]):
-            train_metrics = train_model(
-                model,
-                train_loader,
-                criterion,
-                optimizer,
-                device,
-                epoch,
-                config["num_epochs"],
-            )
-            test_metrics = evaluate_model(model, test_loader, criterion, device)
+                batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
+                optimizer.zero_grad()
 
-            # Save the best model
-            if test_metrics["f1"] > best_f1:
-                best_f1 = test_metrics["f1"]
-                best_metrics = test_metrics
-                torch.save(model.state_dict(), f"models/best_cnnlstm_model_subject_{test_subject}.pth")
+                outputs = model(batch_x)
+                loss = criterion(outputs, batch_y)
 
-        # Record the best results
-        for metric, value in best_metrics.items():
-            all_metrics[metric].append(value)
+                loss.backward()
+                optimizer.step()
 
-        print(f"\nBest metrics for subject {test_subject}:")
-        for metric, value in best_metrics.items():
-            print(f"{metric}: {value:.4f}")
+                training_loss += loss.item()
 
-    # Print overall results
-    print("\nOverall LOSO Cross-validation Results:")
-    for metric, values in all_metrics.items():
-        mean_value = np.mean(values)
-        std_value = np.std(values)
-        print(f"{metric}: {mean_value:.4f} ± {std_value:.4f}")
+            avg_train_loss = training_loss / len(train_loader)
 
-    return all_metrics
+            # Save training data into CSV
+            now = datetime.now()
+            train_csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
+                                    fold + 1, epoch + 1, avg_train_loss])   
+            
+        # Testing
+        model.eval()
+        all_predictions = []
+        all_labels = []
+        with torch.no_grad():
+            for i, (batch_x, batch_y) in enumerate(test_loader):
+                batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
+                outputs = model(batch_x)
+                final_output = outputs[-1]
+                probabilities = F.softmax(final_output, dim=1)
+                predicted_classes = torch.argmax(probabilities, dim=1)
+                all_predictions.extend(predicted_classes.view(-1).cpu().numpy())
+                all_labels.extend(batch_y.view(-1).cpu().numpy())
 
+        all_predictions = np.array(all_predictions)
+        all_labels = np.array(all_labels)
+        # Post-processing predictions
+        all_predictions = post_process_predictions(all_predictions)
 
-# Configuration parameters
-config = {
-    "sequence_length": 128,
-    "downsample_factor": 4,
-    "batch_size": 128,
-    "learning_rate": 1e-3,
-    "num_epochs": 20,
-}
+        # Calculate metrics
+        fp, fn, tp = 0, 0, 0
+        for i in range(len(all_predictions)):
+            fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
+            fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
+            tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1_sample = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
-# Run LOSO cross validation
-metrics = loso_cross_validation(X, Y, config)
+        # Save the F1 scores after testing
+        now = datetime.now()
+        test_csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
+                                  fold + 1, f1_sample])
