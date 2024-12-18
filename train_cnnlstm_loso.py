@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader, Subset
 import numpy as np
 import pickle
 import csv
@@ -9,7 +9,46 @@ from datetime import datetime
 from tqdm import tqdm
 from augmentation import augment_orientation
 from model_cnnlstm import CNN_LSTM
-from utils import IMUDataset, post_process_predictions
+from utils import post_process_predictions
+
+# Dataset class
+class IMUDataset(Dataset):
+    def __init__(self, X, Y, sequence_length=128, downsample_factor=4):
+        self.data = []
+        self.labels = []
+        self.sequence_length = sequence_length
+        self.downsample_factor = downsample_factor
+        self.subject_indices = []  # Record which subject each sample belongs to
+
+        # Processing data for each session
+        for subject_idx, (imu_data, labels) in enumerate(zip(X, Y)):
+            # imu_data = self.normalize(imu_data)
+            num_samples = len(labels)
+
+            for i in range(0, num_samples, sequence_length):
+                imu_segment = imu_data[i : i + sequence_length]
+                label_segment = labels[i : i + sequence_length]
+
+                if len(imu_segment) == sequence_length:
+                    self.data.append(imu_segment)
+                    downsampled_labels = label_segment[:: self.downsample_factor]
+                    self.labels.append(downsampled_labels)
+                    self.subject_indices.append(subject_idx)
+
+    def normalize(self, data):
+        mean = np.mean(data, axis=0)
+        std = np.std(data, axis=0)
+        return (data - mean) / (std + 1e-5)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        x = self.data[idx]
+        y = self.labels[idx]
+        x = torch.tensor(x, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.float32)
+        return x, y
 
 # Hyperparameters
 sequence_length = 128
@@ -20,8 +59,8 @@ num_epochs = 20
 criterion = nn.BCELoss()
 
 # Load .pkl data
-X_path = "./dataset/pkl_data/DX_I_X.pkl"
-Y_path = "./dataset/pkl_data/DX_I_Y.pkl"
+X_path = "./dataset/pkl_data/DX_I_X_mirrored.pkl"
+Y_path = "./dataset/pkl_data/DX_I_Y_mirrored.pkl"
 with open(X_path, "rb") as f:
     X = pickle.load(f)  # List of numpy arrays
 with open(Y_path, "rb") as f:
@@ -73,13 +112,13 @@ with open("result/training_log_dxi_mirrored_cnnlstm.csv", mode='w', newline='') 
             for i, (batch_x, batch_y) in enumerate(train_loader):
                 # Data augmentation
                 batch_x = augment_orientation(batch_x)
-
                 batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
-                optimizer.zero_grad()
 
                 outputs = model(batch_x)
-                loss = criterion(outputs, batch_y)
+                outputs = outputs.squeeze(-1)
 
+                loss = criterion(outputs, batch_y)
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 

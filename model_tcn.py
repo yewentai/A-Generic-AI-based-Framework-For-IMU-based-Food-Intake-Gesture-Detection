@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torch.nn.utils.parametrizations import weight_norm
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 # Chomp1d removes excess padding from the output of Conv1d layers
 class Chomp1d(nn.Module):
