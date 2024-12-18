@@ -1,21 +1,20 @@
+import torch
 import torch.nn as nn
 from torch.nn.utils.parametrizations import weight_norm
-import matplotlib.pyplot as plt
-import numpy as np
 
-# Chomp1d removes excess padding from the output of Conv1d layers
-class Chomp1d(nn.Module):
-    def __init__(self, chomp_size):
+# TrimPadding1d removes excess padding from the output of Conv1d layers
+class TrimPadding1d(nn.Module):
+    def __init__(self, TrimPadding_size):
         """
-        Removes the last `chomp_size` elements along the time dimension
+        Removes the last `TrimPadding_size` elements along the time dimension
         to ensure the output size matches the expected size.
         """
-        super(Chomp1d, self).__init__()
-        self.chomp_size = chomp_size
+        super(TrimPadding1d, self).__init__()
+        self.TrimPadding_size = TrimPadding_size
 
     def forward(self, x):
         # Slice to remove extra padding added during convolution
-        return x[:, :, : -self.chomp_size].contiguous()
+        return x[:, :, : -self.TrimPadding_size].contiguous()
 
 
 # TemporalBlock implements a single block of the Temporal Convolutional Network
@@ -49,7 +48,7 @@ class TemporalBlock(nn.Module):
                 dilation=dilation,
             )
         )
-        self.chomp1 = Chomp1d(padding)  # Remove extra padding
+        self.TrimPadding1 = TrimPadding1d(padding)  # Remove extra padding
         self.relu1 = nn.ReLU()  # First ReLU activation
         self.dropout1 = nn.Dropout(dropout)  # Apply dropout for regularization
 
@@ -64,18 +63,18 @@ class TemporalBlock(nn.Module):
                 dilation=dilation,
             )
         )
-        self.chomp2 = Chomp1d(padding)  # Remove extra padding
+        self.TrimPadding2 = TrimPadding1d(padding)  # Remove extra padding
         self.relu2 = nn.ReLU()  # Second ReLU activation
         self.dropout2 = nn.Dropout(dropout)  # Apply dropout for regularization
 
-        # Sequential layer combining convolution, chomp, activation, and dropout
+        # Sequential layer combining convolution, TrimPadding, activation, and dropout
         self.net = nn.Sequential(
             self.conv1,
-            self.chomp1,
+            self.TrimPadding1,
             self.relu1,
             self.dropout1,
             self.conv2,
-            self.chomp2,
+            self.TrimPadding2,
             self.relu2,
             self.dropout2,
         )
@@ -161,3 +160,22 @@ class TemporalConvNet(nn.Module):
             Output tensor after passing through the TCN.
         """
         return self.network(x)
+    
+# Test the TemporalConvNet model with random input
+num_inputs = 128
+num_channels = [64, 64, 64, 64]
+seq_length = 256
+batch_size = 32
+
+# Create a random input tensor
+x = torch.randn(batch_size, num_inputs, seq_length)
+
+# Initialize the TemporalConvNet model
+model = TemporalConvNet(num_inputs, num_channels)
+
+# Perform a forward pass
+output = model(x)
+print("Input shape:", x.shape)
+print("Output shape:", output.shape)
+# Output shape: torch.Size([32, 64, 256])
+# The output shape is [batch_size, num_channels, seq_length] as expected
