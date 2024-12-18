@@ -24,8 +24,8 @@ learning_rate = 0.0005
 debug_plot = False
 
 # Load data
-X_path = "./dataset/pkl_data/DX_I_X.pkl"
-Y_path = "./dataset/pkl_data/DX_I_Y.pkl"
+X_path = "./dataset/pkl_data/DX_II_X_raw.pkl"
+Y_path = "./dataset/pkl_data/DX_II_Y_raw.pkl"
 
 with open(X_path, "rb") as f:
     X = pickle.load(f)
@@ -44,8 +44,8 @@ unique_subjects = np.unique(full_dataset.subject_indices)
 loso_f1_scores = []
 
 # Open CSV files for writing
-with open("result/training_log.csv", mode='w', newline='') as train_csvfile, \
-     open("result/testing_log.csv", mode='w', newline='') as test_csvfile:
+with open("result/training_log_dxii_raw.csv", mode='w', newline='') as train_csvfile, \
+     open("result/testing_log_dxii_raw.csv", mode='w', newline='') as test_csvfile:
 
     train_csv_writer = csv.writer(train_csvfile)
     test_csv_writer = csv.writer(test_csvfile)

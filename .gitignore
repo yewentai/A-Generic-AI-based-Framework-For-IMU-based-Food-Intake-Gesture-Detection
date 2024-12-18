@@ -2,8 +2,7 @@
 __pycache__/
 
 # Dataset folders (customize based on what should/shouldn't be included)
-*.csv
-*.pkl
+dataset/
 
 # Model checkpoints and outputs
 models/
@@ -13,9 +12,6 @@ models/
 
 # Figures and plots
 figs/
-
-# Result
-result/
 
 # Slurm job outputs
 *.slurm
