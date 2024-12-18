@@ -3,12 +3,13 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 import numpy as np
 import pickle
-from model_mstcn import MSTCN, MSTCN_Loss
-from utils import IMUDataset, segment_f1_binary, post_process_predictions
-from augmentation import augment_orientation
 import csv
 from datetime import datetime
 from tqdm import tqdm
+from model_mstcn import MSTCN, MSTCN_Loss
+from augmentation import augment_orientation
+from utils import IMUDataset, segment_f1_binary, post_process_predictions
+
 
 # Hyperparameters
 num_stages = 2
@@ -24,9 +25,8 @@ learning_rate = 0.0005
 debug_plot = False
 
 # Load data
-X_path = "./dataset/pkl_data/DX_II_X_raw.pkl"
-Y_path = "./dataset/pkl_data/DX_II_Y_raw.pkl"
-
+X_path = "./dataset/pkl_data/DX_I_X_mirrored.pkl"
+Y_path = "./dataset/pkl_data/DX_I_Y_mirrored.pkl"
 with open(X_path, "rb") as f:
     X = pickle.load(f)
 with open(Y_path, "rb") as f:
@@ -35,17 +35,13 @@ with open(Y_path, "rb") as f:
 # Create the full dataset
 full_dataset = IMUDataset(X, Y)
 
-# Device configuration
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-
 # LOSO cross-validation
 unique_subjects = np.unique(full_dataset.subject_indices)
 loso_f1_scores = []
 
 # Open CSV files for writing
-with open("result/training_log_dxii_raw.csv", mode='w', newline='') as train_csvfile, \
-     open("result/testing_log_dxii_raw.csv", mode='w', newline='') as test_csvfile:
+with open("result/training_log_dxi_mirrored_mstcn.csv", mode='w', newline='') as train_csvfile, \
+     open("result/testing_log_dxi_mirrored_mstcn.csv", mode='w', newline='') as test_csvfile:
 
     train_csv_writer = csv.writer(train_csvfile)
     test_csv_writer = csv.writer(test_csvfile)
@@ -54,6 +50,10 @@ with open("result/training_log_dxii_raw.csv", mode='w', newline='') as train_csv
     train_csv_writer.writerow(['Date', 'Time', 'Fold', 'Epoch', 'Training Loss'])
     test_csv_writer.writerow(['Date', 'Time', 'Fold', 'F1 Sample', 
                               'F1 Segment 0.1', 'F1 Segment 0.25', 'F1 Segment 0.5'])
+
+    # Device configuration
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     for fold, test_subject in enumerate(tqdm(unique_subjects, desc="LOSO Folds", leave=True)):
         # Create train and test indices
