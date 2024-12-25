@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
 # Define the convolutional part of the architecture
 class ConvNet(nn.Module):
     def __init__(self):

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.parametrizations import weight_norm
 
+
 # TrimPadding1d removes excess padding from the output of Conv1d layers
 class TrimPadding1d(nn.Module):
     def __init__(self, TrimPadding_size):
@@ -160,7 +161,8 @@ class TemporalConvNet(nn.Module):
             Output tensor after passing through the TCN.
         """
         return self.network(x)
-    
+
+
 # Test the TemporalConvNet model with random input
 num_inputs = 128
 num_channels = [64, 64, 64, 64]

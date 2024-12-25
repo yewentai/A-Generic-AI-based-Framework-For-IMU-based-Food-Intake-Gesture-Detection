@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
 
+
 # Dataset class
 class IMUDataset(Dataset):
     def __init__(self, X, Y, sequence_length=128):
@@ -39,7 +40,7 @@ class IMUDataset(Dataset):
         x = torch.tensor(x, dtype=torch.float32)
         y = torch.tensor(y, dtype=torch.float32)
         return x, y
-    
+
 
 # Evaluation functions
 def nonzero_intervals(x):
@@ -50,7 +51,7 @@ def nonzero_intervals(x):
         x (np.ndarray): Input binary array (1D).
 
     Returns:
-        np.ndarray: An array of shape (N, 2), where each row represents the 
+        np.ndarray: An array of shape (N, 2), where each row represents the
                     [start, end) indices of a contiguous nonzero interval.
     """
     # Prepare a list to collect results
@@ -73,10 +74,10 @@ def nonzero_intervals(x):
     # Handle the case where the sequence ends with a nonzero segment
     if in_segment:
         results.append([start_idx, len(x)])
-    
+
     # Convert the results list to a NumPy array
     return np.array(results, dtype=int)
-    
+
 
 def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
     """
@@ -100,12 +101,12 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
     if debug_plot:
         # Plot the ground truth, prediction, and union sequences
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 12), sharex=True)
-        ax1.step(range(len(gt)), gt, where='post', label='Ground Truth', color='blue')
-        ax1.set_title('Ground Truth')
-        ax2.step(range(len(pred)), pred, where='post', label='Prediction', color='red')
-        ax2.set_title('Prediction')
-        ax3.step(range(len(union)), union, where='post', label='Union', color='green')
-        ax3.set_title('Union')
+        ax1.step(range(len(gt)), gt, where="post", label="Ground Truth", color="blue")
+        ax1.set_title("Ground Truth")
+        ax2.step(range(len(pred)), pred, where="post", label="Prediction", color="red")
+        ax2.set_title("Prediction")
+        ax3.step(range(len(union)), union, where="post", label="Union", color="green")
+        ax3.set_title("Union")
 
     for start_idx, end_idx in union_intervals:
         # Initialize a flag to avoid double counting
@@ -120,47 +121,79 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
         if debug_plot:
             # Highlight the ground truth and prediction intervals
             for gs, ge in gt_interval:
-                ax1.axvspan(gs, ge, alpha=0.3, color='blue')
+                ax1.axvspan(gs, ge, alpha=0.3, color="blue")
             for ps, pe in pred_interval:
-                ax2.axvspan(ps, pe, alpha=0.3, color='red')
+                ax2.axvspan(ps, pe, alpha=0.3, color="red")
 
         if len(gt_interval) == 0 and len(pred_interval) == 1:
             f_p += 1
             if debug_plot:
-                ax3.axvspan(pred_interval[0][0], pred_interval[0][1], alpha=0.5, color='red')
-                ax3.text((pred_interval[0][0] + pred_interval[0][1]) / 2, 0.9, 'FP', color='red', ha='center')
+                ax3.axvspan(
+                    pred_interval[0][0], pred_interval[0][1], alpha=0.5, color="red"
+                )
+                ax3.text(
+                    (pred_interval[0][0] + pred_interval[0][1]) / 2,
+                    0.9,
+                    "FP",
+                    color="red",
+                    ha="center",
+                )
         elif len(gt_interval) == 1 and len(pred_interval) == 0:
             f_n += 1
             if debug_plot:
-                ax3.axvspan(gt_interval[0][0], gt_interval[0][1], alpha=0.5, color='blue')
-                ax3.text((gt_interval[0][0] + gt_interval[0][1]) / 2, 0.9, 'FN', color='blue', ha='center')
+                ax3.axvspan(
+                    gt_interval[0][0], gt_interval[0][1], alpha=0.5, color="blue"
+                )
+                ax3.text(
+                    (gt_interval[0][0] + gt_interval[0][1]) / 2,
+                    0.9,
+                    "FN",
+                    color="blue",
+                    ha="center",
+                )
         elif len(gt_interval) == 1 and len(pred_interval) == 1:
             gt_start, gt_end = gt_interval[0]
             pred_start, pred_end = pred_interval[0]
             intersection = min(gt_end, pred_end) - max(gt_start, pred_start)
             union = max(gt_end, pred_end) - min(gt_start, pred_start)
             iou = intersection / union
-            len_gt = gt_interval[0][1] - gt_interval[0][0] 
-            len_pred = pred_interval[0][1] - pred_interval[0][0] 
+            len_gt = gt_interval[0][1] - gt_interval[0][0]
+            len_pred = pred_interval[0][1] - pred_interval[0][0]
             if iou >= threshold:
                 t_p += 1
                 if debug_plot:
                     if len_gt >= len_pred:
-                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color='red')
-                        ax3.text((pred_start + pred_end) / 2, 0.9, 'TP', color='red', ha='center')
+                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color="red")
+                        ax3.text(
+                            (pred_start + pred_end) / 2,
+                            0.9,
+                            "TP",
+                            color="red",
+                            ha="center",
+                        )
                     else:
-                        ax3.axvspan(gt_start, gt_end, alpha=0.5, color='blue')
-                        ax3.text((gt_start + gt_end) / 2, 0.9, 'TP', color='blue', ha='center')
+                        ax3.axvspan(gt_start, gt_end, alpha=0.5, color="blue")
+                        ax3.text(
+                            (gt_start + gt_end) / 2,
+                            0.9,
+                            "TP",
+                            color="blue",
+                            ha="center",
+                        )
             elif len_gt > len_pred:
                 f_n += 1
                 if debug_plot:
-                    ax3.axvspan(gt_start, gt_end, alpha=0.5, color='blue')
-                    ax3.text((gt_start + gt_end) / 2, 0.9, 'FN', color='blue', ha='center')
+                    ax3.axvspan(gt_start, gt_end, alpha=0.5, color="blue")
+                    ax3.text(
+                        (gt_start + gt_end) / 2, 0.9, "FN", color="blue", ha="center"
+                    )
             else:
                 f_p += 1
                 if debug_plot:
-                    ax3.axvspan(pred_start, pred_end, alpha=0.5, color='red')
-                    ax3.text((pred_start + pred_end) / 2, 0.9, 'FP', color='red', ha='center')
+                    ax3.axvspan(pred_start, pred_end, alpha=0.5, color="red")
+                    ax3.text(
+                        (pred_start + pred_end) / 2, 0.9, "FP", color="red", ha="center"
+                    )
         elif len(gt_interval) >= 2 and len(pred_interval) == 1:
             pred_start, pred_end = pred_interval[0]
             for gt_start, gt_end in gt_interval:
@@ -171,13 +204,25 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
                     flag_t_p += 1
                     t_p += 1
                     if debug_plot:
-                        ax3.axvspan(gt_start , gt_end, alpha=0.5, color='green')
-                        ax3.text((gt_start + gt_end) / 2, 0.9, 'TP', color='green', ha='center')
-                else:   
+                        ax3.axvspan(gt_start, gt_end, alpha=0.5, color="green")
+                        ax3.text(
+                            (gt_start + gt_end) / 2,
+                            0.9,
+                            "TP",
+                            color="green",
+                            ha="center",
+                        )
+                else:
                     f_p += 1
                     if debug_plot:
-                        ax3.axvspan(gt_start, gt_end, alpha=0.5, color='blue')
-                        ax3.text((gt_start + gt_end) / 2, 0.9, 'FP', color='blue', ha='center')
+                        ax3.axvspan(gt_start, gt_end, alpha=0.5, color="blue")
+                        ax3.text(
+                            (gt_start + gt_end) / 2,
+                            0.9,
+                            "FP",
+                            color="blue",
+                            ha="center",
+                        )
         elif len(gt_interval) == 1 and len(pred_interval) >= 2:
             gt_start, gt_end = gt_interval[0]
             for pred_start, pred_end in pred_interval:
@@ -188,13 +233,25 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
                     flag_t_p += 1
                     t_p += 1
                     if debug_plot:
-                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color='green')
-                        ax3.text((pred_start + pred_end) / 2, 0.9, 'TP', color='green', ha='center')
+                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color="green")
+                        ax3.text(
+                            (pred_start + pred_end) / 2,
+                            0.9,
+                            "TP",
+                            color="green",
+                            ha="center",
+                        )
                 else:
                     f_n += 1
                     if debug_plot:
-                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color='blue')
-                        ax3.text((pred_start + pred_end) / 2, 0.9, 'FN', color='blue', ha='center')
+                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color="blue")
+                        ax3.text(
+                            (pred_start + pred_end) / 2,
+                            0.9,
+                            "FN",
+                            color="blue",
+                            ha="center",
+                        )
         else:
             # Handle multiple GT and Pred intervals
             matched = set()
@@ -206,8 +263,10 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
                 for idx, (gt_start, gt_end) in enumerate(gt_interval):
                     if idx in matched:
                         continue  # Skip already matched ground truths
-                    
-                    intersection = max(0, min(gt_end, pred_end) - max(gt_start, pred_start))
+
+                    intersection = max(
+                        0, min(gt_end, pred_end) - max(gt_start, pred_start)
+                    )
                     union = max(gt_end, pred_end) - min(gt_start, pred_start)
                     iou = intersection / union
 
@@ -220,59 +279,80 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
                     t_p += 1
                     matched.add(best_match)
                     if debug_plot:
-                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color='green')
-                        ax3.text((pred_start + pred_end) / 2, 0.9, 'TP', color='green', ha='center')
+                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color="green")
+                        ax3.text(
+                            (pred_start + pred_end) / 2,
+                            0.9,
+                            "TP",
+                            color="green",
+                            ha="center",
+                        )
                 else:
                     f_p += 1
                     if debug_plot:
-                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color='red')
-                        ax3.text((pred_start + pred_end) / 2, 0.9, 'FP', color='red', ha='center')
-
+                        ax3.axvspan(pred_start, pred_end, alpha=0.5, color="red")
+                        ax3.text(
+                            (pred_start + pred_end) / 2,
+                            0.9,
+                            "FP",
+                            color="red",
+                            ha="center",
+                        )
 
     precision = t_p / (t_p + f_p) if (t_p + f_p) > 0 else 0
     recall = t_p / (t_p + f_n) if (t_p + f_n) > 0 else 0
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    f1 = (
+        2 * (precision * recall) / (precision + recall)
+        if (precision + recall) > 0
+        else 0
+    )
 
     if debug_plot:
         # Finalize the plot
         for ax in (ax1, ax2, ax3):
             ax.set_ylim(-0.1, 1.1)
             ax.legend()
-        ax3.set_xlabel('Time')
+        ax3.set_xlabel("Time")
         plt.tight_layout()
         plt.show()
 
     return f1
 
+
 def post_process_predictions(predictions, min_length=64, merge_distance=32):
     """
     Post-process predictions by removing short segments and merging close segments.
-    
+
     Parameters:
         predictions (np.ndarray): Binary predictions array.
         min_length (int): Minimum length of a segment to keep.
         merge_distance (int): Maximum distance between segments to merge.
-    
+
     Returns:
         np.ndarray: Post-processed predictions array.
     """
     # Get the intervals of nonzero predictions
     intervals = nonzero_intervals(predictions)
-    
+
     # Remove short segments
-    intervals = [interval for interval in intervals if interval[1] - interval[0] >= min_length]
-    
+    intervals = [
+        interval for interval in intervals if interval[1] - interval[0] >= min_length
+    ]
+
     # Merge close segments
     merged_intervals = []
     for interval in intervals:
-        if not merged_intervals or interval[0] - merged_intervals[-1][1] > merge_distance:
+        if (
+            not merged_intervals
+            or interval[0] - merged_intervals[-1][1] > merge_distance
+        ):
             merged_intervals.append(interval)
         else:
             merged_intervals[-1][1] = interval[1]
-    
+
     # Create a new predictions array based on the merged intervals
     new_predictions = np.zeros_like(predictions)
     for start, end in merged_intervals:
         new_predictions[start:end] = 1
-    
+
     return new_predictions
