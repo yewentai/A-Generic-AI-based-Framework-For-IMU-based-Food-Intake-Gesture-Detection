@@ -2,6 +2,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class SelfAttention(nn.Module):
+    def __init__(self, num_filters):
+        super(SelfAttention, self).__init__()
+        self.query = nn.Conv1d(num_filters, num_filters, kernel_size=1)
+        self.key = nn.Conv1d(num_filters, num_filters, kernel_size=1)
+        self.value = nn.Conv1d(num_filters, num_filters, kernel_size=1)
+        self.scale = torch.sqrt(torch.FloatTensor([num_filters])).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+    def forward(self, x):
+        Q = self.query(x)
+        K = self.key(x)
+        V = self.value(x)
+        
+        attention = torch.matmul(Q.permute(0, 2, 1), K) / self.scale
+        attention = F.softmax(attention, dim=-1)
+        
+        out = torch.matmul(attention, V.permute(0, 2, 1))
+        return out.permute(0, 2, 1)
+
 # Dilated Residual Layer
 class DilatedResidualLayer(nn.Module):
     def __init__(self, num_filters, dilation, kernel_size=3, dropout=0.3):
@@ -30,25 +49,27 @@ class SSTCN(nn.Module):
     def __init__(self, num_layers, in_channels, num_classes, num_filters=128, 
                  kernel_size=3, dropout=0.3):
         super(SSTCN, self).__init__()
-        # 1x1 convolution to match the number of filters
         self.conv_in = nn.Conv1d(in_channels, num_filters, kernel_size=1)
-        # Stack of dilated residual layers
         self.layers = nn.ModuleList()
         for l in range(num_layers):
             dilation = 2 ** l
-            self.layers.append( DilatedResidualLayer(num_filters, dilation=dilation, 
-                                                     kernel_size=kernel_size,
-                                                     dropout=dropout) )
-        # Final 1x1 convolution to get desired output channels
+            self.layers.append(DilatedResidualLayer(num_filters, dilation=dilation, 
+                                                    kernel_size=kernel_size,
+                                                    dropout=dropout))
+        
+        # Add the self-attention layer
+        self.attention = SelfAttention(num_filters)
+        
         self.conv_out = nn.Conv1d(num_filters, num_classes, kernel_size=1)
         
     def forward(self, x):
-        # Input convolution
         out = self.conv_in(x)
-        # Pass through dilated residual layers
         for layer in self.layers:
             out = layer(out)
-        # Output convolution
+        
+        # Apply self-attention
+        # out = self.attention(out) + out  # Residual connection
+        
         out = self.conv_out(out)
         return out
 
@@ -74,7 +95,7 @@ class MSTCN(nn.Module):
             outputs.append(out)
         return outputs  # Return outputs from all stages
 
-def MSTCN_Loss(outputs, targets, lambda_coef=0.15, tau=4):
+def MSTCN_Loss(outputs, targets, lambda_coef=0.15):
     total_loss = 0
     # Ensure targets are LongTensors
     targets = targets.long()
@@ -96,9 +117,13 @@ def MSTCN_Loss(outputs, targets, lambda_coef=0.15, tau=4):
         log_probs_t = log_probs[:, :, 1:]  # [batch_size, num_classes, seq_len-1]
         log_probs_t_minus_one = log_probs[:, :, :-1]  # [batch_size, num_classes, seq_len-1]
         delta = (log_probs_t - log_probs_t_minus_one).abs()
-        delta = torch.clamp(delta, max=tau)
+        delta = torch.clamp(delta, min=0, max=16)
         mse_loss = (delta ** 2).mean()
         
         total_loss += ce_loss + lambda_coef * mse_loss
     
     return total_loss
+
+# for p in predictions:
+#     ce_loss = loss_ce(p.transpose(2, 1).contiguous().view(-1, num_class), oneBatchLabel2.view(-1, num_class))
+#     mse_loss = 0.15 * torch.mean(torch.clamp(loss_mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16))

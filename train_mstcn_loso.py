@@ -25,8 +25,8 @@ learning_rate = 0.0005
 debug_plot = False
 
 # Load data
-X_path = "./dataset/pkl_data/DX_I_X_mirrored.pkl"
-Y_path = "./dataset/pkl_data/DX_I_Y_mirrored.pkl"
+X_path = "../dataset/DX/pkl_data/DX_I_X_mirrored.pkl"
+Y_path = "../dataset/DX/pkl_data/DX_I_Y_mirrored.pkl"
 with open(X_path, "rb") as f:
     X = pickle.load(f)
 with open(Y_path, "rb") as f:
@@ -40,8 +40,8 @@ unique_subjects = np.unique(full_dataset.subject_indices)
 loso_f1_scores = []
 
 # Open CSV files for writing
-with open("result/training_log_dxi_mirrored_mstcn.csv", mode='w', newline='') as train_csvfile, \
-     open("result/testing_log_dxi_mirrored_mstcn.csv", mode='w', newline='') as test_csvfile:
+with open("result/training_log_dxi_mirrored_mstcn_new.csv", mode='w', newline='') as train_csvfile, \
+     open("result/testing_log_dxi_mirrored_mstcn_new.csv", mode='w', newline='') as test_csvfile:
 
     train_csv_writer = csv.writer(train_csvfile)
     test_csv_writer = csv.writer(test_csvfile)
@@ -89,7 +89,7 @@ with open("result/training_log_dxi_mirrored_mstcn.csv", mode='w', newline='') as
                 optimizer.zero_grad()
 
                 outputs = model(batch_x)
-                loss = MSTCN_Loss(outputs, batch_y, lambda_coef, tau)
+                loss = MSTCN_Loss(outputs, batch_y, lambda_coef)
 
                 loss.backward()
                 optimizer.step()

@@ -59,8 +59,8 @@ num_epochs = 20
 criterion = nn.BCELoss()
 
 # Load .pkl data
-X_path = "./dataset/pkl_data/DX_I_X_mirrored.pkl"
-Y_path = "./dataset/pkl_data/DX_I_Y_mirrored.pkl"
+X_path = "../dataset/DX/pkl_data/DX_I_X_mirrored.pkl"
+Y_path = "../dataset/DX/pkl_data/DX_I_Y_mirrored.pkl"
 with open(X_path, "rb") as f:
     X = pickle.load(f)  # List of numpy arrays
 with open(Y_path, "rb") as f:
