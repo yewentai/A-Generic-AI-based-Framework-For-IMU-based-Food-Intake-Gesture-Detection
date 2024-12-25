@@ -40,52 +40,87 @@ unique_subjects = np.unique(full_dataset.subject_indices)
 loso_f1_scores = []
 
 # Open CSV files for writing
-with open("result/training_log_dxi_mirrored_mstcn_new.csv", mode='w', newline='') as train_csvfile, \
-     open("result/testing_log_dxi_mirrored_mstcn_new.csv", mode='w', newline='') as test_csvfile:
+with open(
+    "result/training_log_dxi_mirrored_mstcn_new.csv", mode="w", newline=""
+) as train_csvfile, open(
+    "result/testing_log_dxi_mirrored_mstcn_new.csv", mode="w", newline=""
+) as test_csvfile:
 
     train_csv_writer = csv.writer(train_csvfile)
     test_csv_writer = csv.writer(test_csvfile)
 
     # Write headers
-    train_csv_writer.writerow(['Date', 'Time', 'Fold', 'Epoch', 'Training Loss'])
-    test_csv_writer.writerow(['Date', 'Time', 'Fold', 'F1 Sample', 
-                              'F1 Segment 0.1', 'F1 Segment 0.25', 'F1 Segment 0.5'])
+    train_csv_writer.writerow(["Date", "Time", "Fold", "Epoch", "Training Loss"])
+    test_csv_writer.writerow(
+        [
+            "Date",
+            "Time",
+            "Fold",
+            "F1 Sample",
+            "F1 Segment 0.1",
+            "F1 Segment 0.25",
+            "F1 Segment 0.5",
+        ]
+    )
 
     # Device configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    for fold, test_subject in enumerate(tqdm(unique_subjects, desc="LOSO Folds", leave=True)):
+    for fold, test_subject in enumerate(
+        tqdm(unique_subjects, desc="LOSO Folds", leave=True)
+    ):
         # Create train and test indices
-        train_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject != test_subject]
-        test_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject == test_subject]
+        train_indices = [
+            i
+            for i, subject in enumerate(full_dataset.subject_indices)
+            if subject != test_subject
+        ]
+        test_indices = [
+            i
+            for i, subject in enumerate(full_dataset.subject_indices)
+            if subject == test_subject
+        ]
 
         # Create Subset datasets
         train_dataset = Subset(full_dataset, train_indices)
         test_dataset = Subset(full_dataset, test_indices)
 
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=True)
-        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, pin_memory=True)
+        train_loader = DataLoader(
+            train_dataset, batch_size=32, shuffle=True, pin_memory=True
+        )
+        test_loader = DataLoader(
+            test_dataset, batch_size=32, shuffle=False, pin_memory=True
+        )
 
         # Model initialization
-        model = MSTCN(num_stages=num_stages, num_layers=num_layers, 
-                      num_classes=num_classes, input_dim=input_dim, 
-                      num_filters=num_filters, kernel_size=kernel_size, 
-                      dropout=dropout)
+        model = MSTCN(
+            num_stages=num_stages,
+            num_layers=num_layers,
+            num_classes=num_classes,
+            input_dim=input_dim,
+            num_filters=num_filters,
+            kernel_size=kernel_size,
+            dropout=dropout,
+        )
         model.to(device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
         # Training loop
         num_epochs = 20
-        for epoch in tqdm(range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False):
+        for epoch in tqdm(
+            range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False
+        ):
             model.train()
             training_loss = 0.0
             for i, (batch_x, batch_y) in enumerate(train_loader):
                 # Data augmentation
                 batch_x = augment_orientation(batch_x)
 
-                batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
+                batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(
+                    device
+                )
                 optimizer.zero_grad()
 
                 outputs = model(batch_x)
@@ -100,8 +135,15 @@ with open("result/training_log_dxi_mirrored_mstcn_new.csv", mode='w', newline=''
 
             # Save training data into CSV
             now = datetime.now()
-            train_csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
-                                       fold + 1, epoch + 1, avg_train_loss])
+            train_csv_writer.writerow(
+                [
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%H:%M:%S"),
+                    fold + 1,
+                    epoch + 1,
+                    avg_train_loss,
+                ]
+            )
 
         # Testing
         model.eval()
@@ -109,7 +151,9 @@ with open("result/training_log_dxi_mirrored_mstcn_new.csv", mode='w', newline=''
         all_labels = []
         with torch.no_grad():
             for i, (batch_x, batch_y) in enumerate(test_loader):
-                batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
+                batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(
+                    device
+                )
                 outputs = model(batch_x)
                 final_output = outputs[-1]
                 probabilities = F.softmax(final_output, dim=1)
@@ -130,7 +174,11 @@ with open("result/training_log_dxi_mirrored_mstcn_new.csv", mode='w', newline=''
             tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1_sample = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        f1_sample = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0
+        )
         f1_segment_1 = segment_f1_binary(all_predictions, all_labels, 0.1, debug_plot)
         f1_segment_2 = segment_f1_binary(all_predictions, all_labels, 0.25, debug_plot)
         f1_segment_3 = segment_f1_binary(all_predictions, all_labels, 0.5, debug_plot)
@@ -139,9 +187,17 @@ with open("result/training_log_dxi_mirrored_mstcn_new.csv", mode='w', newline=''
 
         # Save the F1 scores after testing
         now = datetime.now()
-        test_csv_writer.writerow([now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), 
-                                  fold + 1, f1_sample, 
-                                  f1_segment_1, f1_segment_2, f1_segment_3])
+        test_csv_writer.writerow(
+            [
+                now.strftime("%Y-%m-%d"),
+                now.strftime("%H:%M:%S"),
+                fold + 1,
+                f1_sample,
+                f1_segment_1,
+                f1_segment_2,
+                f1_segment_3,
+            ]
+        )
 
         # Save the best model
         # torch.save(model.state_dict(), f"models/best_model_fold_{fold}.pth")
