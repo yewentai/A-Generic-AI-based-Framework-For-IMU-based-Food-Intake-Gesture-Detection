@@ -3,114 +3,28 @@ import matplotlib.pyplot as plt
 from utils import segment_f1_binary, post_process_predictions
 
 # Ground Truth sequence
-gt = np.array(
-    [
-        0,
-        0,
-        1,
-        1,
-        1,
-        0,
-        0,  # Normal gesture
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,  # No gesture (for insertion test)
-        1,
-        1,
-        1,
-        1,
-        0,
-        0,
-        0,  # Gesture for underfill and overfill tests
-        0,
-        1,
-        1,
-        0,
-        1,
-        1,
-        0,  # Two gestures for merge test
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,  # Long gesture for fragmentation test
-        0,
-        0,
-        1,
-        1,
-        1,
-        0,
-        0,  # Gesture for deletion test
-        1,
-        1,
-        0,
-        1,
-        1,
-        1,
-        0,
-    ]
-)
+# fmt: off
+gt = np.array([
+    0, 0, 1, 1, 1, 0, 0,  # Normal gesture
+    0, 0, 0, 0, 0, 0, 0,  # No gesture (for insertion test)
+    1, 1, 1, 1, 0, 0, 0,  # Gesture for underfill and overfill tests
+    0, 1, 1, 0, 1, 1, 0,  # Two gestures for merge test
+    1, 1, 1, 1, 1, 1, 1,  # Long gesture for fragmentation test
+    0, 0, 1, 1, 1, 0, 0,  # Gesture for deletion test
+    1, 1, 0, 1, 1, 1, 0
+])
 
 # Prediction sequence
-pred = np.array(
-    [
-        0,
-        1,
-        1,
-        1,
-        1,
-        1,
-        0,  # Overfill
-        0,
-        1,
-        1,
-        0,
-        0,
-        0,
-        0,  # Insertion
-        1,
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,  # Underfill
-        0,
-        1,
-        1,
-        1,
-        1,
-        1,
-        0,  # Merge
-        1,
-        0,
-        1,
-        0,
-        1,
-        0,
-        1,  # Fragmentation
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,  # Deletion
-        0,
-        1,
-        1,
-        1,
-        0,
-        1,
-        1,  # Mismatch
-    ]
-)
+pred = np.array([
+    0, 1, 1, 1, 1, 1, 0,  # Overfill
+    0, 1, 1, 0, 0, 0, 0,  # Insertion
+    1, 1, 0, 0, 0, 0, 0,  # Underfill
+    0, 1, 1, 1, 1, 1, 0,  # Merge
+    1, 0, 1, 0, 1, 0, 1,  # Fragmentation
+    0, 0, 0, 0, 0, 0, 0,  # Deletion
+    0, 1, 1, 1, 0, 1, 1   # Mismatch
+])
+# fmt: on
 
 # Plot the sequences
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
