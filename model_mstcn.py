@@ -3,28 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class SelfAttention(nn.Module):
-    def __init__(self, num_filters):
-        super(SelfAttention, self).__init__()
-        self.query = nn.Conv1d(num_filters, num_filters, kernel_size=1)
-        self.key = nn.Conv1d(num_filters, num_filters, kernel_size=1)
-        self.value = nn.Conv1d(num_filters, num_filters, kernel_size=1)
-        self.scale = torch.sqrt(torch.FloatTensor([num_filters])).to(
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        )
-
-    def forward(self, x):
-        Q = self.query(x)
-        K = self.key(x)
-        V = self.value(x)
-
-        attention = torch.matmul(Q.permute(0, 2, 1), K) / self.scale
-        attention = F.softmax(attention, dim=-1)
-
-        out = torch.matmul(attention, V.permute(0, 2, 1))
-        return out.permute(0, 2, 1)
-
-
 # Dilated Residual Layer
 class DilatedResidualLayer(nn.Module):
     def __init__(self, num_filters, dilation, kernel_size=3, dropout=0.3):
@@ -74,9 +52,6 @@ class SSTCN(nn.Module):
                     dropout=dropout,
                 )
             )
-
-        # Add the self-attention layer
-        self.attention = SelfAttention(num_filters)
 
         self.conv_out = nn.Conv1d(num_filters, num_classes, kernel_size=1)
 
@@ -164,8 +139,3 @@ def MSTCN_Loss(outputs, targets, lambda_coef=0.15):
         total_loss += ce_loss + lambda_coef * mse_loss
 
     return total_loss
-
-
-# for p in predictions:
-#     ce_loss = loss_ce(p.transpose(2, 1).contiguous().view(-1, num_class), oneBatchLabel2.view(-1, num_class))
-#     mse_loss = 0.15 * torch.mean(torch.clamp(loss_mse(F.log_softmax(p[:, :, 1:], dim=1), F.log_softmax(p.detach()[:, :, :-1], dim=1)), min=0, max=16))
