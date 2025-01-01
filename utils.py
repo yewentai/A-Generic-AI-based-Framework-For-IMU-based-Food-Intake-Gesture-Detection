@@ -408,9 +408,6 @@ def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
         gt_interval[:, :2] += start_idx
         pred_interval[:, :2] += start_idx
 
-        print(gt_interval)
-        print(pred_interval)
-
         if debug_plot:
             # Highlight the ground truth and prediction intervals
             for gs, ge, _ in gt_interval:

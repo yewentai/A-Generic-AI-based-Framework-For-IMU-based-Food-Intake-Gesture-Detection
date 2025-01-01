@@ -8,7 +8,7 @@ from datetime import datetime
 from tqdm import tqdm
 from model_mstcn import MSTCN, MSTCN_Loss
 from augmentation import augment_orientation
-from utils import IMUDataset, segment_f1_binary, post_process_predictions
+from utils import IMUDataset, segment_f1_multiclass, post_process_predictions
 
 
 # Hyperparameters
@@ -41,9 +41,9 @@ loso_f1_scores = []
 
 # Open CSV files for writing
 with open(
-    "result/training_log_dxi_mirrored_mstcn_new.csv", mode="w", newline=""
+    "result/training_log_fdi_mirrored_mstcn_new.csv", mode="w", newline=""
 ) as train_csvfile, open(
-    "result/testing_log_dxi_mirrored_mstcn_new.csv", mode="w", newline=""
+    "result/testing_log_fdi_mirrored_mstcn_new.csv", mode="w", newline=""
 ) as test_csvfile:
 
     train_csv_writer = csv.writer(train_csvfile)
@@ -108,7 +108,7 @@ with open(
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
         # Training loop
-        num_epochs = 20
+        num_epochs = 10
         for epoch in tqdm(
             range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False
         ):
@@ -179,9 +179,15 @@ with open(
             if (precision + recall) > 0
             else 0
         )
-        f1_segment_1 = segment_f1_binary(all_predictions, all_labels, 0.1, debug_plot)
-        f1_segment_2 = segment_f1_binary(all_predictions, all_labels, 0.25, debug_plot)
-        f1_segment_3 = segment_f1_binary(all_predictions, all_labels, 0.5, debug_plot)
+        f1_segment_1 = segment_f1_multiclass(
+            all_predictions, all_labels, 0.1, debug_plot
+        )
+        f1_segment_2 = segment_f1_multiclass(
+            all_predictions, all_labels, 0.25, debug_plot
+        )
+        f1_segment_3 = segment_f1_multiclass(
+            all_predictions, all_labels, 0.5, debug_plot
+        )
 
         loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2, f1_segment_3])
 
