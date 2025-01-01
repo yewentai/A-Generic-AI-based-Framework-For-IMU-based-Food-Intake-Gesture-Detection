@@ -14,7 +14,7 @@ from utils import IMUDataset, segment_f1_binary, post_process_predictions
 # Hyperparameters
 num_stages = 2
 num_layers = 9
-num_classes = 2
+num_classes = 3
 input_dim = 6
 num_filters = 128
 kernel_size = 3
@@ -25,8 +25,8 @@ learning_rate = 0.0005
 debug_plot = False
 
 # Load data
-X_path = "../dataset/DX/pkl_data/DX_I_X_mirrored.pkl"
-Y_path = "../dataset/DX/pkl_data/DX_I_Y_mirrored.pkl"
+X_path = "./dataset/FD/FD-I/X_L.pkl"
+Y_path = "./dataset/FD/FD-I/Y_L.pkl"
 with open(X_path, "rb") as f:
     X = pickle.load(f)
 with open(Y_path, "rb") as f:
