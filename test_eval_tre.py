@@ -65,5 +65,5 @@ plt.tight_layout()
 plt.show()
 
 # Calculate F1 score for each class
-f1_score = segment_f1_multiclass(pred, gt, threshold=0.3, debug_plot=True)
+f1_score = segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=True)
 print(f"F1 Score: {f1_score:.4f}")
