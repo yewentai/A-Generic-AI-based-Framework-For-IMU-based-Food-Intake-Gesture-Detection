@@ -154,7 +154,7 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
         ax1.set_title("Ground Truth")
         ax2.step(range(len(pred)), pred, where="post", label="Prediction", color="red")
         ax2.set_title("Prediction")
-        ax3.step(range(len(union)), union, where="post", label="Union", color="green")
+        ax3.step(range(len(union)), union, where="post", label="Result", color="green")
         ax3.set_title(f"Result(Threshold={threshold})")
 
     for start_idx, end_idx in union_intervals:
@@ -395,7 +395,7 @@ def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
         ax1.set_title("Ground Truth")
         ax2.step(range(len(pred)), pred, where="post", label="Prediction", color="red")
         ax2.set_title("Prediction")
-        ax3.step(range(len(union)), union, where="post", label="Union", color="green")
+        ax3.step(range(len(union)), union, where="post", label="Result", color="green")
         ax3.set_title(f"Result(Threshold={threshold})")
 
     for start_idx, end_idx in union_intervals:
