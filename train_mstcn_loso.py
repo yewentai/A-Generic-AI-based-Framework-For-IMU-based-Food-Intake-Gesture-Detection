@@ -51,9 +51,9 @@ loso_f1_scores = []
 
 # Open CSV files for writing
 with open(
-    "result/training_log_fdi_mirrored_mstcn_new.csv", mode="w", newline=""
+    "result/training_log_fdi_mirrored_mstcn_attention.csv", mode="w", newline=""
 ) as train_csvfile, open(
-    "result/testing_log_fdi_mirrored_mstcn_new.csv", mode="w", newline=""
+    "result/testing_log_fdi_mirrored_mstcn_attention.csv", mode="w", newline=""
 ) as test_csvfile:
 
     train_csv_writer = csv.writer(train_csvfile)
