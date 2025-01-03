@@ -26,44 +26,6 @@ pred = np.array([
 ])
 # fmt: on
 
-# Plot the sequences
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
-
-# Plot ground truth
-ax1.step(range(len(gt)), gt, where="post", label="Ground Truth")
-ax1.set_ylabel("Class")
-ax1.set_ylim(-0.5, 3.5)
-ax1.legend()
-ax1.set_title("Ground Truth")
-ax1.grid(True)
-
-# Plot prediction
-ax2.step(range(len(pred)), pred, where="post", label="Prediction")
-ax2.set_xlabel("Time")
-ax2.set_ylabel("Class")
-ax2.set_ylim(-0.5, 3.5)
-ax2.legend()
-ax2.set_title("Prediction")
-ax2.grid(True)
-
-# Add labels for different situations
-situations = [
-    "Overfill",
-    "Mismatch",
-    "Wrong Class",
-    "Correct Mix",
-    "Fragmentation",
-    "Missing",
-    "Confusion",
-]
-for i, situation in enumerate(situations):
-    ax1.text(i * 7 + 3, 3.7, situation, ha="center", va="center", rotation=45)
-    ax2.text(i * 7 + 3, -0.7, situation, ha="center", va="center", rotation=45)
-
-plt.suptitle("Multi-class Segmentation Test")
-plt.tight_layout()
-plt.show()
-
 # Calculate F1 score for each class
 f1_score = segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=True)
 print(f"F1 Score: {f1_score:.4f}")

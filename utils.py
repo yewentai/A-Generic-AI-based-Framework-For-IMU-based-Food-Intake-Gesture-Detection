@@ -408,39 +408,31 @@ def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
         gt_interval[:, :2] += start_idx
         pred_interval[:, :2] += start_idx
 
-        if debug_plot:
-            # Highlight the ground truth and prediction intervals
-            for gs, ge, _ in gt_interval:
-                ax1.axvspan(gs, ge, alpha=0.3, color="blue")
-            for ps, pe, _ in pred_interval:
-                ax2.axvspan(ps, pe, alpha=0.3, color="red")
+        if len(gt_interval) == 0 and len(pred_interval) != 0:  # False Positive case
+            f_p += len(pred_interval)  # Count all false positive intervals
+            if debug_plot:
+                for pred in pred_interval:
+                    ax3.axvspan(pred[0], pred[1], alpha=0.5, color="red")
+                    ax3.text(
+                        (pred[0] + pred[1]) / 2,
+                        0.9,
+                        "FP",
+                        color="red",
+                        ha="center",
+                    )
+        elif len(gt_interval) != 0 and len(pred_interval) == 0:  # False Negative case
+            f_n += len(gt_interval)  # Count all false negative intervals
+            if debug_plot:
+                for gt in gt_interval:
+                    ax3.axvspan(gt[0], gt[1], alpha=0.5, color="blue")
+                    ax3.text(
+                        (gt[0] + gt[1]) / 2,
+                        0.9,
+                        "FN",
+                        color="blue",
+                        ha="center",
+                    )
 
-        if len(gt_interval) == 0 and len(pred_interval) == 1:
-            f_p += 1
-            if debug_plot:
-                ax3.axvspan(
-                    pred_interval[0][0], pred_interval[0][1], alpha=0.5, color="red"
-                )
-                ax3.text(
-                    (pred_interval[0][0] + pred_interval[0][1]) / 2,
-                    0.9,
-                    "FP",
-                    color="red",
-                    ha="center",
-                )
-        elif len(gt_interval) == 1 and len(pred_interval) == 0:
-            f_n += 1
-            if debug_plot:
-                ax3.axvspan(
-                    gt_interval[0][0], gt_interval[0][1], alpha=0.5, color="blue"
-                )
-                ax3.text(
-                    (gt_interval[0][0] + gt_interval[0][1]) / 2,
-                    0.9,
-                    "FN",
-                    color="blue",
-                    ha="center",
-                )
         elif len(gt_interval) == 1 and len(pred_interval) == 1:
             gt_start, gt_end, gt_value = gt_interval[0]
             pred_start, pred_end, pred_value = pred_interval[0]
