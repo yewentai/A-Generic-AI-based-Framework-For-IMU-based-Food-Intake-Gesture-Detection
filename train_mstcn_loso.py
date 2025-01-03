@@ -38,12 +38,6 @@ with open(X_R_path, "rb") as f:
 with open(Y_R_path, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
 
-# Debug: Inspect the shapes and types
-print("Type of X_L:", type(X_L))
-print("Shape of X_L:", X_L.shape)
-print("Type of X_R:", type(X_R))
-print("Shape of X_R:", X_R.shape)
-
 # Concatenate the left and right data
 X = np.concatenate([X_L, X_R], axis=0)
 Y = np.concatenate([Y_L, Y_R], axis=0)
