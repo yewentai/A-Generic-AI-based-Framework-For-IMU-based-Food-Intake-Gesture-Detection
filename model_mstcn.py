@@ -112,6 +112,7 @@ def MSTCN_Loss(outputs, targets, lambda_coef=0.15):
     # Ensure targets are LongTensors
     targets = targets.long()
 
+    # Cross-Entropy Loss
     ce_loss_fn = nn.CrossEntropyLoss()
     for output in outputs:
         batch_size, num_classes, seq_len = output.size()
@@ -125,17 +126,31 @@ def MSTCN_Loss(outputs, targets, lambda_coef=0.15):
         # Compute classification loss
         ce_loss = ce_loss_fn(output_reshaped, targets_reshaped)
 
-        # Smoothing Loss L_T-MSE
-        log_probs = F.log_softmax(output, dim=2)  # [batch_size, seq_len, num_classes]
-        log_probs = log_probs.permute(0, 2, 1)  # [batch_size, num_classes, seq_len]
-        log_probs_t = log_probs[:, :, 1:]  # [batch_size, num_classes, seq_len-1]
-        log_probs_t_minus_one = log_probs[
-            :, :, :-1
-        ]  # [batch_size, num_classes, seq_len-1]
-        delta = (log_probs_t - log_probs_t_minus_one).abs()
-        delta = torch.clamp(delta, min=0, max=16)
-        mse_loss = (delta**2).mean()
+    # Smoothing Loss L_T-MSE with Weighted Time Differences
+    log_probs = F.log_softmax(output, dim=2)  # [batch_size, seq_len, num_classes]
+    log_probs = log_probs.permute(0, 2, 1)  # [batch_size, num_classes, seq_len]
+    log_probs_t = log_probs[:, :, 1:]  # [batch_size, num_classes, seq_len-1]
+    log_probs_t_minus_one = log_probs[:, :, :-1]  # [batch_size, num_classes, seq_len-1]
 
-        total_loss += ce_loss + lambda_coef * mse_loss
+    # Calculate absolute difference
+    delta = (log_probs_t - log_probs_t_minus_one).abs()
+
+    # Generate weights for time steps
+    seq_len = delta.size(2)  # Sequence length (seq_len-1 due to delta calculation)
+    weights = torch.linspace(1.0, 0.1, steps=seq_len).to(
+        delta.device
+    )  # Linear decay from 1.0 to 0.1
+
+    # Apply weights to the time differences
+    weighted_delta = delta * weights.unsqueeze(0).unsqueeze(
+        0
+    )  # Add batch and num_classes dimensions
+
+    # Clamp values and compute weighted MSE loss
+    weighted_delta = torch.clamp(weighted_delta, min=0, max=16)
+    mse_loss = (weighted_delta**2).mean()
+
+    # Compute total loss
+    total_loss += ce_loss + lambda_coef * mse_loss
 
     return total_loss
