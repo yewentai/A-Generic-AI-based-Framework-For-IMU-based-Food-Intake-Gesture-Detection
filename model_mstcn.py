@@ -42,8 +42,8 @@ class SSTCN(nn.Module):
         super(SSTCN, self).__init__()
         self.conv_in = nn.Conv1d(in_channels, num_filters, kernel_size=1)
         self.layers = nn.ModuleList()
-        for l in range(num_layers):
-            dilation = 2**l
+        for i in range(num_layers):
+            dilation = 2**i
             self.layers.append(
                 DilatedResidualLayer(
                     num_filters,

@@ -1,3 +1,7 @@
+"""
+Reference:https://github.com/locuslab/TCN?tab=readme-ov-file
+"""
+
 import torch
 import torch.nn as nn
 from torch.nn.utils.parametrizations import weight_norm
@@ -126,9 +130,9 @@ class TemporalConvNet(nn.Module):
         """
         super(TemporalConvNet, self).__init__()
         layers = []
-        num_levels = len(num_channels)  # Number of temporal blocks
+        num_layers = len(num_channels)  # Number of temporal blocks
 
-        for i in range(num_levels):
+        for i in range(num_layers):
             dilation_size = 2**i  # Exponentially increasing dilation factor
             in_channels = (
                 num_inputs if i == 0 else num_channels[i - 1]
@@ -161,23 +165,3 @@ class TemporalConvNet(nn.Module):
             Output tensor after passing through the TCN.
         """
         return self.network(x)
-
-
-# Test the TemporalConvNet model with random input
-num_inputs = 6
-num_channels = [64, 64, 64, 64]
-seq_length = 256
-batch_size = 32
-
-# Create a random input tensor
-x = torch.randn(batch_size, num_inputs, seq_length)
-
-# Initialize the TemporalConvNet model
-model = TemporalConvNet(num_inputs, num_channels)
-
-# Perform a forward pass
-output = model(x)
-print("Input shape:", x.shape)
-# The input shape is [batch_size, num_inputs, seq_length]
-print("Output shape:", output.shape)
-# The output shape is [batch_size, num_channels, seq_length] as expected
