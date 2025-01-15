@@ -1,165 +1,196 @@
+# TODO: Cut the sqeunce before feeding to the model
+
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
-from sklearn.model_selection import KFold
 import numpy as np
 import pickle
+import os
 from datetime import datetime
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-import os
+from model_tcn_mha import TCNMHA, TCNMHA_Loss
+from augmentation import augment_orientation
+from utils import IMUDataset, segment_f1_multiclass, post_process_predictions
 
-# Set random seeds for reproducibility
-torch.manual_seed(42)
-np.random.seed(42)
+# Hyperparameters
+num_layers = 9
+num_classes = 3
+num_heads = 8
+input_dim = 6
+num_filters = 128
+kernel_size = 3
+dropout = 0.3
+lambda_coef = 0.15
+tau = 4
+learning_rate = 0.0005
+debug_plot = False
+
+# Load data
+X_L_path = "./dataset/FD/FD-I/X_L.pkl"
+Y_L_path = "./dataset/FD/FD-I/Y_L.pkl"
+X_R_path = "./dataset/FD/FD-I/X_R.pkl"
+Y_R_path = "./dataset/FD/FD-I/Y_R.pkl"
+
+with open(X_L_path, "rb") as f:
+    X_L = np.array(pickle.load(f), dtype=object)  # Convert to NumPy array
+with open(Y_L_path, "rb") as f:
+    Y_L = np.array(pickle.load(f), dtype=object)
+with open(X_R_path, "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(Y_R_path, "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
+
+# Concatenate the left and right data
+X = np.concatenate([X_L, X_R], axis=0)
+Y = np.concatenate([Y_L, Y_R], axis=0)
+
+# Create the full dataset
+full_dataset = IMUDataset(X, Y)
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
-# Create directory for saving models
-save_path = "./checkpoints"
-os.makedirs(save_path, exist_ok=True)
+# Create directories for saving result
+if not os.path.exists("result"):
+    os.makedirs("result")
 
-# Initialize k-fold cross validation
-kfold = KFold(n_splits=7, shuffle=True, random_state=42)
-fold_results = []
+# File names for training and testing result
+training_stats_file = "result/training_stats_tcnmha.npy"
+testing_stats_file = "result/testing_stats_tcnmha.npy"
 
-# Initialize lists to store results
-all_train_losses = []
-all_val_f1_scores = []
+# Initialize empty lists to store result
+training_statistics = []
+testing_statistics = []
 
-# Perform k-fold cross validation
-for fold, (train_idx, val_idx) in enumerate(kfold.split(full_dataset)):
-    print(f"\nStarting fold {fold+1}/7")
+# LOSO cross-validation
+unique_subjects = np.unique(full_dataset.subject_indices)
+loso_f1_scores = []
 
-    # Create data loaders for this fold
+for fold, test_subject in enumerate(
+    tqdm(unique_subjects, desc="LOSO Folds", leave=True)
+):
+    # Create train and test indices
+    train_indices = [
+        i
+        for i, subject in enumerate(full_dataset.subject_indices)
+        if subject != test_subject
+    ]
+    test_indices = [
+        i
+        for i, subject in enumerate(full_dataset.subject_indices)
+        if subject == test_subject
+    ]
+
+    # Create train and test dataset
+    train_dataset = Subset(full_dataset, train_indices)
+    test_dataset = Subset(full_dataset, test_indices)
+
+    # Create data loaders
     train_loader = DataLoader(
-        Subset(full_dataset, train_idx), batch_size=32, shuffle=True
+        train_dataset, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
     )
-    val_loader = DataLoader(Subset(full_dataset, val_idx), batch_size=32, shuffle=False)
+    test_loader = DataLoader(
+        test_dataset, batch_size=1, shuffle=False, num_workers=4, pin_memory=True
+    )
 
-    # Initialize model, criterion, and optimizer
+    # Initialize the model
     model = TCNMHA(
-        input_dim=input_dim,
-        hidden_dim=64,
+        num_layers=num_layers,
         num_classes=num_classes,
-        num_heads=8,
-        d_model=128,
-        kernel_size=3,
-        num_layers=9,
+        num_heads=num_heads,
+        input_dim=input_dim,
+        num_filters=num_filters,
+        kernel_size=kernel_size,
+        dropout=dropout,
+        lambda_coef=lambda_coef,
+        tau=tau,
     ).to(device)
 
-    criterion = TCNMHALoss(alpha=0.15)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
+    # Loss and optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Training loop variables
-    best_val_f1 = 0
-    train_losses = []
-    val_f1_scores = []
-    patience = 10
-    counter = 0
-
-    # Training loop
-    for epoch in range(100):  # Max epochs with early stopping
-        # Training phase
+    # Training
+    num_epochs = 10
+    for epoch in tqdm(range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False):
         model.train()
-        total_loss = 0
-        progress_bar = tqdm(train_loader, desc=f"Fold {fold+1}, Epoch {epoch+1}")
+        training_loss = 0.0
+        for i, (batch_x, batch_y) in enumerate(train_loader):
+            # Data augmentation
+            batch_x = augment_orientation(batch_x)
 
-        for batch_x, batch_y in progress_bar:
-            batch_x = batch_x.to(device)
-            batch_y = batch_y.to(device)
-
+            batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
             optimizer.zero_grad()
+
             outputs = model(batch_x)
-            loss = criterion(outputs, batch_y)
+            loss = TCNMHA_Loss(outputs, batch_y, lambda_coef)
 
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
-            progress_bar.set_postfix({"loss": loss.item()})
+            training_loss += loss.item()
 
-        avg_train_loss = total_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
-
-        # Validation phase
-        model.eval()
-        all_preds = []
-        all_labels = []
-
-        with torch.no_grad():
-            for batch_x, batch_y in val_loader:
-                batch_x = batch_x.to(device)
-                outputs = model(batch_x)
-                predictions = torch.argmax(outputs, dim=-1)
-
-                all_preds.extend(predictions.cpu().numpy())
-                all_labels.extend(batch_y.cpu().numpy())
-
-        val_f1 = segment_f1_multiclass(np.array(all_preds), np.array(all_labels))
-        val_f1_scores.append(val_f1)
-
-        print(
-            f"Fold {fold+1}, Epoch {epoch+1}: Train Loss = {avg_train_loss:.4f}, Val F1 = {val_f1:.4f}"
+        avg_train_loss = training_loss / len(train_loader)
+        # Save training result for each epoch
+        training_statistics.append(
+            {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "fold": fold + 1,
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+            }
         )
 
-        # Save best model
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
-            counter = 0
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            torch.save(
-                {
-                    "epoch": epoch,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "val_f1": val_f1,
-                },
-                f"{save_path}/tcn_mha_fold{fold+1}_best_{timestamp}.pth",
-            )
-        else:
-            counter += 1
+    # Testing
+    model.eval()
+    all_predictions = []
+    all_labels = []
+    with torch.no_grad():
+        for i, (batch_x, batch_y) in enumerate(test_loader):
+            batch_x, batch_y = batch_x.permute(0, 2, 1).to(device), batch_y.to(device)
+            outputs = model(batch_x)
+            final_output = outputs[-1]
+            probabilities = F.softmax(final_output, dim=1)
+            predicted_classes = torch.argmax(probabilities, dim=1)
+            all_predictions.extend(predicted_classes.view(-1).cpu().numpy())
+            all_labels.extend(batch_y.view(-1).cpu().numpy())
 
-        # Early stopping
-        if counter >= patience:
-            print(f"Early stopping triggered after {epoch+1} epochs")
-            break
+    all_predictions = np.array(all_predictions)
+    all_labels = np.array(all_labels)
+    # Post-processing predictions
+    all_predictions = post_process_predictions(all_predictions)
 
-    # Store results for this fold
-    fold_results.append(best_val_f1)
-    all_train_losses.append(train_losses)
-    all_val_f1_scores.append(val_f1_scores)
+    # Calculate metrics
+    fp, fn, tp = 0, 0, 0
+    for i in range(len(all_predictions)):
+        fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
+        fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
+        tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1_sample = (
+        2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    )
+    f1_segment_1 = segment_f1_multiclass(all_predictions, all_labels, 0.1, debug_plot)
+    f1_segment_2 = segment_f1_multiclass(all_predictions, all_labels, 0.25, debug_plot)
+    f1_segment_3 = segment_f1_multiclass(all_predictions, all_labels, 0.5, debug_plot)
 
-    print(f"Fold {fold+1} Best Validation F1: {best_val_f1:.4f}")
+    # Save testing result for each fold
+    testing_statistics.append(
+        {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "fold": fold + 1,
+            "f1_sample": f1_sample,
+            "f1_segment_1": f1_segment_1,
+            "f1_segment_2": f1_segment_2,
+            "f1_segment_3": f1_segment_3,
+        }
+    )
 
-# Print final results
-mean_f1 = np.mean(fold_results)
-std_f1 = np.std(fold_results)
-print(f"\nCross-validation results:")
-print(f"Mean F1: {mean_f1:.4f} ± {std_f1:.4f}")
+    loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2, f1_segment_3])
 
-# Plot results
-plt.figure(figsize=(15, 5))
-
-# Plot training loss
-plt.subplot(1, 2, 1)
-for fold in range(7):
-    plt.plot(all_train_losses[fold], label=f"Fold {fold+1}")
-plt.title("Training Loss by Fold")
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
-plt.legend()
-
-# Plot validation F1 scores
-plt.subplot(1, 2, 2)
-for fold in range(7):
-    plt.plot(all_val_f1_scores[fold], label=f"Fold {fold+1}")
-plt.title("Validation F1 Score by Fold")
-plt.xlabel("Epoch")
-plt.ylabel("F1 Score")
-plt.legend()
-
-plt.tight_layout()
-plt.savefig("cross_validation_results.png")
-plt.close()
+# Save result to .npy files
+np.save(training_stats_file, training_statistics)
+np.save(testing_stats_file, testing_statistics)

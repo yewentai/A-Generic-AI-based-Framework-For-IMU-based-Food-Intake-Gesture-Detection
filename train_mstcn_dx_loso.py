@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 import numpy as np
 import pickle
+import os
 from datetime import datetime
 from tqdm import tqdm
 from model_mstcn import MSTCN, MSTCN_Loss
@@ -34,14 +35,25 @@ with open(Y, "rb") as f:
 # Create the full dataset
 full_dataset = IMUDataset(X, Y)
 
-# LOSO cross-validation
-unique_subjects = np.unique(full_dataset.subject_indices)
-loso_f1_scores = []
-
-
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
+
+# Create directories for saving result
+if not os.path.exists("result"):
+    os.makedirs("result")
+
+# File names for training and testing result
+training_stats_file = "result/training_stats_mstcn.npy"
+testing_stats_file = "result/testing_stats_mstcn.npy"
+
+# Initialize empty lists to store result
+training_statistics = []
+testing_statistics = []
+
+# LOSO cross-validation
+unique_subjects = np.unique(full_dataset.subject_indices)
+loso_f1_scores = []
 
 for fold, test_subject in enumerate(
     tqdm(unique_subjects, desc="LOSO Folds", leave=True)
@@ -104,6 +116,16 @@ for fold, test_subject in enumerate(
             training_loss += loss.item()
 
         avg_train_loss = training_loss / len(train_loader)
+        # Save training result for each epoch
+        training_statistics.append(
+            {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "fold": fold + 1,
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+            }
+        )
 
     # Testing
     model.eval()
@@ -139,4 +161,21 @@ for fold, test_subject in enumerate(
     f1_segment_2 = segment_f1_multiclass(all_predictions, all_labels, 0.25, debug_plot)
     f1_segment_3 = segment_f1_multiclass(all_predictions, all_labels, 0.5, debug_plot)
 
+    # Save testing result for each fold
+    testing_statistics.append(
+        {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "fold": fold + 1,
+            "f1_sample": f1_sample,
+            "f1_segment_1": f1_segment_1,
+            "f1_segment_2": f1_segment_2,
+            "f1_segment_3": f1_segment_3,
+        }
+    )
+
     loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2, f1_segment_3])
+
+# Save result to .npy files
+np.save(training_stats_file, training_statistics)
+np.save(testing_stats_file, testing_statistics)
