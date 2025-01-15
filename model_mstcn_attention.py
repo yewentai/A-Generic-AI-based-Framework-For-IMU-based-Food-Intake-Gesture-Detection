@@ -30,6 +30,7 @@ class DilatedResidualLayer(nn.Module):
 
 # Single Stage TCN module
 class SSTCN(nn.Module):
+
     def __init__(
         self,
         num_layers,
@@ -38,6 +39,7 @@ class SSTCN(nn.Module):
         num_filters=128,
         kernel_size=3,
         dropout=0.3,
+        num_heads=8,
     ):
         super(SSTCN, self).__init__()
         self.conv_in = nn.Conv1d(in_channels, num_filters, kernel_size=1)
@@ -53,12 +55,28 @@ class SSTCN(nn.Module):
                 )
             )
 
+        # Add MultiheadAttention layer
+        self.attention = nn.MultiheadAttention(
+            embed_dim=num_filters,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.layer_norm = nn.LayerNorm(num_filters)
         self.conv_out = nn.Conv1d(num_filters, num_classes, kernel_size=1)
 
     def forward(self, x):
         out = self.conv_in(x)
         for layer in self.layers:
             out = layer(out)
+
+        # Apply self-attention
+        # Convert from (batch, channels, seq_len) to (batch, seq_len, channels)
+        out_trans = out.permute(0, 2, 1)
+        attended_out, _ = self.attention(out_trans, out_trans, out_trans)
+        attended_out = self.layer_norm(attended_out)
+        # Convert back to (batch, channels, seq_len)
+        out = attended_out.permute(0, 2, 1) + out  # Residual connection
 
         out = self.conv_out(out)
         return out
