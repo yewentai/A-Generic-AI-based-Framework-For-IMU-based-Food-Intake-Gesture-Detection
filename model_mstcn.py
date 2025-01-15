@@ -151,3 +151,28 @@ def MSTCN_Loss(outputs, targets, lambda_coef=0.15):
     total_loss += ce_loss + lambda_coef * mse_loss
 
     return total_loss
+
+
+# Test the TemporalConvNet model with random input
+num_inputs = 6
+num_channels = [64, 64, 64, 64]
+seq_length = 256
+batch_size = 32
+
+# Create a random input tensor
+x = torch.randn(batch_size, num_inputs, seq_length)
+
+# Initialize the MSTCN model
+num_stages = 3
+num_layers = 4
+num_classes = 3
+model = MSTCN(num_stages, num_layers, num_classes, num_inputs)
+
+# Perform a forward pass
+output = model(x)
+print("Input shape:", x.shape)
+for i, stage_output in enumerate(output):
+    print(f"Output shape from stage {i+1}:", stage_output.shape)
+
+# Output shape: torch.Size([32, 64, 256])
+# The output shape is [batch_size, num_channels, seq_length] as expected

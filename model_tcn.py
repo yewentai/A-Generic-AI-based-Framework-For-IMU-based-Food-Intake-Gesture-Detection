@@ -164,7 +164,7 @@ class TemporalConvNet(nn.Module):
 
 
 # Test the TemporalConvNet model with random input
-num_inputs = 128
+num_inputs = 6
 num_channels = [64, 64, 64, 64]
 seq_length = 256
 batch_size = 32
@@ -178,6 +178,6 @@ model = TemporalConvNet(num_inputs, num_channels)
 # Perform a forward pass
 output = model(x)
 print("Input shape:", x.shape)
+# The input shape is [batch_size, num_inputs, seq_length]
 print("Output shape:", output.shape)
-# Output shape: torch.Size([32, 64, 256])
 # The output shape is [batch_size, num_channels, seq_length] as expected
