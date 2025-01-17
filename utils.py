@@ -650,7 +650,7 @@ def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
         plt.tight_layout()
         plt.show()
 
-    return f1
+    return f1, f_n, f_p, t_p
 
 
 def post_process_predictions(predictions, min_length=64, merge_distance=32):

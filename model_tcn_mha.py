@@ -9,7 +9,7 @@ class TemporalBlock(nn.Module):
     """A single temporal block with two layers of dilated non-causal convolutions."""
 
     def __init__(
-        self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2
+        self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.3
     ):
         super(TemporalBlock, self).__init__()
         # First convolutional layer
@@ -74,7 +74,7 @@ class TemporalBlock(nn.Module):
 class TemporalConvNet(nn.Module):
     """A Temporal Convolutional Network (TCN) with multiple temporal blocks."""
 
-    def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.3):
         super(TemporalConvNet, self).__init__()
         layers = []
         for i in range(len(num_channels)):
@@ -154,7 +154,7 @@ class TCNMHA(nn.Module):
         d_model=128,
         kernel_size=3,
         num_layers=9,
-        dropout=0.2,
+        dropout=0.3,
     ):
         super().__init__()
 
@@ -174,6 +174,7 @@ class TCNMHA(nn.Module):
             nn.Linear(d_model, 64),
             nn.ReLU(),
             nn.Linear(64, num_classes),
+            nn.Softmax(dim=-1),
         )
 
     def forward(self, x):

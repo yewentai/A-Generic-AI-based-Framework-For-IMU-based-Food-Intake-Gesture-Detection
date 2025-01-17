@@ -15,12 +15,15 @@ num_layers = 9
 num_classes = 3
 num_heads = 8
 input_dim = 6
-num_filters = 128
+num_filters = 64
 kernel_size = 3
 dropout = 0.3
 lambda_coef = 0.15
 tau = 4
 learning_rate = 0.0005
+sampling_frequency = 16
+window_length = 60
+window_size = sampling_frequency * window_length  # 16 Hz * 60 s = 960
 debug_plot = False
 
 # Load data
@@ -41,6 +44,21 @@ with open(Y_R_path, "rb") as f:
 # Concatenate the left and right data
 X = np.concatenate([X_L, X_R], axis=0)
 Y = np.concatenate([Y_L, Y_R], axis=0)
+
+
+# Function to segment data into 60-second windows
+def segment_data(data, labels, window_size):
+    segmented_data = []
+    segmented_labels = []
+    for d, l in zip(data, labels):
+        for i in range(0, len(d) - window_size + 1, window_size):
+            segmented_data.append(d[i : i + window_size])
+            segmented_labels.append(l[i : i + window_size])
+    return np.array(segmented_data), np.array(segmented_labels)
+
+
+# Segment data
+X, Y = segment_data(X, Y, window_size)
 
 # Create the full dataset
 full_dataset = IMUDataset(X, Y)
@@ -102,12 +120,13 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="7-Fold", leave=True)
 
     # Initialize the model
     model = TCNMHA(
-        num_layers=num_layers,
+        input_dim=input_dim,
         hidden_dim=num_filters,
         num_classes=num_classes,
         num_heads=num_heads,
-        input_dim=input_dim,
+        d_model=128,
         kernel_size=kernel_size,
+        num_layers=num_layers,
         dropout=dropout,
     ).to(device)
 
@@ -166,9 +185,15 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="7-Fold", leave=True)
     all_predictions = post_process_predictions(all_predictions)
 
     # Calculate metrics
-    f1_sample = segment_f1_multiclass(all_predictions, all_labels, 0.1, debug_plot)
-    f1_segment_1 = segment_f1_multiclass(all_predictions, all_labels, 0.25, debug_plot)
-    f1_segment_2 = segment_f1_multiclass(all_predictions, all_labels, 0.5, debug_plot)
+    f1_sample, f_n_0, f_p_0, t_p_0 = segment_f1_multiclass(
+        all_predictions, all_labels, 0.1, debug_plot
+    )
+    f1_segment_1, f_n_1, f_p_1, t_p_1 = segment_f1_multiclass(
+        all_predictions, all_labels, 0.25, debug_plot
+    )
+    f1_segment_2, f_n_2, f_p_2, t_p_2 = segment_f1_multiclass(
+        all_predictions, all_labels, 0.5, debug_plot
+    )
 
     # Save testing result for each fold
     testing_statistics.append(
