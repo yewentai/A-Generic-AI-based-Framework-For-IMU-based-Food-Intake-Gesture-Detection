@@ -1,21 +1,12 @@
+import math
 import torch
 import torch.nn as nn
-from torch.nn.utils import weight_norm
-
-
-class Chomp1d(nn.Module):
-    """Chops off extra padding added during convolution to ensure causality."""
-
-    def __init__(self, chomp_size):
-        super(Chomp1d, self).__init__()
-        self.chomp_size = chomp_size
-
-    def forward(self, x):
-        return x[:, :, : -self.chomp_size].contiguous()
+from torch.nn.utils.parametrizations import weight_norm
+import torch.nn.functional as F
 
 
 class TemporalBlock(nn.Module):
-    """A single temporal block with two layers of dilated causal convolutions."""
+    """A single temporal block with two layers of dilated non-causal convolutions."""
 
     def __init__(
         self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2
@@ -32,7 +23,6 @@ class TemporalBlock(nn.Module):
                 dilation=dilation,
             )
         )
-        self.chomp1 = Chomp1d(padding)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(dropout)
 
@@ -47,7 +37,6 @@ class TemporalBlock(nn.Module):
                 dilation=dilation,
             )
         )
-        self.chomp2 = Chomp1d(padding)
         self.relu2 = nn.ReLU()
         self.dropout2 = nn.Dropout(dropout)
 
@@ -59,11 +48,9 @@ class TemporalBlock(nn.Module):
         )
         self.net = nn.Sequential(
             self.conv1,
-            self.chomp1,
             self.relu1,
             self.dropout1,
             self.conv2,
-            self.chomp2,
             self.relu2,
             self.dropout2,
         )
@@ -94,6 +81,10 @@ class TemporalConvNet(nn.Module):
             dilation_size = 2**i
             in_channels = num_inputs if i == 0 else num_channels[i - 1]
             out_channels = num_channels[i]
+
+            # Adjust padding for "same" padding
+            padding = (kernel_size - 1) * dilation_size // 2
+
             layers.append(
                 TemporalBlock(
                     in_channels,
@@ -101,7 +92,7 @@ class TemporalConvNet(nn.Module):
                     kernel_size,
                     stride=1,
                     dilation=dilation_size,
-                    padding=(kernel_size - 1) * dilation_size,
+                    padding=padding,
                     dropout=dropout,
                 )
             )
@@ -163,11 +154,14 @@ class TCNMHA(nn.Module):
         d_model=128,
         kernel_size=3,
         num_layers=9,
+        dropout=0.2,
     ):
         super().__init__()
 
         # TCN Module
-        self.tcn = TemporalConvNet(input_dim, hidden_dim, kernel_size, num_layers)
+        self.tcn = TemporalConvNet(
+            input_dim, [hidden_dim] * num_layers, kernel_size, dropout
+        )
 
         # Linear projection to d_model dimension for MHA
         self.projection = nn.Linear(hidden_dim, d_model)
@@ -180,68 +174,59 @@ class TCNMHA(nn.Module):
             nn.Linear(d_model, 64),
             nn.ReLU(),
             nn.Linear(64, num_classes),
-            nn.Softmax(dim=-1),
         )
 
     def forward(self, x):
         # TCN Module
-        x = self.tcn(x)
+        x = self.tcn(x)  # Output shape: [batch_size, hidden_dim, seq_len]
+
+        # Transpose to match Linear layer input
+        x = x.transpose(1, 2)  # [batch_size, seq_len, hidden_dim]
 
         # Project to d_model dimension
-        x = self.projection(x)
+        x = self.projection(x)  # [batch_size, seq_len, d_model]
 
         # MHA Module
-        x = self.mha(x)
+        x = self.mha(x)  # [batch_size, seq_len, d_model]
 
         # FCN Module
-        x = self.fcn(x)
+        x = self.fcn(x)  # [batch_size, seq_len, num_classes]
 
         return x
 
 
-def TCNMHA_Loss(output, target, lambda_coef=0.15):
-    total_loss = 0
-    # Ensure target are LongTensors
+def TCNMHA_Loss(output, target, lambda_coef):
+    # Ensure target is a LongTensor
     target = target.long()
+
+    # Reshape output for CrossEntropyLoss
+    batch_size, seq_len, num_classes = output.size()
+    output_reshaped = output.view(-1, num_classes)  # [batch_size*seq_len, num_classes]
+    target_reshaped = target.view(-1)  # [batch_size*seq_len]
 
     # Cross-Entropy Loss
     ce_loss_fn = nn.CrossEntropyLoss()
-    batch_size, num_classes, seq_len = output.size()
-    # Reshape output and target for CrossEntropyLoss
-    output = output.permute(0, 2, 1)  # [batch_size, seq_len, num_classes]
-    output_reshaped = output.reshape(
-        -1, num_classes
-    )  # [batch_size*seq_len, num_classes]
-    target_reshaped = target.reshape(-1)  # [batch_size*seq_len]
-
-    # Compute classification loss
     ce_loss = ce_loss_fn(output_reshaped, target_reshaped)
 
     # Smoothing Loss L_T-MSE with Weighted Time Differences
     log_probs = F.log_softmax(output, dim=2)  # [batch_size, seq_len, num_classes]
-    log_probs = log_probs.permute(0, 2, 1)  # [batch_size, num_classes, seq_len]
-    log_probs_t = log_probs[:, :, 1:]  # [batch_size, num_classes, seq_len-1]
-    log_probs_t_minus_one = log_probs[:, :, :-1]  # [batch_size, num_classes, seq_len-1]
+    log_probs_t = log_probs[:, 1:, :]  # [batch_size, seq_len-1, num_classes]
+    log_probs_t_minus_one = log_probs[:, :-1, :]  # [batch_size, seq_len-1, num_classes]
 
     # Calculate absolute difference
     delta = (log_probs_t - log_probs_t_minus_one).abs()
 
     # Generate weights for time steps
-    seq_len = delta.size(2)  # Sequence length (seq_len-1 due to delta calculation)
-    weights = torch.linspace(1.0, 0.1, steps=seq_len).to(
-        delta.device
-    )  # Linear decay from 1.0 to 0.1
+    seq_len = delta.size(1)  # Sequence length (seq_len-1 due to delta calculation)
+    weights = torch.linspace(1.0, 0.1, steps=seq_len).to(delta.device)
 
     # Apply weights to the time differences
-    weighted_delta = delta * weights.unsqueeze(0).unsqueeze(
-        0
-    )  # Add batch and num_classes dimensions
+    weighted_delta = delta * weights.unsqueeze(0).unsqueeze(-1)
 
     # Clamp values and compute weighted MSE loss
-    weighted_delta = torch.clamp(weighted_delta, min=0, max=16)
     mse_loss = (weighted_delta**2).mean()
 
     # Compute total loss
-    total_loss += ce_loss + lambda_coef * mse_loss
+    total_loss = ce_loss + lambda_coef * mse_loss
 
     return total_loss

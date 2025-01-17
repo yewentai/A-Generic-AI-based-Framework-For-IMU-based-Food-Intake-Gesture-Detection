@@ -1,5 +1,3 @@
-# TODO: Cut the sqeunce before feeding to the model
-
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
@@ -47,6 +45,17 @@ Y = np.concatenate([Y_L, Y_R], axis=0)
 # Create the full dataset
 full_dataset = IMUDataset(X, Y)
 
+# 7-Fold Test Splits
+test_folds = [
+    list(range(0, 10)),  # Fold 1: Subjects 0-9
+    list(range(10, 20)),  # Fold 2: Subjects 10-19
+    list(range(20, 30)),  # Fold 3: Subjects 20-29
+    list(range(30, 40)),  # Fold 4: Subjects 30-39
+    list(range(40, 50)),  # Fold 5: Subjects 40-49
+    list(range(50, 60)),  # Fold 6: Subjects 50-59
+    list(range(60, 68)),  # Fold 7: Subjects 60-67 (remaining subjects)
+]
+
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -63,23 +72,20 @@ testing_stats_file = "result/testing_stats_tcnmha.npy"
 training_statistics = []
 testing_statistics = []
 
-# LOSO cross-validation
-unique_subjects = np.unique(full_dataset.subject_indices)
+# 7-Fold Cross-Validation
 loso_f1_scores = []
 
-for fold, test_subject in enumerate(
-    tqdm(unique_subjects, desc="LOSO Folds", leave=True)
-):
+for fold, test_subjects in enumerate(tqdm(test_folds, desc="7-Fold", leave=True)):
     # Create train and test indices
     train_indices = [
         i
         for i, subject in enumerate(full_dataset.subject_indices)
-        if subject != test_subject
+        if subject not in test_subjects
     ]
     test_indices = [
         i
         for i, subject in enumerate(full_dataset.subject_indices)
-        if subject == test_subject
+        if subject in test_subjects
     ]
 
     # Create train and test dataset
@@ -97,21 +103,19 @@ for fold, test_subject in enumerate(
     # Initialize the model
     model = TCNMHA(
         num_layers=num_layers,
+        hidden_dim=num_filters,
         num_classes=num_classes,
         num_heads=num_heads,
         input_dim=input_dim,
-        num_filters=num_filters,
         kernel_size=kernel_size,
         dropout=dropout,
-        lambda_coef=lambda_coef,
-        tau=tau,
     ).to(device)
 
     # Loss and optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Training
-    num_epochs = 10
+    num_epochs = 20
     for epoch in tqdm(range(num_epochs), desc=f"Training Fold {fold + 1}", leave=False):
         model.train()
         training_loss = 0.0
@@ -162,19 +166,9 @@ for fold, test_subject in enumerate(
     all_predictions = post_process_predictions(all_predictions)
 
     # Calculate metrics
-    fp, fn, tp = 0, 0, 0
-    for i in range(len(all_predictions)):
-        fp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 0))
-        fn += np.sum((all_predictions[i] == 0) & (all_labels[i] == 1))
-        tp += np.sum((all_predictions[i] == 1) & (all_labels[i] == 1))
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    f1_sample = (
-        2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    )
-    f1_segment_1 = segment_f1_multiclass(all_predictions, all_labels, 0.1, debug_plot)
-    f1_segment_2 = segment_f1_multiclass(all_predictions, all_labels, 0.25, debug_plot)
-    f1_segment_3 = segment_f1_multiclass(all_predictions, all_labels, 0.5, debug_plot)
+    f1_sample = segment_f1_multiclass(all_predictions, all_labels, 0.1, debug_plot)
+    f1_segment_1 = segment_f1_multiclass(all_predictions, all_labels, 0.25, debug_plot)
+    f1_segment_2 = segment_f1_multiclass(all_predictions, all_labels, 0.5, debug_plot)
 
     # Save testing result for each fold
     testing_statistics.append(
@@ -185,11 +179,10 @@ for fold, test_subject in enumerate(
             "f1_sample": f1_sample,
             "f1_segment_1": f1_segment_1,
             "f1_segment_2": f1_segment_2,
-            "f1_segment_3": f1_segment_3,
         }
     )
 
-    loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2, f1_segment_3])
+    loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2])
 
 # Save result to .npy files
 np.save(training_stats_file, training_statistics)
