@@ -368,9 +368,9 @@ def segment_f1_binary(pred, gt, threshold=0.5, debug_plot=False):
     return f1
 
 
-def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
+def segment_confusion_matrix(pred, gt, threshold=0.5, debug_plot=False):
     """
-    Compute the F1 score for multi-class segmentation tasks.
+    Compute the confusion matrix for segmentation tasks.
 
     Parameters:
         pred (np.ndarray): Array of predicted segmentation.
@@ -380,7 +380,8 @@ def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
         debug_plot (bool): Whether to plot the segmentation results.
 
     Returns:
-        dict: A dictionary with F1 scores for each class in `classes`.
+        tuple: A tuple containing the number of false negatives, false positives,
+               and true positives.
     """
     # Initialize counters
     f_n, f_p, t_p = 0, 0, 0
@@ -634,14 +635,6 @@ def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
                             ha="center",
                         )
 
-    precision = t_p / (t_p + f_p) if (t_p + f_p) > 0 else 0
-    recall = t_p / (t_p + f_n) if (t_p + f_n) > 0 else 0
-    f1 = (
-        2 * (precision * recall) / (precision + recall)
-        if (precision + recall) > 0
-        else 0
-    )
-
     if debug_plot:
         # Finalize the plot
         for ax in (ax1, ax2, ax3):
@@ -650,7 +643,7 @@ def segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=False):
         plt.tight_layout()
         plt.show()
 
-    return f1, f_n, f_p, t_p
+    return f_n, f_p, t_p
 
 
 def post_process_predictions(predictions, min_length=64, merge_distance=32):

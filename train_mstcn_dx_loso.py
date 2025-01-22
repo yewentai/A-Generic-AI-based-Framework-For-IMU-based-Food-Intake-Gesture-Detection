@@ -8,7 +8,7 @@ from datetime import datetime
 from tqdm import tqdm
 from model_mstcn import MSTCN, MSTCN_Loss
 from augmentation import augment_orientation
-from utils import IMUDataset, segment_f1_multiclass, post_process_predictions
+from utils import IMUDataset, segment_confusion_matrix, post_process_predictions
 
 # Hyperparameters
 num_stages = 2
@@ -157,9 +157,20 @@ for fold, test_subject in enumerate(
     f1_sample = (
         2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
     )
-    f1_segment_1 = segment_f1_multiclass(all_predictions, all_labels, 0.1, debug_plot)
-    f1_segment_2 = segment_f1_multiclass(all_predictions, all_labels, 0.25, debug_plot)
-    f1_segment_3 = segment_f1_multiclass(all_predictions, all_labels, 0.5, debug_plot)
+    # Calculate confusion matrix for each threshold
+    fn_10, fp_10, tp_10 = segment_confusion_matrix(
+        all_predictions, all_labels, 0.1, debug_plot
+    )
+    fn_25, fp_25, tp_25 = segment_confusion_matrix(
+        all_predictions, all_labels, 0.25, debug_plot
+    )
+    fn_50, fp_50, tp_50 = segment_confusion_matrix(
+        all_predictions, all_labels, 0.5, debug_plot
+    )
+    # Calculate F1-score for each segment
+    f1_segment_10 = 2 * tp_10 / (2 * tp_10 + fp_10 + fn_10)
+    f1_segment_25 = 2 * tp_25 / (2 * tp_25 + fp_25 + fn_25)
+    f1_segment_50 = 2 * tp_50 / (2 * tp_50 + fp_50 + fn_50)
 
     # Save testing result for each fold
     testing_statistics.append(
@@ -168,13 +179,13 @@ for fold, test_subject in enumerate(
             "time": datetime.now().strftime("%H:%M:%S"),
             "fold": fold + 1,
             "f1_sample": f1_sample,
-            "f1_segment_1": f1_segment_1,
-            "f1_segment_2": f1_segment_2,
-            "f1_segment_3": f1_segment_3,
+            "f1_segment_1": f1_segment_10,
+            "f1_segment_2": f1_segment_25,
+            "f1_segment_3": f1_segment_50,
         }
     )
 
-    loso_f1_scores.append([f1_sample, f1_segment_1, f1_segment_2, f1_segment_3])
+    loso_f1_scores.append([f1_sample, f1_segment_10, f1_segment_25, f1_segment_50])
 
 # Save result to .npy files
 np.save(training_stats_file, training_statistics)

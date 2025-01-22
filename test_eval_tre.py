@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import segment_f1_multiclass
+from utils import segment_confusion_matrix
 
 # Ground Truth sequence (3 classes: 0=background, 1=class1, 2=class2, 3=class3)
 # fmt: off
@@ -26,6 +26,7 @@ pred = np.array([
 ])
 # fmt: on
 
-# Calculate F1 score for each class
-f1_score = segment_f1_multiclass(pred, gt, threshold=0.5, debug_plot=True)
+# Calculate confusion matrix for each threshold
+fn, fp, tp = segment_confusion_matrix(pred, gt, threshold=0.5, debug_plot=True)
+f1_score = 2 * tp / (2 * tp + fp + fn)
 print(f"F1 Score: {f1_score:.4f}")
