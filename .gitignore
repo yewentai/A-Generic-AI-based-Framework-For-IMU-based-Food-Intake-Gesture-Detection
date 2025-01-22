@@ -23,3 +23,6 @@ figs/
 
 # Ignore VSCode settings
 .vscode/
+
+# Ignore FreeFileSync database
+sync.ffs_db
