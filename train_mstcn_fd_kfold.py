@@ -195,10 +195,10 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="7-Fold", leave=True)
         all_predictions, all_labels, 0.5, debug_plot
     )
 
-    # Calculate F1-score for each segment
-    f1_segment_10 = 2 * tp_10 / (2 * tp_10 + fp_10 + fn_10)
-    f1_segment_25 = 2 * tp_25 / (2 * tp_25 + fp_25 + fn_25)
-    f1_segment_50 = 2 * tp_50 / (2 * tp_50 + fp_50 + fn_50)
+    # Calculate F1-score for each segment and avoid zero division
+    f1_segment_10 = 2 * tp_10 / (2 * tp_10 + fp_10 + fn_10) if tp_10 > 0 else 0
+    f1_segment_25 = 2 * tp_25 / (2 * tp_25 + fp_25 + fn_25) if tp_25 > 0 else 0
+    f1_segment_50 = 2 * tp_50 / (2 * tp_50 + fp_50 + fn_50) if tp_50 > 0 else 0
 
     # Save testing result for each fold
     testing_statistics.append(
