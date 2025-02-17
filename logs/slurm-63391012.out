@@ -1,0 +1,32 @@
+SLURM_JOB_ID: 63391012
+SLURM_JOB_USER: vsc37097
+SLURM_JOB_ACCOUNT: lp-emedia
+SLURM_JOB_NAME: project.slurm
+SLURM_CLUSTER_NAME: wice
+SLURM_JOB_PARTITION: gpu_h100
+SLURM_NNODES: 1
+SLURM_NODELIST: s16g09
+SLURM_JOB_CPUS_PER_NODE: 16
+SLURM_JOB_GPUS: 1
+Date: Fri Jan 17 01:41:18 CET 2025
+Walltime: 01-00:00:00
+========================================================================
+Using device: cuda
+7-Fold:   0%|          | 0/7 [00:00<?, ?it/s]
+Training Fold 1:   0%|          | 0/20 [00:00<?, ?it/s][A
+Training Fold 1:   5%|▌         | 1/20 [1:27:42<27:46:25, 5262.38s/it][A
+Training Fold 1:  10%|█         | 2/20 [3:00:14<27:09:54, 5433.05s/it][A
+Training Fold 1:  15%|█▌        | 3/20 [4:26:56<25:09:28, 5327.53s/it][A
+Training Fold 1:  20%|██        | 4/20 [5:54:51<23:35:07, 5306.72s/it][A
+Training Fold 1:  25%|██▌       | 5/20 [7:31:27<22:50:45, 5483.05s/it][A
+Training Fold 1:  30%|███       | 6/20 [8:58:45<20:59:56, 5399.78s/it][A
+Training Fold 1:  35%|███▌      | 7/20 [10:29:04<19:31:17, 5405.99s/it][A
+Training Fold 1:  40%|████      | 8/20 [12:00:49<18:07:29, 5437.43s/it][A
+Training Fold 1:  45%|████▌     | 9/20 [13:26:58<16:21:29, 5353.58s/it][A
+Training Fold 1:  50%|█████     | 10/20 [15:00:52<15:06:42, 5440.21s/it][A
+Training Fold 1:  55%|█████▌    | 11/20 [16:27:16<13:24:17, 5361.90s/it][A
+Training Fold 1:  60%|██████    | 12/20 [17:53:33<11:47:23, 5305.46s/it][A
+Training Fold 1:  65%|██████▌   | 13/20 [19:24:04<10:23:25, 5343.61s/it][A
+Training Fold 1:  70%|███████   | 14/20 [20:50:35<8:49:44, 5297.47s/it] [A
+Training Fold 1:  75%|███████▌  | 15/20 [22:17:43<7:19:42, 5276.59s/it][A
+Training Fold 1:  80%|████████  | 16/20 [23:45:21<5:51:23, 5270.96s/it][Aslurmstepd: error: *** JOB 63391012 ON s16g09 CANCELLED AT 2025-01-18T01:41:38 DUE TO TIME LIMIT ***

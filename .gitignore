@@ -1,28 +1,17 @@
 # Python cache and temporary files
 __pycache__/
 
-# Dataset folders (customize based on what should/shouldn't be included)
+# Dataset folders
 dataset/
 
 # Model checkpoints and outputs
-models/
+checkpoints/
 *.pth
 *.h5
 *.ckpt
-
-# Figures and plots
-figs/
-
-# Slurm job outputs
-*.slurm
-*.out
-*.err
 
 # Miscellaneous system files
 .DS_Store
 
 # Ignore VSCode settings
 .vscode/
-
-# Ignore FreeFileSync database
-sync.ffs_db

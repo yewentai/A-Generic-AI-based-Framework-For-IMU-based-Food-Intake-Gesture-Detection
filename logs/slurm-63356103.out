@@ -1,0 +1,44 @@
+SLURM_JOB_ID: 63356103
+SLURM_JOB_USER: vsc37097
+SLURM_JOB_ACCOUNT: lp-emedia
+SLURM_JOB_NAME: project1.slurm
+SLURM_CLUSTER_NAME: wice
+SLURM_JOB_PARTITION: gpu_h100
+SLURM_NNODES: 1
+SLURM_NODELIST: s16g12
+SLURM_JOB_CPUS_PER_NODE: 16
+SLURM_JOB_GPUS: 3
+Date: Thu Jan  9 20:18:38 CET 2025
+Walltime: 00-12:00:00
+========================================================================
+Using device: cuda
+LOSO Folds:   0%|          | 0/68 [00:00<?, ?it/s]
+Training Fold 1:   0%|          | 0/10 [00:00<?, ?it/s][A
+Training Fold 1:  10%|█         | 1/10 [04:44<42:43, 284.84s/it][A
+Training Fold 1:  20%|██        | 2/10 [08:52<35:03, 262.94s/it][A
+Training Fold 1:  30%|███       | 3/10 [12:59<29:51, 255.88s/it][A
+Training Fold 1:  40%|████      | 4/10 [17:07<25:14, 252.48s/it][A
+Training Fold 1:  50%|█████     | 5/10 [21:20<21:03, 252.71s/it][A
+Training Fold 1:  60%|██████    | 6/10 [25:28<16:44, 251.00s/it][A
+Training Fold 1:  70%|███████   | 7/10 [29:35<12:29, 249.94s/it][A
+Training Fold 1:  80%|████████  | 8/10 [33:43<08:18, 249.23s/it][A
+Training Fold 1:  90%|█████████ | 9/10 [37:51<04:08, 248.82s/it][A
+Training Fold 1: 100%|██████████| 10/10 [42:01<00:00, 249.37s/it][A
+                                                                 [ALOSO Folds:   1%|▏         | 1/68 [42:31<47:29:33, 2551.84s/it]
+Training Fold 2:   0%|          | 0/10 [00:00<?, ?it/s][A
+Training Fold 2:  10%|█         | 1/10 [04:11<37:39, 251.04s/it][A
+Training Fold 2:  20%|██        | 2/10 [08:19<33:15, 249.49s/it][A
+Training Fold 2:  30%|███       | 3/10 [12:31<29:13, 250.48s/it][A
+Training Fold 2:  40%|████      | 4/10 [16:39<24:58, 249.69s/it][A
+Training Fold 2:  50%|█████     | 5/10 [20:47<20:45, 249.04s/it][A
+Training Fold 2:  60%|██████    | 6/10 [24:55<16:34, 248.70s/it][A
+Training Fold 2:  70%|███████   | 7/10 [29:05<12:27, 249.03s/it][A
+Training Fold 2:  80%|████████  | 8/10 [33:13<08:17, 248.64s/it][A
+Training Fold 2:  90%|█████████ | 9/10 [37:20<04:08, 248.33s/it][A
+Training Fold 2: 100%|██████████| 10/10 [41:27<00:00, 247.99s/it][A
+                                                                 [ALOSO Folds:   3%|▎         | 2/68 [1:24:20<46:19:21, 2526.70s/it]
+Training Fold 3:   0%|          | 0/10 [00:00<?, ?it/s][A
+Training Fold 3:  10%|█         | 1/10 [04:08<37:19, 248.85s/it][A
+Training Fold 3:  20%|██        | 2/10 [08:17<33:10, 248.82s/it][A
+Training Fold 3:  30%|███       | 3/10 [12:26<29:00, 248.68s/it][A
+Training Fold 3:  40%|████      | 4/10 [16:34<24:52, 248.67s/it][A
