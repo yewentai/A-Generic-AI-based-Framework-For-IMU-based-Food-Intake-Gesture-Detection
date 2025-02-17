@@ -1,13 +1,14 @@
 import os
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader, Subset
 import numpy as np
 import pickle
 from datetime import datetime
-from models.model_tcn_mha import TCNMHA, TCNMHA_Loss
+from models.model_mstcn import MSTCN, MSTCN_Loss
 from augmentation import augment_orientation
 from datasets import IMUDataset, segment_confusion_matrix, post_process_predictions
 
@@ -150,7 +151,7 @@ def main(rank, world_size):
         )
 
         # Initialize the model
-        model = TCNMHA(
+        model = MSTCN(
             input_dim=input_dim,
             hidden_dim=num_filters,
             num_classes=num_classes,
@@ -178,7 +179,7 @@ def main(rank, world_size):
                 optimizer.zero_grad()
                 with torch.amp.autocast():
                     outputs = model(batch_x)
-                    loss = TCNMHA_Loss(outputs, batch_y, lambda_coef)
+                    loss = MSTCN_Loss(outputs, batch_y, lambda_coef)
 
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
