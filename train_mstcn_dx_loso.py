@@ -24,7 +24,7 @@ learning_rate = 0.0005
 debug_plot = False
 
 # Load data
-X = "./dataset/DX/pkl_data/DX_I_X_mirrored.pkl.pkl"
+X = "./dataset/DX/DX-I/DX_I_X_mirrored.pkl.pkl"
 Y = "./dataset/DX/pkl_data/DX_I_Y_mirrored.pkl.pkl"
 
 with open(X, "rb") as f:
@@ -33,7 +33,7 @@ with open(Y, "rb") as f:
     Y = np.array(pickle.load(f), dtype=object)
 
 # Create the full dataset
-full_dataset = IMUDataset(X, Y)
+dataset = IMUDataset(X, Y)
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -52,7 +52,7 @@ training_statistics = []
 testing_statistics = []
 
 # LOSO cross-validation
-unique_subjects = np.unique(full_dataset.subject_indices)
+unique_subjects = np.unique(dataset.subject_indices)
 loso_f1_scores = []
 
 for fold, test_subject in enumerate(
@@ -61,18 +61,18 @@ for fold, test_subject in enumerate(
     # Create train and test indices
     train_indices = [
         i
-        for i, subject in enumerate(full_dataset.subject_indices)
+        for i, subject in enumerate(dataset.subject_indices)
         if subject != test_subject
     ]
     test_indices = [
         i
-        for i, subject in enumerate(full_dataset.subject_indices)
+        for i, subject in enumerate(dataset.subject_indices)
         if subject == test_subject
     ]
 
     # Create Subset datasets
-    train_dataset = Subset(full_dataset, train_indices)
-    test_dataset = Subset(full_dataset, test_indices)
+    train_dataset = Subset(dataset, train_indices)
+    test_dataset = Subset(dataset, test_indices)
 
     train_loader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, pin_memory=True

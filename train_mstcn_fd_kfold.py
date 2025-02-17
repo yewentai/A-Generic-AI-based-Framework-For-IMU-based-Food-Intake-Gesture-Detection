@@ -26,14 +26,15 @@ window_length = 60
 window_size = sampling_frequency * window_length  # 16 Hz * 60 s = 960
 debug_plot = False
 
-# Load data
+# Path to the dataset
 X_L_path = "./dataset/FD/FD-I/X_L.pkl"
 Y_L_path = "./dataset/FD/FD-I/Y_L.pkl"
 X_R_path = "./dataset/FD/FD-I/X_R.pkl"
 Y_R_path = "./dataset/FD/FD-I/Y_R.pkl"
 
+# Load data and convert to NumPy array
 with open(X_L_path, "rb") as f:
-    X_L = np.array(pickle.load(f), dtype=object)  # Convert to NumPy array
+    X_L = np.array(pickle.load(f), dtype=object)
 with open(Y_L_path, "rb") as f:
     Y_L = np.array(pickle.load(f), dtype=object)
 with open(X_R_path, "rb") as f:
