@@ -8,7 +8,7 @@ from datetime import datetime
 from tqdm import tqdm
 from model_tcn_mha import TCNMHA, TCNMHA_Loss
 from augmentation import augment_orientation
-from utils import IMUDataset, segment_confusion_matrix, post_process_predictions
+from datasets import IMUDataset, segment_confusion_matrix, post_process_predictions
 
 # Hyperparameters
 num_layers = 9

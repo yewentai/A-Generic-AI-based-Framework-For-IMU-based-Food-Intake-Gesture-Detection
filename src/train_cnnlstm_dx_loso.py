@@ -7,9 +7,9 @@ import os
 from datetime import datetime
 from tqdm import tqdm
 from augmentation import augment_orientation
-from utils import IMUDataset, segment_confusion_matrix, post_process_predictions
-from model_cnnlstm import CNN_LSTM
-from utils import IMUDatasetDowmSample
+from datasets import IMUDataset, segment_confusion_matrix, post_process_predictions
+from models.model_cnnlstm import CNN_LSTM
+from datasets import IMUDatasetDowmSample
 
 # Hyperparameters and configuration
 config = {

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import segment_f1_binary, post_process_predictions
+from datasets import segment_f1_binary, post_process_predictions
 
 # Ground Truth sequence
 # fmt: off
