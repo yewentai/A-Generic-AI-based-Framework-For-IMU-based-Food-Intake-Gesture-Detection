@@ -18,4 +18,4 @@ source activate torch                         # Activate your Conda environment 
 export NCCL_DEBUG=INFO
 
 # Launch the training script with torchrun for DDP (Distributed Data Parallel) support
-torchrun --nnodes=1 --nproc_per_node=4 train_mstcn_fd_kfold.py
+torchrun --nnodes=1 --nproc_per_node=4 train.py
