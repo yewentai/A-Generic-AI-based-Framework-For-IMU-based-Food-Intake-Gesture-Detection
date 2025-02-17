@@ -173,6 +173,3 @@ output = model(x)
 print("Input shape:", x.shape)
 for i, stage_output in enumerate(output):
     print(f"Output shape from stage {i+1}:", stage_output.shape)
-
-# Output shape: torch.Size([32, 64, 256])
-# The output shape is [batch_size, num_channels, seq_length] as expected

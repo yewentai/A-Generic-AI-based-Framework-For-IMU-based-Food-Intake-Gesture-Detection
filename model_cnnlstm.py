@@ -27,20 +27,6 @@ class ConvNet(nn.Module):
 
 
 # Define the recurrent part of the architecture
-class RecurrentNet(nn.Module):
-    def __init__(self):
-        super(RecurrentNet, self).__init__()
-        self.lstm = nn.LSTM(input_size=128, hidden_size=128, batch_first=True)
-        self.fc = nn.Linear(128, 1)
-
-    def forward(self, x):
-        self.lstm.flatten_parameters()
-        x, _ = self.lstm(x)
-        x = torch.sigmoid(self.fc(x))
-        return x
-
-
-# Define the recurrent part of the architecture
 class LSTM(nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
