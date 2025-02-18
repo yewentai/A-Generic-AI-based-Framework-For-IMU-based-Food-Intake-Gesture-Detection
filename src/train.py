@@ -1,299 +1,190 @@
-# -*- coding: utf-8 -*-
-"""Simplified training script without K-Fold validation."""
-
 import os
-import pickle
-from datetime import date, datetime
+from datetime import date
+from enum import Enum
+from typing import Tuple
 
 import numpy as np
 import torch
 import torch.distributed as dist
+import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.model_selection import KFold, LeaveOneGroupOut
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from augmentation import augment_orientation
-from datasets import IMUDataset, post_process_predictions, segment_confusion_matrix
-from models.model_mstcn import MSTCN, MSTCN_Loss
+from datasets import IMUDataset
+from evaluation import segment_evaluation
+from post_processing import post_process_predictions
+from model_cnnlstm import CNN_LSTM
 
-# region Constants & Configuration
-MODEL_NAME = "MSTCN"
-DATASET_NAME = "FD-I"
-TODAY = date.today().strftime("%Y%m%d")
-
-NUM_LAYERS = 9
-NUM_CLASSES = 3
-NUM_HEADS = 8
-INPUT_DIM = 6
-NUM_FILTERS = 64
-KERNEL_SIZE = 3
-DROPOUT = 0.3
-LAMBDA_COEF = 0.15
-LEARNING_RATE = 0.0005
-SAMPLING_FREQUENCY = 16
-WINDOW_LENGTH = 60  # seconds
-WINDOW_SIZE = SAMPLING_FREQUENCY * WINDOW_LENGTH
-DEBUG_PLOT = False
-BATCH_SIZE = 64
-NUM_EPOCHS = 10
-TRAIN_RATIO = 0.8
-
-PATHS = {
-    "X_L": "./dataset/FD/FD-I/X_L.pkl",
-    "Y_L": "./dataset/FD/FD-I/Y_L.pkl",
-    "X_R": "./dataset/FD/FD-I/X_R.pkl",
-    "Y_R": "./dataset/FD/FD-I/Y_R.pkl",
-    "results": "result",
-    "checkpoints": "checkpoints",
-}
-# endregion
+# Add these imports at the top
+import pickle
+from tqdm import tqdm
 
 
-def setup(rank: int, world_size: int) -> None:
-    """Initialize distributed training environment."""
-    dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
+# Configuration
+class Config:
+    # Dataset
+    dataset_path = "dataset/DX/DX-I"
+    sequence_length = 128
+    batch_size = 64
+    num_workers = 4
+
+    # Training
+    num_epochs = 100
+    learning_rate = 1e-4
+    weight_decay = 1e-4
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Post-processing
+    postprocess_min_length = 16  # In downsampled units
+    postprocess_merge_distance = 8  # In downsampled units
+
+    # Experiment tracking
+    save_dir = "checkpoints/dx1_cnnlstm_loso"
 
 
-def cleanup() -> None:
-    """Clean up distributed training resources."""
-    dist.destroy_process_group()
+# Load DX-I dataset
+def load_dx1_data(hand="R"):
+    """Load DX-I data for specified hand"""
+    base_path = f"{Config.dataset_path}/X_{hand}.pkl"
+    with open(base_path, "rb") as f:
+        X = pickle.load(f)
+    with open(f"{Config.dataset_path}/Y_{hand}.pkl", "rb") as f:
+        Y = pickle.load(f)
+    return X, Y
 
 
-def segment_data(
-    data: np.ndarray, labels: np.ndarray, window_size: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Segment time series data into fixed windows."""
-    segmented_data, segmented_labels = [], []
-    for d, l in zip(data, labels):
-        for i in range(0, len(d) - window_size + 1, window_size):
-            segmented_data.append(d[i : i + window_size])
-            segmented_labels.append(l[i : i + window_size])
-    return np.array(segmented_data), np.array(segmented_labels)
-
-
-def get_checkpoint_path(epoch: int = None, best: bool = False) -> str:
-    """Generate standardized checkpoint paths."""
-    base_dir = os.path.join(
-        PATHS["checkpoints"], f"{MODEL_NAME}_{DATASET_NAME}_{TODAY}"
+# Training function
+def train_fold(train_loader, test_loader, fold_idx, num_subjects):
+    # Initialize model
+    model = CNN_LSTM().to(Config.device)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=Config.learning_rate, weight_decay=Config.weight_decay
     )
-    os.makedirs(base_dir, exist_ok=True)
+    criterion = nn.BCEWithLogitsLoss()
 
-    if best:
-        return os.path.join(base_dir, "best_model.pt")
-    if epoch:
-        return os.path.join(base_dir, f"epoch_{epoch}.pt")
-    return base_dir
-
-
-def save_checkpoint(model, optimizer, scaler, epoch: int, is_best: bool = False):
-    """Save training state with proper naming."""
-    checkpoint = {
-        "epoch": epoch,
-        "model_state_dict": model.module.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "scaler_state_dict": scaler.state_dict(),
-    }
-
-    path = (
-        get_checkpoint_path(best=True) if is_best else get_checkpoint_path(epoch=epoch)
-    )
-    torch.save(checkpoint, path)
-    print(f"Saved checkpoint: {path}") if dist.get_rank() == 0 else None
-
-
-def load_checkpoint(rank: int):
-    """Load latest checkpoint for resuming training."""
-    try:
-        checkpoint_dir = get_checkpoint_path()
-        all_checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith(".pt")]
-        epochs = [
-            int(f.split("_")[1].split(".")[0]) for f in all_checkpoints if "epoch" in f
-        ]
-        latest_epoch = max(epochs) if epochs else None
-
-        if latest_epoch:
-            path = get_checkpoint_path(epoch=latest_epoch)
-            checkpoint = torch.load(path, map_location=f"cuda:{rank}")
-            print(f"Resuming training from checkpoint: {path}") if rank == 0 else None
-            return checkpoint, latest_epoch
-    except Exception as e:
-        print(f"No checkpoints found: {e}") if rank == 0 else None
-    return None, 0
-
-
-def main(rank: int, world_size: int) -> None:
-    """Main training loop without K-Fold."""
-    setup(rank, world_size)
-
-    # region Data Loading & Preparation
-    if rank == 0:
-        datasets = {}
-        for key in ["X_L", "Y_L", "X_R", "Y_R"]:
-            with open(PATHS[key], "rb") as f:
-                datasets[key] = np.array(pickle.load(f), dtype=object)
-
-        X = np.concatenate([datasets["X_L"], datasets["X_R"]], axis=0)
-        Y = np.concatenate([datasets["Y_L"], datasets["Y_R"]], axis=0)
-        X, Y = segment_data(X, Y, WINDOW_SIZE)
-        full_dataset = IMUDataset(X, Y)
-    else:
-        full_dataset = None
-
-    full_dataset = dist.broadcast_object(full_dataset, src=0)
-
-    # Split dataset
-    train_size = int(TRAIN_RATIO * len(full_dataset))
-    test_size = len(full_dataset) - train_size
-    train_dataset, test_dataset = random_split(
-        full_dataset,
-        [train_size, test_size],
-        generator=torch.Generator().manual_seed(42),
-    )
-    # endregion
-
-    # region Model & Optimizer Setup
-    model = MSTCN(
-        input_dim=INPUT_DIM,
-        hidden_dim=NUM_FILTERS,
-        num_classes=NUM_CLASSES,
-        num_heads=NUM_HEADS,
-        d_model=128,
-        kernel_size=KERNEL_SIZE,
-        num_layers=NUM_LAYERS,
-        dropout=DROPOUT,
-    ).to(rank)
-    model = DDP(model, device_ids=[rank])
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE * world_size)
-    scaler = torch.amp.GradScaler()
-    # endregion
-
-    # region Checkpoint Loading
-    checkpoint, start_epoch = load_checkpoint(rank)
-    if checkpoint:
-        model.module.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scaler.load_state_dict(checkpoint["scaler_state_dict"])
-    # endregion
-
-    # region Training Setup
-    train_sampler = DistributedSampler(train_dataset, shuffle=True)
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=BATCH_SIZE,
-        sampler=train_sampler,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
-    )
-
-    test_sampler = DistributedSampler(test_dataset, shuffle=False)
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=BATCH_SIZE,
-        sampler=test_sampler,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
-    )
-
-    best_loss = float("inf")
-    training_stats = []
-    # endregion
-
-    # region Training Loop
-    for epoch in range(start_epoch + 1, NUM_EPOCHS + 1):
-        train_sampler.set_epoch(epoch)
+    best_f1 = 0
+    for epoch in range(Config.num_epochs):
+        # Training phase
         model.train()
-        epoch_loss = 0.0
+        train_loss = 0
+        with tqdm(
+            train_loader,
+            unit="batch",
+            desc=f"Fold {fold_idx+1}/{num_subjects} Epoch {epoch+1}",
+        ) as tepoch:
+            for x, y in tepoch:
+                x = x.to(Config.device)
+                y = y.to(Config.device)
 
-        for batch_x, batch_y in train_loader:
-            batch_x = augment_orientation(batch_x)
-            batch_x = batch_x.permute(0, 2, 1).to(rank)
-            batch_y = batch_y.to(rank)
+                # Data augmentation
+                x = augment_orientation(x)
 
-            optimizer.zero_grad()
-            with torch.amp.autocast():
-                outputs = model(batch_x)
-                loss = MSTCN_Loss(outputs, batch_y, LAMBDA_COEF)
+                # Forward pass
+                outputs = model(x)
+                loss = criterion(outputs.squeeze(), y.squeeze())
 
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            epoch_loss += loss.item()
+                # Backward pass
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-        avg_loss = epoch_loss / len(train_loader)
+                train_loss += loss.item() * x.size(0)
+                tepoch.set_postfix(loss=loss.item())
 
-        # Save checkpoints and statistics
-        if rank == 0:
-            training_stats.append(
-                {
-                    "timestamp": datetime.now().isoformat(),
-                    "epoch": epoch,
-                    "train_loss": avg_loss,
-                }
-            )
-
-            # Save regular checkpoint
-            save_checkpoint(model, optimizer, scaler, epoch)
-
-            # Update best model
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                save_checkpoint(model, optimizer, scaler, epoch, is_best=True)
-    # endregion
-
-    # region Final Evaluation
-    if rank == 0:
+        # Evaluation phase
         model.eval()
         all_preds, all_labels = [], []
-
         with torch.no_grad():
-            for batch_x, batch_y in test_loader:
-                batch_x = batch_x.permute(0, 2, 1).to(rank)
-                outputs = model(batch_x)
-                probs = F.softmax(outputs[-1], dim=1)
-                preds = torch.argmax(probs, dim=1)
+            for x, y in test_loader:
+                x = x.to(Config.device)
+                outputs = model(x)
+                preds = torch.sigmoid(outputs).cpu().numpy()
+                all_preds.append(preds.squeeze())
+                all_labels.append(y.numpy().squeeze())
 
-                all_preds.extend(preds.view(-1).cpu().numpy())
-                all_labels.extend(batch_y.view(-1).cpu().numpy())
-
-        processed_preds = post_process_predictions(np.array(all_preds))
-        fn, fp, tp = segment_confusion_matrix(
-            processed_preds, np.array(all_labels), threshold=0.5, debug_plot=DEBUG_PLOT
+        # Post-process predictions
+        full_pred = np.concatenate(all_preds)
+        full_label = np.concatenate(all_labels)
+        processed_pred = post_process_predictions(
+            full_pred,
+            min_length=Config.postprocess_min_length,
+            merge_distance=Config.postprocess_merge_distance,
         )
 
-        f1_segment = 2 * tp / (2 * tp + fp + fn) if tp > 0 else 0
+        # Calculate metrics
+        fn, fp, tp = segment_evaluation(processed_pred, full_label)
+        precision = tp / (tp + fp + 1e-10)
+        recall = tp / (tp + fn + 1e-10)
+        f1 = 2 * (precision * recall) / (precision + recall + 1e-10)
 
-        # Save results
-        results_prefix = f"{MODEL_NAME}_{DATASET_NAME}_{TODAY}"
-        np.save(
-            os.path.join(PATHS["results"], f"training_stats_{results_prefix}.npy"),
-            training_stats,
+        # Save best model
+        if f1 > best_f1:
+            best_f1 = f1
+            torch.save(
+                model.state_dict(), f"{Config.save_dir}/fold_{fold_idx}_best.pth"
+            )
+
+        print(
+            f"Epoch {epoch+1}: F1={f1:.4f}, Precision={precision:.4f}, Recall={recall:.4f}"
         )
 
-        testing_stats = {
-            "timestamp": datetime.now().isoformat(),
-            "f1_segment": f1_segment,
-            "fn": fn,
-            "fp": fp,
-            "tp": tp,
-        }
-        np.save(
-            os.path.join(PATHS["results"], f"testing_stats_{results_prefix}.npy"),
-            testing_stats,
+
+# Main training loop
+def main():
+    # Load dataset
+    X, Y = load_dx1_data(hand="R")  # Use right hand data
+
+    # Create save directory
+    os.makedirs(Config.save_dir, exist_ok=True)
+
+    # LOSO cross-validation
+    num_subjects = len(X)
+    fold_metrics = []
+
+    for fold_idx in range(num_subjects):
+        print(f"\n{'='*40}")
+        print(f"Training fold {fold_idx+1}/{num_subjects}")
+        print(f"{'='*40}")
+
+        # Split data
+        train_X = [x for i, x in enumerate(X) if i != fold_idx]
+        train_Y = [y for i, y in enumerate(Y) if i != fold_idx]
+        test_X = [X[fold_idx]]
+        test_Y = [Y[fold_idx]]
+
+        # Create datasets
+        train_dataset = IMUDataset(
+            train_X,
+            train_Y,
+            sequence_length=Config.sequence_length,
+        )
+        test_dataset = IMUDataset(
+            test_X,
+            test_Y,
+            sequence_length=Config.sequence_length,
         )
 
-        # Save final model
-        final_model_path = os.path.join(PATHS["results"], f"{results_prefix}_final.pt")
-        torch.save(model.module.state_dict(), final_model_path)
-    # endregion
+        # Create dataloaders
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=Config.batch_size,
+            shuffle=True,
+            num_workers=Config.num_workers,
+        )
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=Config.batch_size,
+            shuffle=False,
+            num_workers=Config.num_workers,
+        )
 
-    cleanup()
+        # Train and evaluate fold
+        train_fold(train_loader, test_loader, fold_idx, num_subjects)
 
 
 if __name__ == "__main__":
-    world_size = torch.cuda.device_count()
-    torch.multiprocessing.spawn(main, args=(world_size,), nprocs=world_size)
+    main()

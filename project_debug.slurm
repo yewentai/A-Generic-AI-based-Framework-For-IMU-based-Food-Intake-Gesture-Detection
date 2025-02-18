@@ -6,8 +6,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=16
 #SBATCH --gpus-per-node=1  # Adjust this if using multiple GPUs
-#SBATCH --partition=gpu_h100
-#SBATCH --time=3-24:00:00
+#SBATCH --partition=gpu_a100_debug
+#SBATCH --time=1:00:00
 #SBATCH --output=logs/ddp_train_%j.out
 
 # Load Miniconda
