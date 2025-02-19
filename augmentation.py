@@ -61,17 +61,3 @@ def augment_orientation(batch_x, probability=0.5):
             )
 
     return augmented_batch
-
-
-def augment_mirror(batch_x, probability=0.5):
-    batch_size, seq_len, features = batch_x.shape
-    augmented_batch = batch_x.clone()
-
-    for i in range(batch_size):
-        if np.random.random() < probability:
-            # Generate random mirror
-            mirror_choice = np.random.choice([0, 1])
-            if mirror_choice == 0:
-                augmented_batch[i] = torch.flip(augmented_batch[i], [1])
-
-    return augmented_batch

@@ -26,31 +26,16 @@ binary_gt = generate_test_sequence(50, 8, [0, 1])
 binary_pred = generate_test_sequence(50, 10, [0, 1])
 
 # Generate 3-class test case
-multiclass_gt = generate_test_sequence(50, 8, [0, 1, 2, 3])
-multiclass_pred = generate_test_sequence(50, 10, [0, 1, 2, 3])
-
-# # Test binary case
-# print("Binary Case Evaluation:")
-# binary_fn, binary_fp, binary_tp = segment_confusion_matrix_binary(
-#     binary_pred, binary_gt, threshold=0.5, debug_plot=True
-# )
-# print(f"Binary Results (FN: {binary_fn}, FP: {binary_fp}, TP: {binary_tp})\n")
-
-# # Test 3-class case
-# print("Multi-class Case Evaluation:")
-# multiclass_fn, multiclass_fp, multiclass_tp = segment_confusion_matrix(
-#     multiclass_pred, multiclass_gt, threshold=0.5, debug_plot=True
-# )
-# print(
-#     f"Multi-class Results (FN: {multiclass_fn}, FP: {multiclass_fp}, TP: {multiclass_tp})\n"
-# )
-
+multiclass_gt = generate_test_sequence(50, 8, [0, 1, 2])
+multiclass_pred = generate_test_sequence(50, 10, [0, 1, 2])
 
 # Test Hungarian algorithm version
 print("\nHungarian Algorithm Evaluation:")
-hungarian_binary = segment_evaluation(binary_pred, binary_gt, debug_plot=True)
+hungarian_binary = segment_evaluation(
+    binary_pred, binary_gt, class_label=1, threshold=0.5, debug_plot=True
+)
 hungarian_multiclass = segment_evaluation(
-    multiclass_pred, multiclass_gt, debug_plot=True
+    multiclass_pred, multiclass_gt, class_label=2, threshold=0.5, debug_plot=True
 )
 print(f"Hungarian Binary Results: {hungarian_binary}")
 print(f"Hungarian Multi-class Results: {hungarian_multiclass}")

@@ -10,6 +10,7 @@ from tqdm import tqdm
 from augmentation import augment_orientation
 from datasets import IMUDataset, create_balanced_subject_folds
 from evaluation import segment_evaluation
+from pre_processing import hand_mirroring
 from post_processing import post_process_predictions
 from checkpoint import save_checkpoint
 from model_mstcn import MSTCN, MSTCN_Loss
