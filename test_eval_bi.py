@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from datasets import segment_f1_binary, post_process_predictions
+from evaluation import segment_evaluation
 
 # Ground Truth sequence
 # fmt: off
@@ -63,17 +63,19 @@ plt.tight_layout()
 plt.show()
 
 # Calculate F1 score sample-wise
-t_p = np.sum(np.logical_and(pred == 1, gt == 1))
-f_p = np.sum(np.logical_and(pred == 1, gt == 0))
-f_n = np.sum(np.logical_and(pred == 0, gt == 1))
-precision = t_p / (t_p + f_p)
-recall = t_p / (t_p + f_n)
+tp = np.sum(np.logical_and(pred == 1, gt == 1))
+fp = np.sum(np.logical_and(pred == 1, gt == 0))
+fn = np.sum(np.logical_and(pred == 0, gt == 1))
+precision = tp / (tp + fp)
+recall = tp / (tp + fn)
 f1_score = 2 * precision * recall / (precision + recall)
+print(f"Sample-wise - TP: {tp}, FP: {fp}, FN: {fn}")
 print(f"F1 Score (sample): {f1_score:.4f}")
 
-# Post-processing predictions
-# pred = post_process_predictions(pred, 2, 1)
-
 # Calculate F1 score segment-wise
-f1_score_seg = segment_f1_binary(pred, gt, 0.3, debug_plot=True)
+fn_seg, fp_seg, tp_seg = segment_evaluation(pred, gt, 1, 0.5, debug_plot=True)
+precision = tp_seg / (tp_seg + fp_seg)
+recall = tp_seg / (tp_seg + fn_seg)
+f1_score_seg = 2 * precision * recall / (precision + recall)
+print(f"Segment-wise - TP: {tp_seg}, FP: {fp_seg}, FN: {fn_seg}")
 print(f"F1 Score (seg): {f1_score_seg:.4f}")
