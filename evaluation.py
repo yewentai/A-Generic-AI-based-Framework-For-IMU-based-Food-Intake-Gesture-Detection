@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
-from collections import defaultdict
-from utils import nonzero_intervals_value
 
 
 def _plot_span(ax, interval, text, color):
@@ -18,194 +16,223 @@ def _plot_span(ax, interval, text, color):
     )
 
 
-def nonzero_intervals_value(x):
-    # TODO: add input class_label to filter by class
+def get_target_intervals(x, class_label):
     """
-    Extract start and end indices of nonzero intervals in an array and their corresponding values.
+    Extract start and end indices of intervals where x[i] equals class_label.
 
     Parameters:
-        x (np.ndarray): Input 1D array.
+        x (np.ndarray): Input 1D array
+        class_label (int): Target class label
 
     Returns:
-        np.ndarray: An array of shape (N, 3), where each row represents
-                    [start, end, value] for a contiguous interval.
+        np.ndarray: Array of [start, end) interval indices
     """
-    # Prepare a list to collect results
     results = []
-
-    # Track the current interval
     in_segment = False
     start_idx = 0
-    current_value = 0
 
     for i in range(len(x)):
-        if x[i] != 0 and not in_segment:
-            # Start of a new interval
+        if x[i] == class_label and not in_segment:
             in_segment = True
             start_idx = i
-            current_value = x[i]
-        elif (x[i] != current_value or x[i] == 0) and in_segment:
-            # End of the current interval
-            results.append([start_idx, i, current_value])
+        elif x[i] != class_label and in_segment:
             in_segment = False
-            # Restart a new interval if the current value is nonzero
-            if x[i] != 0:
-                in_segment = True
-                start_idx = i
-                current_value = x[i]
+            results.append([start_idx, i])
 
-    # Handle the case where the sequence ends with a nonzero interval
     if in_segment:
-        results.append([start_idx, len(x), current_value])
+        results.append([start_idx, len(x)])
 
-    # Convert the results list to a NumPy array
-    results_array = np.array(results, dtype=int)
+    return np.array(results, dtype=int)
 
-    # Ensure the result is always 2D
-    if results_array.ndim == 1:  # If it's a 1D array (e.g., empty or a single interval)
-        results_array = results_array.reshape(-1, 3)
 
-    return results_array
+def get_union_intervals(pred_intervals, gt_intervals):
+    """
+    Merge overlapping intervals from predictions and ground truth.
+
+    Parameters:
+        pred_intervals (np.ndarray): Prediction intervals
+        gt_intervals (np.ndarray): Ground truth intervals
+
+    Returns:
+        list: Merged intervals with source indices
+    """
+    if len(pred_intervals) == 0 and len(gt_intervals) == 0:
+        return []
+
+    all_intervals = np.vstack((pred_intervals, gt_intervals))
+    all_intervals = all_intervals[np.argsort(all_intervals[:, 0])]
+
+    merged = []
+    current_start, current_end = all_intervals[0]
+    pred_ids = set()
+    gt_ids = set()
+
+    # Initialize first interval
+    if 0 < len(pred_intervals):
+        pred_ids.add(0)
+    else:
+        gt_ids.add(0 - len(pred_intervals))
+
+    for i in range(1, len(all_intervals)):
+        start, end = all_intervals[i]
+
+        if start <= current_end:
+            current_end = max(current_end, end)
+            # Track source indices
+            if i < len(pred_intervals):
+                pred_ids.add(i)
+            else:
+                gt_ids.add(i - len(pred_intervals))
+        else:
+            merged.append(
+                {
+                    "range": (current_start, current_end),
+                    "pred_indices": list(pred_ids),
+                    "gt_indices": list(gt_ids),
+                }
+            )
+            current_start, current_end = start, end
+            pred_ids = set()
+            gt_ids = set()
+            if i < len(pred_intervals):
+                pred_ids.add(i)
+            else:
+                gt_ids.add(i - len(pred_intervals))
+
+    merged.append(
+        {
+            "range": (current_start, current_end),
+            "pred_indices": list(pred_ids),
+            "gt_indices": list(gt_ids),
+        }
+    )
+
+    return merged
 
 
 def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
     """
-    Unified segmentation confusion matrix calculator using value-aware interval matching.
+    Calculate segmentation metrics using interval matching.
 
     Parameters:
-        pred (np.ndarray): Predicted segmentation array
-        gt (np.ndarray): Ground truth segmentation array
-        class_label (int): The class label for which to compute metrics
-        threshold (float): IoU threshold for true positive classification
-        debug_plot (bool): Enable visualization of matching logic
+        pred (np.ndarray): Predicted segmentation
+        gt (np.ndarray): Ground truth
+        class_label (int): Class to evaluate
+        threshold (float): IoU threshold for TP
+        debug_plot (bool): Enable visualization
 
     Returns:
-        tuple: (false_negatives, false_positives, true_positives) for the specified class
+        tuple: (false_negatives, false_positives, true_positives)
     """
-    fn, fp, tp = 0, 0, 0
-
-    # Extract intervals for the specified class
-    gt_intervals = nonzero_intervals_value(gt)
-    pred_intervals = nonzero_intervals_value(pred)
-
-    # Filter intervals to include only the specified class
-    gt_class_intervals = [
-        interval for interval in gt_intervals if interval[2] == class_label
-    ]
-    pred_class_intervals = [
-        interval for interval in pred_intervals if interval[2] == class_label
-    ]
-
     if debug_plot:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
         ax1.step(range(len(gt)), gt, where="post", label="GT", color="blue")
         ax2.step(range(len(pred)), pred, where="post", label="Pred", color="red")
 
-    # TODO: Implement Union before cost matrix calculation
+    fn, fp, tp = 0, 0, 0
 
-    # Build cost matrix for Hungarian matching
-    cost_matrix = np.zeros((len(gt_class_intervals), len(pred_class_intervals)))
-    for i, (gs, ge, gv) in enumerate(gt_class_intervals):
-        for j, (ps, pe, pv) in enumerate(pred_class_intervals):
-            # Since we've filtered by class_label, gv and pv should both be class_label
-            # Proceed to calculate IoU
-            inter_start = max(gs, ps)
-            inter_end = min(ge, pe)
-            inter = max(0, inter_end - inter_start)
-            union = (ge - gs) + (pe - ps) - inter
-            cost_matrix[i, j] = inter / union if union else 0
+    # Extract intervals for target class
+    gt_intervals = get_target_intervals(gt, class_label)
+    pred_intervals = get_target_intervals(pred, class_label)
+    union = get_union_intervals(pred_intervals, gt_intervals)
 
-    # Hungarian algorithm for optimal matching
-    row_ind, col_ind = linear_sum_assignment(-cost_matrix)
-    matched = set()
-    for r, c in zip(row_ind, col_ind):
-        if cost_matrix[r, c] >= threshold:
-            tp += 1
-            matched.add((r, c))
+    for interval in union:
+        # Get contributing intervals
+        if debug_plot:
+            print("In interval")
+            print(interval["range"])
+        gt_subset = [gt_intervals[i] for i in interval["gt_indices"]]
+        pred_subset = [pred_intervals[i] for i in interval["pred_indices"]]
+
+        if len(gt_subset) == 0 and len(pred_subset) == 1:
+            fp += 1
             if debug_plot:
-                _plot_span(ax1, gt_class_intervals[r][:2], "TP", "green")
-                _plot_span(ax2, pred_class_intervals[c][:2], "TP", "green")
-
-    # Identify remaining intervals
-    matched_gt = set(r for r, _ in matched)
-    matched_pred = set(c for _, c in matched)
-
-    remaining_gt = [
-        (i, (s, e, v))
-        for i, (s, e, v) in enumerate(gt_class_intervals)
-        if i not in matched_gt
-    ]
-    remaining_pred = [
-        (j, (s, e, v))
-        for j, (s, e, v) in enumerate(pred_class_intervals)
-        if j not in matched_pred
-    ]
-
-    # Greedy matching for remaining intervals
-    gt_dict = defaultdict(list)
-    for idx, (s, e, v) in remaining_gt:
-        gt_dict[v].append((s, e, idx))
-
-    pred_dict = defaultdict(list)
-    for idx, (s, e, v) in remaining_pred:
-        pred_dict[v].append((s, e, idx))
-
-    used_gt = set()
-    used_pred = set()
-
-    # Process each class separately (in this case, only the specified class)
-    for value in gt_dict:
-        if value != class_label:
-            continue  # Skip if not the specified class
-        if value not in pred_dict:
+                for _, (s, e) in pred_subset:
+                    _plot_span(ax2, (s, e), "FP", "red")
             continue
 
-        # Find best overlaps between remaining GT and Pred
-        for gt_idx, (gs, ge, _) in enumerate(gt_dict[value]):
+        elif len(pred_subset) == 0 and len(gt_subset) == 1:
+            fn += 1
+            if debug_plot:
+                for _, (s, e) in gt_subset:
+                    _plot_span(ax1, (s, e), "FN", "blue")
+            continue
+
+        # Build IoU matrix
+        cost_matrix = np.zeros((len(gt_subset), len(pred_subset)))
+        for i, (gs, ge) in enumerate(gt_subset):
+            for j, (ps, pe) in enumerate(pred_subset):
+                inter_start = max(gs, ps)
+                inter_end = min(ge, pe)
+                inter = max(0, inter_end - inter_start)
+                union = (ge - gs) + (pe - ps) - inter
+                cost_matrix[i, j] = inter / union if union else 0
+
+        # Optimal matching
+        gt_idx, pred_idx = linear_sum_assignment(-cost_matrix)
+        matched = set()
+        for r, c in zip(gt_idx, pred_idx):
+            if cost_matrix[r, c] >= threshold:
+                tp += 1
+                matched.add((r, c))
+
+        # Identify leftovers
+        remaining_gt = [
+            (i, (s, e))
+            for i, (s, e) in enumerate(gt_subset)
+            if i not in {r for r, _ in matched}
+        ]
+        remaining_pred = [
+            (j, (s, e))
+            for j, (s, e) in enumerate(pred_subset)
+            if j not in {c for _, c in matched}
+        ]
+
+        # Greedy overlap matching for leftovers
+        used_gt = set()
+        used_pred = set()
+
+        # Match remaining GT to Pred
+        for gt_id, (gs, ge) in remaining_gt:
             max_overlap = 0
             best_pred = None
-            for pred_idx, (ps, pe, _) in enumerate(pred_dict[value]):
-                overlap_start = max(gs, ps)
-                overlap_end = min(ge, pe)
-                overlap = max(0, overlap_end - overlap_start)
+
+            for pred_id, (ps, pe) in enumerate(remaining_pred):
+                if pred_id in used_pred:
+                    continue
+
+                overlap = max(0, min(ge, pe) - max(gs, ps))
                 if overlap > max_overlap:
                     max_overlap = overlap
-                    best_pred = pred_idx
+                    best_pred = pred_id
 
             if best_pred is not None and max_overlap > 0:
-                # Mark as paired
-                used_gt.add(gt_dict[value][gt_idx][2])  # original index
-                used_pred.add(pred_dict[value][best_pred][2])
+                used_gt.add(gt_id)
+                used_pred.add(best_pred)
+                ps, pe = remaining_pred[best_pred][1]
 
-                # Compare lengths of GT and Pred intervals
-                gt_length = ge - gs
-                pred_length = pe - ps
-
-                if gt_length > pred_length:
-                    # GT is longer, mark as FN
+                # Compare lengths
+                if (ge - gs) > (pe - ps):
                     fn += 1
                     if debug_plot:
                         _plot_span(ax1, (gs, ge), "FN", "blue")
-                        _plot_span(ax2, (ps, pe), "FN", "red")
                 else:
-                    # Pred is longer, mark as FP
                     fp += 1
                     if debug_plot:
                         _plot_span(ax2, (ps, pe), "FP", "red")
-                        _plot_span(ax1, (gs, ge), "FP", "blue")
 
-    # Count unpaired intervals
-    for idx, (s, e, v) in remaining_gt:
-        if idx not in used_gt:
-            fn += 1
-            if debug_plot:
-                _plot_span(ax1, (s, e), "FN", "blue")
+        # Count completely unpaired intervals
+        for gt_id, (gs, ge) in remaining_gt:
+            if gt_id not in used_gt:
+                fn += 1
+                if debug_plot:
+                    _plot_span(ax1, (gs, ge), "FN", "blue")
 
-    for idx, (s, e, v) in remaining_pred:
-        if idx not in used_pred:
-            fp += 1
-            if debug_plot:
-                _plot_span(ax2, (s, e), "FP", "red")
+        for pred_id, (ps, pe) in remaining_pred:
+            if pred_id not in used_pred:
+                fp += 1
+                if debug_plot:
+                    _plot_span(ax2, (ps, pe), "FP", "red")
 
     if debug_plot:
         plt.tight_layout()

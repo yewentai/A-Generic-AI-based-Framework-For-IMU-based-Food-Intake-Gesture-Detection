@@ -1,71 +1,94 @@
 import numpy as np
-from scipy.optimize import linear_sum_assignment
 
 
-def match_segments(gt_segments, pred_segments, iou_threshold=0.5):
+def get_union_intervals(pred_intervals, gt_intervals):
     """
-    使用匈牙利算法匹配预测片段和真实片段
-    :param gt_segments: List of (start, end) tuples
-    :param pred_segments: List of (start, end) tuples
-    :param iou_threshold: float
-    :return: (tp, fp, fn)
+    Find overlapping intervals from two sets: pred and gt, and return the union with indices.
+
+    Parameters:
+        pred_intervals (np.ndarray): An array of shape (N, 2), each row is [start, end).
+        gt_intervals (np.ndarray): An array of shape (M, 2), each row is [start, end).
+
+    Returns:
+        list: A list of dictionaries, each with 'range', 'pred_indices', and 'gt_indices'.
     """
-    # 计算 IoU 矩阵
-    iou_matrix = np.zeros((len(gt_segments), len(pred_segments)))
-    for i, (gt_start, gt_end) in enumerate(gt_segments):
-        for j, (pred_start, pred_end) in enumerate(pred_segments):
-            inter_start = max(gt_start, pred_start)
-            inter_end = min(gt_end, pred_end)
-            inter = max(0, inter_end - inter_start)
-            union = (gt_end - gt_start) + (pred_end - pred_start) - inter
-            iou_matrix[i, j] = inter / union if union > 0 else 0
+    # Create a list of all intervals with their type (pred/gt) and original index
+    all_intervals = []
+    # Add pred intervals with their indices
+    for idx, interval in enumerate(pred_intervals):
+        start, end = interval
+        all_intervals.append((start, end, "pred", idx))
+    # Add gt intervals with their indices
+    for idx, interval in enumerate(gt_intervals):
+        start, end = interval
+        all_intervals.append((start, end, "gt", idx))
 
-    # 匈牙利算法匹配
-    gt_indices, pred_indices = linear_sum_assignment(-iou_matrix)
-    tp = 0
-    matched_gt = set()
-    matched_pred = set()
+    # Sort the intervals based on their start time
+    all_intervals.sort(key=lambda x: x[0])
 
-    for i, j in zip(gt_indices, pred_indices):
-        if iou_matrix[i, j] >= iou_threshold:
-            tp += 1
-            matched_gt.add(i)
-            matched_pred.add(j)
+    merged = []
+    if not all_intervals:
+        return merged
 
-    fp = len(pred_segments) - len(matched_pred)
-    fn = len(gt_segments) - len(matched_gt)
+    # Initialize the first interval
+    current_start, current_end = all_intervals[0][0], all_intervals[0][1]
+    pred_indices = set()
+    gt_indices = set()
+    source, idx = all_intervals[0][2], all_intervals[0][3]
+    if source == "pred":
+        pred_indices.add(idx)
+    else:
+        gt_indices.add(idx)
 
-    return tp, fp, fn
+    # Iterate through the sorted intervals
+    for interval in all_intervals[1:]:
+        start, end, src, idx = interval
+        if start <= current_end:
+            # Overlapping or contiguous, merge them
+            current_end = max(current_end, end)
+            if src == "pred":
+                pred_indices.add(idx)
+            else:
+                gt_indices.add(idx)
+        else:
+            # Add the merged interval so far
+            merged.append(
+                {
+                    "range": (current_start, current_end),
+                    "pred_indices": sorted(pred_indices),
+                    "gt_indices": sorted(gt_indices),
+                }
+            )
+            # Reset for the new interval
+            current_start, current_end = start, end
+            pred_indices = set()
+            gt_indices = set()
+            if src == "pred":
+                pred_indices.add(idx)
+            else:
+                gt_indices.add(idx)
+
+    # Add the last merged interval
+    merged.append(
+        {
+            "range": (current_start, current_end),
+            "pred_indices": sorted(pred_indices),
+            "gt_indices": sorted(gt_indices),
+        }
+    )
+
+    return merged
 
 
-# 示例数据
-gt = [(5, 10), (20, 25), (30, 40)]  # 真实片段
-pred = [(6, 9), (18, 22), (28, 35), (45, 50)]  # 预测片段
+# Example usage:
+pred_intervals = np.array([[1, 5], [10, 15], [20, 25]])
+gt_intervals = np.array([[3, 7], [16, 21]])
+union_intervals = get_union_intervals(pred_intervals, gt_intervals)
+for interval in union_intervals:
+    start, end = interval["range"]
+    pred_indices = interval["pred_indices"]
+    gt_indices = interval["gt_indices"]
 
-tp, fp, fn = match_segments(gt, pred, iou_threshold=0.7)
-print(f"TP: {tp}, FP: {fp}, FN: {fn}")
-# 输出：TP: 2, FP: 2, FN: 1
-
-# plot the sequences
-import matplotlib.pyplot as plt
-
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
-
-# Plot ground truth
-for start, end in gt:
-    ax1.axvspan(start, end, color="blue", alpha=0.3)
-    ax1.set_ylabel("State")
-    ax1.set_ylim(-0.1, 1.1)
-    ax1.set_title("Ground Truth")
-
-# Plot prediction
-for start, end in pred:
-    ax2.axvspan(start, end, color="red", alpha=0.3)
-    ax2.set_xlabel("Time")
-    ax2.set_ylabel("State")
-    ax2.set_ylim(-0.1, 1.1)
-    ax2.set_title("Prediction")
-
-plt.suptitle(f"Ground Truth vs Prediction")
-plt.tight_layout()
-plt.show()
+    print(f"Interval: {start}-{end}")
+    print(f"Pred Indices: {pred_indices}")
+    print(f"GT Indices: {gt_indices}")
