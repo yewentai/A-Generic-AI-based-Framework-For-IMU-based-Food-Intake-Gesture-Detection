@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from evaluation import segment_evaluation
+from components.evaluation import segment_evaluation
 
 # Ground Truth sequence (3 classes: 0=background, 1=class1, 2=class2, 3=class3)
 # fmt: off

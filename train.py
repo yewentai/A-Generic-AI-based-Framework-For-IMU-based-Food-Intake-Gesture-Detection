@@ -7,13 +7,13 @@ import os
 from datetime import datetime
 from tqdm import tqdm
 
-from augmentation import augment_orientation
-from datasets import IMUDataset, create_balanced_subject_folds
-from evaluation import segment_evaluation
-from pre_processing import hand_mirroring
-from post_processing import post_process_predictions
-from checkpoint import save_checkpoint
-from model_mstcn import MSTCN, MSTCN_Loss
+from components.augmentation import augment_orientation
+from components.datasets import IMUDataset, create_balanced_subject_folds
+from components.evaluation import segment_evaluation
+from components.pre_processing import hand_mirroring
+from components.post_processing import post_process_predictions
+from components.checkpoint import save_checkpoint
+from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # Hyperparameters
 NUM_STAGES = 2
