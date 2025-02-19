@@ -87,3 +87,46 @@ class IMUDataset(Dataset):
         x = torch.tensor(self.data[idx], dtype=torch.float32)
         y = torch.tensor(self.labels[idx], dtype=torch.float32)
         return x, y
+
+
+def create_balanced_subject_folds(dataset, num_folds=7):
+    """
+    Create balanced folds where each fold has approximately the same number of samples.
+
+    Args:
+        dataset: IMUDataset object with subject_indices attribute
+        num_folds: Number of folds to create
+
+    Returns:
+        List of lists, where each inner list contains subject IDs for that fold
+    """
+    # Count samples per subject
+    subject_counts = {}
+    unique_subjects = sorted(set(dataset.subject_indices))
+
+    for subject in unique_subjects:
+        subject_count = sum(1 for idx in dataset.subject_indices if idx == subject)
+        subject_counts[subject] = subject_count
+
+    # Sort subjects by sample count (descending)
+    sorted_subjects = sorted(subject_counts.items(), key=lambda x: x[1], reverse=True)
+
+    # Initialize folds with empty lists and zero counts
+    folds = [[] for _ in range(num_folds)]
+    fold_sample_counts = [0] * num_folds
+
+    # Distribute subjects to folds using greedy approach
+    for subject, count in sorted_subjects:
+        # Find the fold with the fewest samples
+        min_fold_idx = fold_sample_counts.index(min(fold_sample_counts))
+
+        # Add the subject to this fold
+        folds[min_fold_idx].append(subject)
+        fold_sample_counts[min_fold_idx] += count
+
+    # Print distribution statistics
+    # print("Fold distribution statistics:")
+    # for i, (fold, count) in enumerate(zip(folds, fold_sample_counts)):
+    #     print(f"Fold {i+1}: {len(fold)} subjects, {count} samples")
+
+    return folds
