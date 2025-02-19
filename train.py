@@ -175,11 +175,25 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         all_labels = np.array(all_labels)
         all_predictions = post_process_predictions(all_predictions)
 
-        fn, fp, tp = segment_evaluation(
-            all_predictions, all_labels, threshold=0.5, debug_plot=DEBUG_PLOT
+        fn_1, fp_1, tp_1 = segment_evaluation(
+            all_predictions,
+            all_labels,
+            class_label=1,
+            threshold=0.5,
+            debug_plot=DEBUG_PLOT,
         )
 
-        f1_segment = 2 * tp / (2 * tp + fp + fn) if tp > 0 else 0
+        fn_2, fp_2, tp_2 = segment_evaluation(
+            all_predictions,
+            all_labels,
+            class_label=2,
+            threshold=0.5,
+            debug_plot=DEBUG_PLOT,
+        )
+
+        f1_segment_1 = 2 * tp_1 / (2 * tp_1 + fp_1 + fn_1) if tp_1 > 0 else 0
+        f1_segment_2 = 2 * tp_2 / (2 * tp_2 + fp_2 + fn_2) if tp_2 > 0 else 0
+        f1_segment = (f1_segment_1 + f1_segment_2) / 2
 
         # Save checkpoint and check if this is the best model
         is_best = f1_segment > best_f1_score

@@ -32,7 +32,6 @@ def save_checkpoint(model, optimizer, epoch, fold, f1_score, is_best=False):
     if is_best:
         best_path = f"checkpoint/fold{fold}_best.pth"
         torch.save(checkpoint, best_path)
-        print(f"Saved best model for fold {fold} with F1 score: {f1_score:.4f}")
 
 
 # Function to load checkpoint
