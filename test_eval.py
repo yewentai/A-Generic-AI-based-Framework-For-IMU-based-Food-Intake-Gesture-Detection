@@ -1,3 +1,14 @@
+import numpy as np
+import os
+import sys
+
+# Add project root to Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(project_root)
+
+from evaluation import segment_evaluation
+
+
 # Generate test sequences
 def generate_test_sequence(length, num_segments, classes=[0, 1]):
     arr = np.zeros(length, dtype=int)
@@ -18,21 +29,21 @@ binary_pred = generate_test_sequence(50, 10, [0, 1])
 multiclass_gt = generate_test_sequence(50, 8, [0, 1, 2, 3])
 multiclass_pred = generate_test_sequence(50, 10, [0, 1, 2, 3])
 
-# Test binary case
-print("Binary Case Evaluation:")
-binary_fn, binary_fp, binary_tp = segment_confusion_matrix_binary(
-    binary_pred, binary_gt, threshold=0.5, debug_plot=True
-)
-print(f"Binary Results (FN: {binary_fn}, FP: {binary_fp}, TP: {binary_tp})\n")
+# # Test binary case
+# print("Binary Case Evaluation:")
+# binary_fn, binary_fp, binary_tp = segment_confusion_matrix_binary(
+#     binary_pred, binary_gt, threshold=0.5, debug_plot=True
+# )
+# print(f"Binary Results (FN: {binary_fn}, FP: {binary_fp}, TP: {binary_tp})\n")
 
-# Test 3-class case
-print("Multi-class Case Evaluation:")
-multiclass_fn, multiclass_fp, multiclass_tp = segment_confusion_matrix(
-    multiclass_pred, multiclass_gt, threshold=0.5, debug_plot=True
-)
-print(
-    f"Multi-class Results (FN: {multiclass_fn}, FP: {multiclass_fp}, TP: {multiclass_tp})\n"
-)
+# # Test 3-class case
+# print("Multi-class Case Evaluation:")
+# multiclass_fn, multiclass_fp, multiclass_tp = segment_confusion_matrix(
+#     multiclass_pred, multiclass_gt, threshold=0.5, debug_plot=True
+# )
+# print(
+#     f"Multi-class Results (FN: {multiclass_fn}, FP: {multiclass_fp}, TP: {multiclass_tp})\n"
+# )
 
 
 # Test Hungarian algorithm version

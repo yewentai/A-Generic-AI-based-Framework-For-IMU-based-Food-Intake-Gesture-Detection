@@ -11,7 +11,7 @@ from augmentation import augment_orientation
 from datasets import IMUDataset, create_balanced_subject_folds
 from evaluation import segment_evaluation
 from post_processing import post_process_predictions
-from checkpoint import save_checkpoint, load_checkpoint
+from checkpoint import save_checkpoint
 from model_mstcn import MSTCN, MSTCN_Loss
 
 # Hyperparameters
@@ -116,6 +116,9 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     # Loss and optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
+    # Track best F1 score for this fold
+    best_f1_score = 0.0
+
     # Training loop
     NUM_EPOCHS = 10
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
@@ -148,35 +151,51 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             }
         )
 
-    # Evaluation
-    model.eval()
-    all_predictions = []
-    all_labels = []
+        # Evaluation after each epoch
+        model.eval()
+        all_predictions = []
+        all_labels = []
 
-    with torch.no_grad():
-        for batch_x, batch_y in test_loader:
-            batch_x = batch_x.permute(0, 2, 1).to(device)
-            batch_y = batch_y.to(device)
+        with torch.no_grad():
+            for batch_x, batch_y in test_loader:
+                batch_x = batch_x.permute(0, 2, 1).to(device)
+                batch_y = batch_y.to(device)
 
-            outputs = model(batch_x)
-            final_output = outputs[-1]
-            probabilities = F.softmax(final_output, dim=1)
-            predicted_classes = torch.argmax(probabilities, dim=1)
+                outputs = model(batch_x)
+                final_output = outputs[-1]
+                probabilities = F.softmax(final_output, dim=1)
+                predicted_classes = torch.argmax(probabilities, dim=1)
 
-            all_predictions.extend(predicted_classes.view(-1).cpu().numpy())
-            all_labels.extend(batch_y.view(-1).cpu().numpy())
+                all_predictions.extend(predicted_classes.view(-1).cpu().numpy())
+                all_labels.extend(batch_y.view(-1).cpu().numpy())
 
-    # Post-processing and evaluation
-    all_predictions = np.array(all_predictions)
-    all_labels = np.array(all_labels)
-    all_predictions = post_process_predictions(all_predictions)
+        # Post-processing and evaluation
+        all_predictions = np.array(all_predictions)
+        all_labels = np.array(all_labels)
+        all_predictions = post_process_predictions(all_predictions)
 
-    fn, fp, tp = segment_evaluation(
-        all_predictions, all_labels, threshold=0.5, debug_plot=DEBUG_PLOT
-    )
+        fn, fp, tp = segment_evaluation(
+            all_predictions, all_labels, threshold=0.5, debug_plot=DEBUG_PLOT
+        )
 
-    f1_segment = 2 * tp / (2 * tp + fp + fn) if tp > 0 else 0
-    loso_f1_scores.append(f1_segment)
+        f1_segment = 2 * tp / (2 * tp + fp + fn) if tp > 0 else 0
+
+        # Save checkpoint and check if this is the best model
+        is_best = f1_segment > best_f1_score
+        if is_best:
+            best_f1_score = f1_segment
+
+        save_checkpoint(
+            model=model,
+            optimizer=optimizer,
+            epoch=epoch,
+            fold=fold,
+            f1_score=f1_segment,
+            is_best=is_best,
+        )
+
+    # Record best F1 score for this fold
+    loso_f1_scores.append(best_f1_score)
 
     # Record testing statistics
     testing_statistics.append(
@@ -184,7 +203,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             "date": datetime.now().strftime("%Y-%m-%d"),
             "time": datetime.now().strftime("%H:%M:%S"),
             "fold": fold + 1,
-            "f1_segment": f1_segment,
+            "f1_segment": best_f1_score,
         }
     )
 
