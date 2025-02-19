@@ -26,7 +26,7 @@ The objective of this thesis is to design a generic AI-based framework to proces
 
 ## Repository Structure
 
-```
+```sh
 .
 ├── LICENSE                     # License information
 ├── README.md                   # Project documentation (this file)
@@ -47,13 +47,10 @@ The objective of this thesis is to design a generic AI-based framework to proces
 │   │   ├── 00_ReadMe.txt       # Description of FD dataset
 │   │   ├── FD-I/               # FD-I dataset
 │   │   ├── FD-II/              # FD-II dataset
-│   │   ├── MO/                 # Additional motion data
+│   │   ├── MO/                 # MO dataset
 ├── datasets.py                 # Dataset processing script
 ├── evaluation.py               # Evaluation metrics and functions
 ├── figs/                       # Figures and visualizations
-│   ├── fig1.png                # Sample result visualization
-│   ├── fig2.png
-│   ├── fig3.png
 ├── logs/                       # Log files from model training runs
 │   ├── slurm-*.out             # Logs from SLURM job submissions
 ├── model_cnnlstm.py            # CNN-LSTM model implementation
