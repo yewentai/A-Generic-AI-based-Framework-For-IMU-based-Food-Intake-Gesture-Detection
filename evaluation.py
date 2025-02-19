@@ -3,29 +3,16 @@ import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 
 
-def _plot_span(ax, interval, text, color):
-    """Helper for debug visualization"""
-    ax.axvspan(interval[0], interval[1], alpha=0.3, color=color)
-    ax.text(
-        (interval[0] + interval[1]) / 2,
-        0.5,
-        text,
-        ha="center",
-        va="center",
-        color=color,
-    )
-
-
 def get_target_intervals(x, class_label):
     """
     Extract start and end indices of intervals where x[i] equals class_label.
 
     Parameters:
-        x (np.ndarray): Input 1D array
-        class_label (int): Target class label
+        x (np.ndarray): Input 1D array.
+        class_label (int): Target class label.
 
     Returns:
-        np.ndarray: Array of [start, end) interval indices
+        np.ndarray: Array of [start, end) interval indices.
     """
     results = []
     in_segment = False
@@ -47,67 +34,90 @@ def get_target_intervals(x, class_label):
 
 def get_union_intervals(pred_intervals, gt_intervals):
     """
-    Merge overlapping intervals from predictions and ground truth.
+    Merge prediction and ground truth intervals into union intervals,
+    tracking which original intervals from each contribute to the merged intervals.
 
     Parameters:
-        pred_intervals (np.ndarray): Prediction intervals
-        gt_intervals (np.ndarray): Ground truth intervals
+        pred_intervals (np.ndarray): Array of [start, end) intervals for predictions.
+        gt_intervals (np.ndarray): Array of [start, end) intervals for ground truth.
 
     Returns:
-        list: Merged intervals with source indices
+        list of dict: Each dict contains the merged 'range', 'pred_ranges', and 'gt_ranges'.
     """
     if len(pred_intervals) == 0 and len(gt_intervals) == 0:
         return []
 
-    all_intervals = np.vstack((pred_intervals, gt_intervals))
-    all_intervals = all_intervals[np.argsort(all_intervals[:, 0])]
+    # Combine intervals with labels indicating their source
+    labeled_intervals = []
+    for p in pred_intervals:
+        labeled_intervals.append((p[0], p[1], "pred"))
+    for g in gt_intervals:
+        labeled_intervals.append((g[0], g[1], "gt"))
+
+    # Sort intervals by their start time
+    labeled_intervals.sort(key=lambda x: x[0])
 
     merged = []
-    current_start, current_end = all_intervals[0]
-    pred_ids = set()
-    gt_ids = set()
+    if not labeled_intervals:
+        return merged
 
-    # Initialize first interval
-    if 0 < len(pred_intervals):
-        pred_ids.add(0)
+    current_start, current_end, current_type = labeled_intervals[0]
+    pred_ranges = []
+    gt_ranges = []
+
+    # Initialize the first interval
+    if current_type == "pred":
+        pred_ranges.append([current_start, current_end])
     else:
-        gt_ids.add(0 - len(pred_intervals))
+        gt_ranges.append([current_start, current_end])
 
-    for i in range(1, len(all_intervals)):
-        start, end = all_intervals[i]
-
+    for interval in labeled_intervals[1:]:
+        start, end, type_ = interval
         if start <= current_end:
+            # Overlapping or adjacent, merge them
             current_end = max(current_end, end)
-            # Track source indices
-            if i < len(pred_intervals):
-                pred_ids.add(i)
+            if type_ == "pred":
+                pred_ranges.append([start, end])
             else:
-                gt_ids.add(i - len(pred_intervals))
+                gt_ranges.append([start, end])
         else:
+            # Non-overlapping, finalize the current merged interval
             merged.append(
                 {
-                    "range": (current_start, current_end),
-                    "pred_indices": list(pred_ids),
-                    "gt_indices": list(gt_ids),
+                    "pred_ranges": pred_ranges.copy(),
+                    "gt_ranges": gt_ranges.copy(),
                 }
             )
-            current_start, current_end = start, end
-            pred_ids = set()
-            gt_ids = set()
-            if i < len(pred_intervals):
-                pred_ids.add(i)
-            else:
-                gt_ids.add(i - len(pred_intervals))
+            # Start new interval
+            current_start, current_end, current_type = start, end, type_
+            pred_ranges = [[start, end]] if type_ == "pred" else []
+            gt_ranges = [[start, end]] if type_ == "gt" else []
 
+    # Add the last merged interval
     merged.append(
         {
-            "range": (current_start, current_end),
-            "pred_indices": list(pred_ids),
-            "gt_indices": list(gt_ids),
+            "pred_ranges": pred_ranges.copy(),
+            "gt_ranges": gt_ranges.copy(),
         }
     )
 
     return merged
+
+
+def _plot_span(ax, interval, text, color):
+    """
+    Helper function for debug visualization.
+    Plots a span on the given axis with the specified text and color.
+    """
+    ax.axvspan(interval[0], interval[1], alpha=0.3, color=color)
+    ax.text(
+        (interval[0] + interval[1]) / 2,
+        0.5,
+        text,
+        ha="center",
+        va="center",
+        color=color,
+    )
 
 
 def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
@@ -115,14 +125,14 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
     Calculate segmentation metrics using interval matching.
 
     Parameters:
-        pred (np.ndarray): Predicted segmentation
-        gt (np.ndarray): Ground truth
-        class_label (int): Class to evaluate
-        threshold (float): IoU threshold for TP
-        debug_plot (bool): Enable visualization
+        pred (np.ndarray): Predicted segmentation.
+        gt (np.ndarray): Ground truth.
+        class_label (int): Class to evaluate.
+        threshold (float): IoU threshold for TP.
+        debug_plot (bool): Enable visualization.
 
     Returns:
-        tuple: (false_negatives, false_positives, true_positives)
+        tuple: (false_negatives, false_positives, true_positives).
     """
     if debug_plot:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
@@ -137,24 +147,20 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
     union = get_union_intervals(pred_intervals, gt_intervals)
 
     for interval in union:
-        # Get contributing intervals
-        if debug_plot:
-            print("In interval")
-            print(interval["range"])
-        gt_subset = [gt_intervals[i] for i in interval["gt_indices"]]
-        pred_subset = [pred_intervals[i] for i in interval["pred_indices"]]
+        gt_subset = interval["gt_ranges"]
+        pred_subset = interval["pred_ranges"]
 
-        if len(gt_subset) == 0 and len(pred_subset) == 1:
+        if len(gt_subset) == 0:
             fp += 1
             if debug_plot:
-                for _, (s, e) in pred_subset:
+                for s, e in pred_subset:
                     _plot_span(ax2, (s, e), "FP", "red")
             continue
 
-        elif len(pred_subset) == 0 and len(gt_subset) == 1:
+        if len(pred_subset) == 0:
             fn += 1
             if debug_plot:
-                for _, (s, e) in gt_subset:
+                for s, e in gt_subset:
                     _plot_span(ax1, (s, e), "FN", "blue")
             continue
 
@@ -175,6 +181,11 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
             if cost_matrix[r, c] >= threshold:
                 tp += 1
                 matched.add((r, c))
+                if debug_plot:
+                    gs, ge = gt_subset[r][0], gt_subset[r][1]
+                    ps, pe = pred_subset[c][0], pred_subset[c][1]
+                    _plot_span(ax1, (gs, ge), "TP", "blue")
+                    _plot_span(ax2, (ps, pe), "TP", "red")
 
         # Identify leftovers
         remaining_gt = [
@@ -197,7 +208,7 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
             max_overlap = 0
             best_pred = None
 
-            for pred_id, (ps, pe) in enumerate(remaining_pred):
+            for pred_id, (ps, pe) in remaining_pred:
                 if pred_id in used_pred:
                     continue
 
@@ -216,9 +227,11 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
                     fn += 1
                     if debug_plot:
                         _plot_span(ax1, (gs, ge), "FN", "blue")
+                        _plot_span(ax2, (ps, pe), "FN", "red")
                 else:
                     fp += 1
                     if debug_plot:
+                        _plot_span(ax1, (gs, ge), "FP", "blue")
                         _plot_span(ax2, (ps, pe), "FP", "red")
 
         # Count completely unpaired intervals

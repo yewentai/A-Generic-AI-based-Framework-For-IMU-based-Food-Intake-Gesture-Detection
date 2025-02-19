@@ -32,10 +32,10 @@ multiclass_pred = generate_test_sequence(50, 10, [0, 1, 2])
 # Test Hungarian algorithm version
 print("\nHungarian Algorithm Evaluation:")
 hungarian_binary = segment_evaluation(
-    binary_pred, binary_gt, class_label=1, threshold=0.5, debug_plot=False
+    binary_pred, binary_gt, class_label=1, threshold=0.5, debug_plot=True
 )
 hungarian_multiclass = segment_evaluation(
-    multiclass_pred, multiclass_gt, class_label=1, threshold=0.5, debug_plot=True
+    multiclass_pred, multiclass_gt, class_label=2, threshold=0.5, debug_plot=True
 )
 print(f"Hungarian Binary Results: {hungarian_binary}")
 print(f"Hungarian Multi-class Results: {hungarian_multiclass}")
