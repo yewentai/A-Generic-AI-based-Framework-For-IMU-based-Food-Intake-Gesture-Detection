@@ -34,6 +34,7 @@ WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH  # 16 Hz * 60 s = 960
 DEBUG_PLOT = False
 NUM_FOLDS = 5
+NUM_EPOCHS = 10
 
 # Load data
 X_L_PATH = "./dataset/FD/FD-I/X_L.pkl"
@@ -104,15 +105,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     )
 
     # Initialize model
-    model = CNN_LSTM(
-        num_stages=NUM_STAGES,
-        num_layers=NUM_LAYERS,
-        num_classes=NUM_CLASSES,
-        input_dim=INPUT_DIM,
-        num_filters=128,
-        kernel_size=KERNEL_SIZE,
-        dropout=DROPOUT,
-    ).to(device)
+    model = CNN_LSTM().to(device)
 
     # Loss and optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -121,7 +114,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     best_f1_score = 0.0
 
     # Training loop
-    NUM_EPOCHS = 10
+
+    criterion = torch.nn.CrossEntropyLoss()
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         model.train()
         training_loss = 0.0
@@ -134,7 +128,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
 
             optimizer.zero_grad()
             outputs = model(batch_x)
-            loss = CNN_LSTM(outputs, batch_y, LAMBDA_COEF)
+
+            loss = criterion(outputs, batch_y)
             loss.backward()
             optimizer.step()
 

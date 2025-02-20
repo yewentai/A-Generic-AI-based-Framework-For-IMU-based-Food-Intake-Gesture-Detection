@@ -220,7 +220,8 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
             if best_pred is not None and max_overlap > 0:
                 used_gt.add(gt_id)
                 used_pred.add(best_pred)
-                ps, pe = remaining_pred[best_pred][1]
+                remaining_pred_dict = {j: (s, e) for j, (s, e) in remaining_pred}
+                ps, pe = remaining_pred_dict.get(best_pred, (None, None))
 
                 # Compare lengths
                 if (ge - gs) > (pe - ps):
