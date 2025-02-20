@@ -14,7 +14,7 @@ def save_checkpoint(model, optimizer, epoch, fold, f1_score, is_best=False):
         f1_score: F1 score on validation/test set
         is_best: Boolean indicating if this is the best model so far
     """
-    os.makedirs("checkpoint", exist_ok=True)
+    os.makedirs("checkpoints", exist_ok=True)
 
     checkpoint = {
         "fold": fold,
@@ -24,13 +24,9 @@ def save_checkpoint(model, optimizer, epoch, fold, f1_score, is_best=False):
         "f1_score": f1_score,
     }
 
-    # Save latest checkpoint
-    checkpoint_path = f"checkpoint/fold{fold}_epoch{epoch}.pth"
-    torch.save(checkpoint, checkpoint_path)
-
     # If best model, save a copy
     if is_best:
-        best_path = f"checkpoint/fold{fold}_best.pth"
+        best_path = f"checkpoints/fold{fold}_best.pth"
         torch.save(checkpoint, best_path)
 
 

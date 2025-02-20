@@ -33,7 +33,8 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH  # 16 Hz * 60 s = 960
 DEBUG_PLOT = False
-NUM_FOLDS = 5
+NUM_FOLDS = 7
+NUM_EPOCHS = 20
 
 # Load data
 X_L_PATH = "./dataset/FD/FD-I/X_L.pkl"
@@ -121,7 +122,6 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     best_f1_score = 0.0
 
     # Training loop
-    NUM_EPOCHS = 10
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         model.train()
         training_loss = 0.0
@@ -199,15 +199,14 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         is_best = f1_segment > best_f1_score
         if is_best:
             best_f1_score = f1_segment
-
-        save_checkpoint(
-            model=model,
-            optimizer=optimizer,
-            epoch=epoch,
-            fold=fold,
-            f1_score=f1_segment,
-            is_best=is_best,
-        )
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                fold=fold,
+                f1_score=f1_segment,
+                is_best=is_best,
+            )
 
     # Record best F1 score for this fold
     loso_f1_scores.append(best_f1_score)
