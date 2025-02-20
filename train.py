@@ -125,6 +125,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         model.train()
         training_loss = 0.0
+        training_loss_ce = 0.0
+        training_loss_mse = 0.0
 
         for batch_x, batch_y in train_loader:
             # Data augmentation
@@ -134,14 +136,19 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
 
             optimizer.zero_grad()
             outputs = model(batch_x)
-            loss = MSTCN_Loss(outputs, batch_y, LAMBDA_COEF)
+            ce_loss, mse_loss = MSTCN_Loss(outputs, batch_y)
+            loss = ce_loss + LAMBDA_COEF * mse_loss
             loss.backward()
             optimizer.step()
 
             training_loss += loss.item()
+            training_loss_ce += ce_loss.item()
+            training_loss_mse += mse_loss.item()
 
         # Record training statistics
         avg_train_loss = training_loss / len(train_loader)
+        avg_train_loss_ce = training_loss_ce / len(train_loader)
+        avg_train_loss_mse = training_loss_mse / len(train_loader)
         training_statistics.append(
             {
                 "date": datetime.now().strftime("%Y-%m-%d"),
@@ -149,6 +156,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
                 "fold": fold + 1,
                 "epoch": epoch + 1,
                 "train_loss": avg_train_loss,
+                "train_loss_ce": avg_train_loss_ce,
+                "train_loss_mse": avg_train_loss_mse,
             }
         )
 

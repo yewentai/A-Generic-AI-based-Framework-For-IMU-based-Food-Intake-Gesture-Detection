@@ -104,7 +104,7 @@ class MSTCN(nn.Module):
         return outputs  # Return outputs from all stages
 
 
-def MSTCN_Loss(outputs, targets, lambda_coef=0.15):
+def MSTCN_Loss(outputs, targets):
     total_loss = 0
     # Ensure targets are LongTensors
     targets = targets.long()
@@ -147,7 +147,4 @@ def MSTCN_Loss(outputs, targets, lambda_coef=0.15):
     weighted_delta = torch.clamp(weighted_delta, min=0, max=16)
     mse_loss = (weighted_delta**2).mean()
 
-    # Compute total loss
-    total_loss += ce_loss + lambda_coef * mse_loss
-
-    return total_loss
+    return ce_loss, mse_loss

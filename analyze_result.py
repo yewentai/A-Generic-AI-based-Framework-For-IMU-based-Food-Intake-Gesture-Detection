@@ -33,21 +33,36 @@ for entry in training_stats:
     fold = entry["fold"]
     epoch = entry["epoch"]
     loss = entry["train_loss"]
+    loss_ce = entry["train_loss_ce"]
+    loss_mse = entry["train_loss_mse"]
 
     if fold not in fold_epochs:
-        fold_epochs[fold] = {"epochs": [], "losses": []}
+        fold_epochs[fold] = {"epochs": [], "losses_ce": [], "losses_mse": []}
 
     fold_epochs[fold]["epochs"].append(epoch)
-    fold_epochs[fold]["losses"].append(loss)
+    fold_epochs[fold]["losses_ce"].append(loss_ce)
+    fold_epochs[fold]["losses_mse"].append(loss_mse)
 
-# Plot training loss per epoch
-plt.figure(figsize=(10, 6))
+# Plot training loss per epoch (two subplots)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+
+# Plot CE Loss
 for fold, data in fold_epochs.items():
-    plt.plot(data["epochs"], data["losses"], marker="o", label=f"Fold {fold}")
+    ax1.plot(data["epochs"], data["losses_ce"], label=f"Fold {fold}")
+ax1.set_xlabel("Epoch")
+ax1.set_ylabel("CE Loss")
+ax1.set_title("Cross Entropy Loss per Epoch for Each Fold")
+ax1.legend()
+ax1.grid(True, linestyle="--", alpha=0.7)
 
-plt.xlabel("Epoch")
-plt.ylabel("Training Loss")
-plt.title("Training Loss per Epoch for Each Fold")
-plt.legend()
-plt.grid(True, linestyle="--", alpha=0.7)
+# Plot MSE Loss
+for fold, data in fold_epochs.items():
+    ax2.plot(data["epochs"], data["losses_mse"], label=f"Fold {fold}")
+ax2.set_xlabel("Epoch")
+ax2.set_ylabel("MSE Loss")
+ax2.set_title("MSE Loss per Epoch for Each Fold")
+ax2.legend()
+ax2.grid(True, linestyle="--", alpha=0.7)
+
+plt.tight_layout()
 plt.show()
