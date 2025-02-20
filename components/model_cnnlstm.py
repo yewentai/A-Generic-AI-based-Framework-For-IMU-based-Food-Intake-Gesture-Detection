@@ -10,20 +10,27 @@ from tqdm import tqdm
 from components.augmentation import augment_orientation
 from components.datasets import IMUDataset, create_balanced_subject_folds
 from components.evaluation import segment_evaluation
-from components.pre_processing import hand_mirroring
 from components.post_processing import post_process_predictions
 from components.checkpoint import save_checkpoint
 from components.model_cnnlstm import CNN_LSTM
 
 # Hyperparameters
-LEARNING_RATE = 0.0005
-SAMPLING_FREQ_ORIGINAL = 64
-DOWNSAMPLE_FACTOR = 4
-SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
-WINDOW_LENGTH = 60
-WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH  # 16 Hz * 60 s = 960
+HYPERPARAMS = {
+    "learning_rate": 0.0005,
+    "batch_size": 16,
+    "num_epochs": 10,
+    "sampling_freq_original": 64,
+    "downsample_factor": 4,
+    "window_length": 60,
+    "num_folds": 5,
+    "num_workers": 16,
+}
+
+SAMPLING_FREQ = (
+    HYPERPARAMS["sampling_freq_original"] // HYPERPARAMS["downsample_factor"]
+)
+WINDOW_SIZE = SAMPLING_FREQ * HYPERPARAMS["window_length"]
 DEBUG_PLOT = False
-NUM_FOLDS = 5
 
 # Load data
 X_L_PATH = "./dataset/FD/FD-I/X_L.pkl"
@@ -48,7 +55,9 @@ Y = np.concatenate([Y_L, Y_R], axis=0)
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
 
 # Create balanced subject folds
-test_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
+test_folds = create_balanced_subject_folds(
+    full_dataset, num_folds=HYPERPARAMS["num_folds"]
+)
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -80,21 +89,30 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     test_dataset = Subset(full_dataset, test_indices)
 
     train_loader = DataLoader(
-        train_dataset, batch_size=16, shuffle=True, num_workers=16, pin_memory=True
+        train_dataset,
+        batch_size=HYPERPARAMS["batch_size"],
+        shuffle=True,
+        num_workers=HYPERPARAMS["num_workers"],
+        pin_memory=True,
     )
     test_loader = DataLoader(
-        test_dataset, batch_size=16, shuffle=False, num_workers=16, pin_memory=True
+        test_dataset,
+        batch_size=HYPERPARAMS["batch_size"],
+        shuffle=False,
+        num_workers=HYPERPARAMS["num_workers"],
+        pin_memory=True,
     )
 
     # Initialize model
     model = CNN_LSTM().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=HYPERPARAMS["learning_rate"])
     loss_fn = torch.nn.BCELoss()
 
     best_f1_score = 0.0
-    NUM_EPOCHS = 10
 
-    for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
+    for epoch in tqdm(
+        range(HYPERPARAMS["num_epochs"]), desc=f"Fold {fold+1}", leave=False
+    ):
         model.train()
         training_loss = 0.0
 

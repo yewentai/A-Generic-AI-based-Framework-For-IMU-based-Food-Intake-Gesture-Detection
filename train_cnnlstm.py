@@ -13,7 +13,7 @@ from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.post_processing import post_process_predictions
 from components.checkpoint import save_checkpoint
-from components.model_cnnlstm import CNN_LSTM, CNN_LSTM_Loss
+from components.model_cnnlstm import CNN_LSTM
 
 # Hyperparameters
 NUM_STAGES = 2
@@ -104,7 +104,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     )
 
     # Initialize model
-    model = MSTCN(
+    model = CNN_LSTM(
         num_stages=NUM_STAGES,
         num_layers=NUM_LAYERS,
         num_classes=NUM_CLASSES,
@@ -134,7 +134,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
 
             optimizer.zero_grad()
             outputs = model(batch_x)
-            loss = MSTCN_Loss(outputs, batch_y, LAMBDA_COEF)
+            loss = CNN_LSTM(outputs, batch_y, LAMBDA_COEF)
             loss.backward()
             optimizer.step()
 
