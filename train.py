@@ -33,8 +33,8 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH  # 16 Hz * 60 s = 960
 DEBUG_PLOT = False
-NUM_FOLDS = 7
-NUM_EPOCHS = 20
+NUM_FOLDS = 10
+NUM_EPOCHS = 60
 
 # Load data
 X_L_PATH = "./dataset/FD/FD-I/X_L.pkl"
@@ -69,8 +69,8 @@ print(f"Using device: {device}")
 os.makedirs("result", exist_ok=True)
 
 # File paths for results
-TRAINING_STATS_FILE = "result/training_stats_tcnmha.npy"
-TESTING_STATS_FILE = "result/testing_stats_tcnmha.npy"
+TRAINING_STATS_FILE = "result/training_stats_tcnmha_no_smooth_loss.npy"
+TESTING_STATS_FILE = "result/testing_stats_tcnmha_no_smooth_loss.npy"
 
 # Initialize lists to store statistics
 training_statistics = []
@@ -137,7 +137,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             optimizer.zero_grad()
             outputs = model(batch_x)
             ce_loss, mse_loss = MSTCN_Loss(outputs, batch_y)
-            loss = ce_loss + LAMBDA_COEF * mse_loss
+            # loss = ce_loss + LAMBDA_COEF * mse_loss
+            loss = ce_loss
             loss.backward()
             optimizer.step()
 
