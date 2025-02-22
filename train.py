@@ -38,6 +38,10 @@ NUM_EPOCHS = 20
 BATCH_SIZE = 32
 NUM_WORKERS = 16
 
+# File paths for results
+TRAINING_STATS_FILE = "result/training_stats_tcnmha_v1.npy"
+TESTING_STATS_FILE = "result/testing_stats_tcnmha_v1.npy"
+
 # Load data
 X_L_PATH = "./dataset/FD/FD-I/X_L.pkl"
 Y_L_PATH = "./dataset/FD/FD-I/Y_L.pkl"
@@ -69,10 +73,6 @@ print(f"Using device: {device}")
 
 # Create directories for saving results
 os.makedirs("result", exist_ok=True)
-
-# File paths for results
-TRAINING_STATS_FILE = "result/training_stats_tcnmha_no_down_sample.npy"
-TESTING_STATS_FILE = "result/testing_stats_tcnmha_no_down_sample.npy"
 
 # Initialize lists to store statistics
 training_statistics = []
