@@ -12,8 +12,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
 # Configuration
-DATA_PATH = "./dataset/FD/FD-I/"
-SAVE_DIR = "./figs/fd1_analysis/"
+DATA_PATH = "./dataset/DX/DX-II/"
+SAVE_DIR = "./figs/DXII_analysis/"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 

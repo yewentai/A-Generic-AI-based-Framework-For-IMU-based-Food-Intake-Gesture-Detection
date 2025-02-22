@@ -33,10 +33,12 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH  # 16 Hz * 60 s = 960
 DEBUG_PLOT = False
-NUM_FOLDS = 7
+NUM_FOLDS = 13
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 NUM_WORKERS = 16
+FLAG_AUGMENT = False
+FLAG_MIRROR = True
 
 # Load data
 X_L_PATH = "./dataset/DX/DX-I/X_L.pkl"
@@ -45,9 +47,9 @@ X_R_PATH = "./dataset/DX/DX-I/X_R.pkl"
 Y_R_PATH = "./dataset/DX/DX-I/Y_R.pkl"
 
 # File paths for results
-TRAINING_STATS_FILE = "result/training_stats_tcnmha_dxi_v1.npy"
-TESTING_STATS_FILE = "result/testing_stats_tcnmha_dxi_v1.npy"
-CONFIG_FILE = "result/config_tcnmha_dxi_v1.txt"
+TRAINING_STATS_FILE = "result/training_stats_tcnmha_dxi_v3.npy"
+TESTING_STATS_FILE = "result/testing_stats_tcnmha_dxi_v3.npy"
+CONFIG_FILE = "result/config_tcnmha_dxi_v3.txt"
 
 with open(X_L_PATH, "rb") as f:
     X_L = np.array(pickle.load(f), dtype=object)
@@ -57,6 +59,10 @@ with open(X_R_PATH, "rb") as f:
     X_R = np.array(pickle.load(f), dtype=object)
 with open(Y_R_PATH, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
+
+# Hand mirroring
+if FLAG_MIRROR:
+    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
 # Concatenate the left and right data
 X = np.concatenate([X_L, X_R], axis=0)
@@ -141,7 +147,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
 
         for batch_x, batch_y in train_loader:
             # Data augmentation
-            batch_x = augment_orientation(batch_x)
+            if FLAG_AUGMENT:
+                batch_x = augment_orientation(batch_x)
             batch_x = batch_x.permute(0, 2, 1).to(device)
             batch_y = batch_y.to(device)
 
@@ -245,3 +252,31 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
 # Save results
 np.save(TRAINING_STATS_FILE, training_statistics)
 np.save(TESTING_STATS_FILE, testing_statistics)
+np.save(
+    CONFIG_FILE,
+    {
+        "num_stages": NUM_STAGES,
+        "num_layers": NUM_LAYERS,
+        "num_classes": NUM_CLASSES,
+        "num_heads": NUM_HEADS,
+        "input_dim": INPUT_DIM,
+        "num_filters": NUM_FILTERS,
+        "kernel_size": KERNEL_SIZE,
+        "dropout": DROPOUT,
+        "lambda_coef": LAMBDA_COEF,
+        "tau": TAU,
+        "learning_rate": LEARNING_RATE,
+        "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
+        "downsample_factor": DOWNSAMPLE_FACTOR,
+        "sampling_freq": SAMPLING_FREQ,
+        "window_length": WINDOW_LENGTH,
+        "window_size": WINDOW_SIZE,
+        "debug_plot": DEBUG_PLOT,
+        "num_folds": NUM_FOLDS,
+        "num_epochs": NUM_EPOCHS,
+        "batch_size": BATCH_SIZE,
+        "num_workers": NUM_WORKERS,
+        "flag_augment": FLAG_AUGMENT,
+        "flag_mirror": FLAG_MIRROR,
+    },
+)

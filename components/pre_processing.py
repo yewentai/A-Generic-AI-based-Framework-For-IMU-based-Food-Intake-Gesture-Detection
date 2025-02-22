@@ -14,6 +14,7 @@ def hand_mirroring(data):
         np.ndarray or torch.Tensor: Transformed data with the same shape as input.
     """
     # Define the mirroring transformation matrix
+
     mirroring_matrix = np.array(
         [
             [-1, 0, 0, 0, 0, 0],

@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load results
-TESTING_STATS_FILE = "result/testing_stats_tcnmha_dxii_v1.npy"
-TRAINING_STATS_FILE = "result/training_stats_tcnmha_dxii_v1.npy"
+TESTING_STATS_FILE = "result/testing_stats_tcnmha_dxi_v1.npy"
+TRAINING_STATS_FILE = "result/training_stats_tcnmha_dxi_v1.npy"
 
 testing_stats = np.load(TESTING_STATS_FILE, allow_pickle=True)
 training_stats = np.load(TRAINING_STATS_FILE, allow_pickle=True)
