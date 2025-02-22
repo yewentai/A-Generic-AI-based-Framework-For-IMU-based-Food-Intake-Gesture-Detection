@@ -28,7 +28,7 @@ LAMBDA_COEF = 0.15
 TAU = 4
 LEARNING_RATE = 1e-3
 SAMPLING_FREQ_ORIGINAL = 64
-DOWNSAMPLE_FACTOR = 1
+DOWNSAMPLE_FACTOR = 4
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH  # 16 Hz * 60 s = 960
@@ -38,15 +38,16 @@ NUM_EPOCHS = 20
 BATCH_SIZE = 32
 NUM_WORKERS = 16
 
-# File paths for results
-TRAINING_STATS_FILE = "result/training_stats_tcnmha_v1.npy"
-TESTING_STATS_FILE = "result/testing_stats_tcnmha_v1.npy"
-
 # Load data
-X_L_PATH = "./dataset/FD/FD-I/X_L.pkl"
-Y_L_PATH = "./dataset/FD/FD-I/Y_L.pkl"
-X_R_PATH = "./dataset/FD/FD-I/X_R.pkl"
-Y_R_PATH = "./dataset/FD/FD-I/Y_R.pkl"
+X_L_PATH = "./dataset/DX/DX-I/X_L.pkl"
+Y_L_PATH = "./dataset/DX/DX-I/Y_L.pkl"
+X_R_PATH = "./dataset/DX/DX-I/X_R.pkl"
+Y_R_PATH = "./dataset/DX/DX-I/Y_R.pkl"
+
+# File paths for results
+TRAINING_STATS_FILE = "result/training_stats_tcnmha_dxi_v1.npy"
+TESTING_STATS_FILE = "result/testing_stats_tcnmha_dxi_v1.npy"
+CONFIG_FILE = "result/config_tcnmha_dxi_v1.txt"
 
 with open(X_L_PATH, "rb") as f:
     X_L = np.array(pickle.load(f), dtype=object)
@@ -101,14 +102,14 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     # Create data loaders
     train_loader = DataLoader(
         train_dataset,
-        BATCH_SIZE=32,
+        batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
     test_loader = DataLoader(
         test_dataset,
-        BATCH_SIZE=32,
+        batch_size=BATCH_SIZE,
         shuffle=False,
         num_workers=NUM_WORKERS,
         pin_memory=True,
