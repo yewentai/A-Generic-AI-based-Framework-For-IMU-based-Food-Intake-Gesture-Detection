@@ -21,20 +21,22 @@ NUM_LAYERS = 9
 NUM_CLASSES = 3
 NUM_HEADS = 8
 INPUT_DIM = 6
-NUM_FILTERS = 64
+NUM_FILTERS = 128
 KERNEL_SIZE = 3
 DROPOUT = 0.3
 LAMBDA_COEF = 0.15
 TAU = 4
-LEARNING_RATE = 0.0005
+LEARNING_RATE = 1e-3
 SAMPLING_FREQ_ORIGINAL = 64
-DOWNSAMPLE_FACTOR = 4
+DOWNSAMPLE_FACTOR = 1
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH  # 16 Hz * 60 s = 960
 DEBUG_PLOT = False
-NUM_FOLDS = 10
-NUM_EPOCHS = 60
+NUM_FOLDS = 7
+NUM_EPOCHS = 20
+BATCH_SIZE = 32
+NUM_WORKERS = 16
 
 # Load data
 X_L_PATH = "./dataset/FD/FD-I/X_L.pkl"
@@ -69,8 +71,8 @@ print(f"Using device: {device}")
 os.makedirs("result", exist_ok=True)
 
 # File paths for results
-TRAINING_STATS_FILE = "result/training_stats_tcnmha_no_smooth_loss.npy"
-TESTING_STATS_FILE = "result/testing_stats_tcnmha_no_smooth_loss.npy"
+TRAINING_STATS_FILE = "result/training_stats_tcnmha_no_down_sample.npy"
+TESTING_STATS_FILE = "result/testing_stats_tcnmha_no_down_sample.npy"
 
 # Initialize lists to store statistics
 training_statistics = []
@@ -98,10 +100,18 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
 
     # Create data loaders
     train_loader = DataLoader(
-        train_dataset, batch_size=16, shuffle=True, num_workers=16, pin_memory=True
+        train_dataset,
+        BATCH_SIZE=32,
+        shuffle=True,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
     )
     test_loader = DataLoader(
-        test_dataset, batch_size=16, shuffle=False, num_workers=16, pin_memory=True
+        test_dataset,
+        BATCH_SIZE=32,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
     )
 
     # Initialize model
@@ -110,7 +120,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         num_layers=NUM_LAYERS,
         num_classes=NUM_CLASSES,
         input_dim=INPUT_DIM,
-        num_filters=128,
+        num_filters=NUM_FILTERS,
         kernel_size=KERNEL_SIZE,
         dropout=DROPOUT,
     ).to(device)
@@ -137,8 +147,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             optimizer.zero_grad()
             outputs = model(batch_x)
             ce_loss, mse_loss = MSTCN_Loss(outputs, batch_y)
-            # loss = ce_loss + LAMBDA_COEF * mse_loss
-            loss = ce_loss
+            loss = ce_loss + LAMBDA_COEF * mse_loss
+            # loss = ce_loss
             loss.backward()
             optimizer.step()
 
