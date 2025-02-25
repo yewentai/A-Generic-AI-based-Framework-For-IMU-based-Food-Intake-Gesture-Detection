@@ -1,68 +1,55 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
-# Load results
-TESTING_STATS_FILE = "result/testing_stats_tcnmha_dxi_v1.npy"
-TRAINING_STATS_FILE = "result/training_stats_tcnmha_dxi_v1.npy"
+# 配置
+DATASET = "DXI"
+RESULT_VERSION = "2252"  # 修改为实际版本号
+result_dir = "result"
 
-testing_stats = np.load(TESTING_STATS_FILE, allow_pickle=True)
-training_stats = np.load(TRAINING_STATS_FILE, allow_pickle=True)
+# 加载数据
+testing_stats = np.load(
+    os.path.join(result_dir, f"testing_stats_{DATASET.lower()}_{RESULT_VERSION}.npy"),
+    allow_pickle=True,
+)
+training_stats = np.load(
+    os.path.join(result_dir, f"training_stats_{DATASET.lower()}_{RESULT_VERSION}.npy"),
+    allow_pickle=True,
+)
 
-# Extract F1 scores and folds
-folds = [entry["fold"] for entry in testing_stats]
-f1_scores = [entry["f1_segment"] for entry in testing_stats]
+# 统计分析
+f1_scores = [e["average_f1"] for e in testing_stats]
+tp_total = sum(e["class_metrics"]["class_1"]["tp"] for e in testing_stats)
+fp_total = sum(e["class_metrics"]["class_1"]["fp"] for e in testing_stats)
+fn_total = sum(e["class_metrics"]["class_1"]["fn"] for e in testing_stats)
 
-# Compute average F1 score
-avg_f1 = np.mean(f1_scores)
-print(f"Average F1 Score: {avg_f1:.4f}")
+print(f"\n{' Results Summary ':=^40}")
+print(f"Average F1: {np.mean(f1_scores):.4f} ± {np.std(f1_scores):.4f}")
+print(f"Total TP: {tp_total}  FP: {fp_total}  FN: {fn_total}")
 
-# Plot F1 scores per fold
-plt.figure(figsize=(8, 5))
-plt.bar(folds, f1_scores, color="skyblue", edgecolor="black")
+# 可视化
+plt.figure(figsize=(12, 6))
+
+# F1分布
+plt.subplot(121)
+plt.boxplot(
+    f1_scores,
+    vert=False,
+    widths=0.6,
+    patch_artist=True,
+    boxprops=dict(facecolor="lightblue"),
+)
+plt.title("F1 Score Distribution")
+plt.xlim(0, 1)
+
+# Fold-wise表现
+plt.subplot(122)
+plt.bar(range(1, len(f1_scores) + 1), f1_scores, color="skyblue")
+plt.xticks(range(1, len(f1_scores) + 1))
 plt.xlabel("Fold")
 plt.ylabel("F1 Score")
 plt.title("F1 Score per Fold")
-plt.xticks(folds)
 plt.ylim(0, 1)
-plt.grid(axis="y", linestyle="--", alpha=0.7)
-plt.show()
-
-# Extract training loss per epoch
-fold_epochs = {}  # Dictionary to hold epochs and loss per fold
-for entry in training_stats:
-    fold = entry["fold"]
-    epoch = entry["epoch"]
-    loss = entry["train_loss"]
-    loss_ce = entry["train_loss_ce"]
-    loss_mse = entry["train_loss_mse"]
-
-    if fold not in fold_epochs:
-        fold_epochs[fold] = {"epochs": [], "losses_ce": [], "losses_mse": []}
-
-    fold_epochs[fold]["epochs"].append(epoch)
-    fold_epochs[fold]["losses_ce"].append(loss_ce)
-    fold_epochs[fold]["losses_mse"].append(loss_mse)
-
-# Plot training loss per epoch (two subplots)
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
-
-# Plot CE Loss
-for fold, data in fold_epochs.items():
-    ax1.plot(data["epochs"], data["losses_ce"], label=f"Fold {fold}")
-ax1.set_xlabel("Epoch")
-ax1.set_ylabel("CE Loss")
-ax1.set_title("Cross Entropy Loss per Epoch for Each Fold")
-ax1.legend()
-ax1.grid(True, linestyle="--", alpha=0.7)
-
-# Plot MSE Loss
-for fold, data in fold_epochs.items():
-    ax2.plot(data["epochs"], data["losses_mse"], label=f"Fold {fold}")
-ax2.set_xlabel("Epoch")
-ax2.set_ylabel("MSE Loss")
-ax2.set_title("MSE Loss per Epoch for Each Fold")
-ax2.legend()
-ax2.grid(True, linestyle="--", alpha=0.7)
 
 plt.tight_layout()
 plt.show()
