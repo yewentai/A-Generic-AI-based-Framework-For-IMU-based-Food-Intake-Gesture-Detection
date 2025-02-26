@@ -12,8 +12,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
 # Configuration
-DATA_PATH = "./dataset/DX/DX-II/"
-SAVE_DIR = "./figs/DXII_analysis/"
+DATA_PATH = "./dataset/DX/DX-I/"
+SAVE_DIR = "./figs/DXI_analysis/"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 
@@ -89,7 +89,8 @@ def analyze_segments(X, Y, side="L"):
     os.makedirs(save_dir, exist_ok=True)
 
     fs = 16  # Sampling frequency (Hz)
-    subject_indices = random.sample(range(len(X)), 3)  # Randomly select 3 subjects
+    # subject_indices = random.sample(range(len(X)), 3)  # Randomly select 3 subjects
+    subject_indices = [4, 5, 6]
 
     for subj_idx in subject_indices:
         imu_data = X[subj_idx]  # (T, F)

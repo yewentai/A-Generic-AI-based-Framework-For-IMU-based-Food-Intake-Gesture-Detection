@@ -4,7 +4,7 @@ import os
 
 # 配置
 DATASET = "DXI"
-RESULT_VERSION = "2252"  # 修改为实际版本号
+RESULT_VERSION = "02261202"  # 修改为实际版本号
 result_dir = "result"
 
 # 加载数据

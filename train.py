@@ -33,11 +33,11 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 DEBUG_PLOT = False
-NUM_FOLDS = 13
+NUM_FOLDS = 12
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 NUM_WORKERS = 16
-FLAG_AUGMENT = False
+FLAG_AUGMENT = True
 FLAG_MIRROR = True
 
 # Configure parameters based on dataset type
@@ -63,7 +63,7 @@ X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
 Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
 
 # Result file paths
-version_suffix = datetime.now().strftime("%Y%m%d%H%M")[-4:]
+version_suffix = datetime.now().strftime("%Y%m%d%H%M")[-8:]
 TRAINING_STATS_FILE = f"result/training_stats_{DATASET.lower()}_{version_suffix}.npy"
 TESTING_STATS_FILE = f"result/testing_stats_{DATASET.lower()}_{version_suffix}.npy"
 CONFIG_FILE = f"result/config_{DATASET.lower()}_{version_suffix}.txt"
@@ -78,6 +78,12 @@ with open(X_R_PATH, "rb") as f:
     X_R = np.array(pickle.load(f), dtype=object)
 with open(Y_R_PATH, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
+
+# Skip the 5th subject (index 4)
+X_L = np.delete(X_L, 4, axis=0)
+Y_L = np.delete(Y_L, 4, axis=0)
+X_R = np.delete(X_R, 4, axis=0)
+Y_R = np.delete(Y_R, 4, axis=0)
 
 # Hand mirroring processing
 if FLAG_MIRROR:
