@@ -1,3 +1,4 @@
+from calendar import c
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
@@ -16,7 +17,7 @@ from components.checkpoint import save_checkpoint
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # ********************** Configuration Parameters **********************
-DATASET = "DXI"  # Options: DX/DXI/DXII or FD/FDI/FDII
+DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII
 NUM_STAGES = 2
 NUM_LAYERS = 9
 NUM_HEADS = 8
@@ -26,18 +27,18 @@ KERNEL_SIZE = 3
 DROPOUT = 0.3
 LAMBDA_COEF = 0.15
 TAU = 4
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 5e-4
 SAMPLING_FREQ_ORIGINAL = 64
 DOWNSAMPLE_FACTOR = 4
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 DEBUG_PLOT = False
-NUM_FOLDS = 12
-NUM_EPOCHS = 20
+NUM_FOLDS = 7
+NUM_EPOCHS = 100
 BATCH_SIZE = 32
 NUM_WORKERS = 16
-FLAG_AUGMENT = True
+FLAG_AUGMENT = False
 FLAG_MIRROR = True
 
 # Configure parameters based on dataset type
@@ -63,10 +64,11 @@ X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
 Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
 
 # Result file paths
-version_suffix = datetime.now().strftime("%Y%m%d%H%M")[-8:]
-TRAINING_STATS_FILE = f"result/training_stats_{DATASET.lower()}_{version_suffix}.npy"
-TESTING_STATS_FILE = f"result/testing_stats_{DATASET.lower()}_{version_suffix}.npy"
-CONFIG_FILE = f"result/config_{DATASET.lower()}_{version_suffix}.txt"
+version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:8]
+TRAINING_STATS_FILE = f"result/{version_prefix}_training_stats_{DATASET.lower()}.npy"
+TESTING_STATS_FILE = f"result/{version_prefix}_testing_stats_{DATASET.lower()}.npy"
+CONFIG_FILE = f"result/{version_prefix}_config_{DATASET.lower()}.txt"
+CHECKPOINT_PATH = f"checkpoints/{version_prefix}_checkpoint_{DATASET.lower()}.pth"
 # ****************************************************
 
 # Load data
@@ -80,10 +82,10 @@ with open(Y_R_PATH, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
 
 # Skip the 5th subject (index 4)
-X_L = np.delete(X_L, 4, axis=0)
-Y_L = np.delete(Y_L, 4, axis=0)
-X_R = np.delete(X_R, 4, axis=0)
-Y_R = np.delete(Y_R, 4, axis=0)
+# X_L = np.delete(X_L, 4, axis=0)
+# Y_L = np.delete(Y_L, 4, axis=0)
+# X_R = np.delete(X_R, 4, axis=0)
+# Y_R = np.delete(Y_R, 4, axis=0)
 
 # Hand mirroring processing
 if FLAG_MIRROR:
@@ -211,28 +213,40 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     all_labels = np.array(all_labels)
 
     # Multi-class evaluation
-    class_metrics = {}
-    class_f1_scores = []
-    for class_label in range(1, NUM_CLASSES):
+    metrics_segment = {}
+    metrics_sample = {}
+    for label in range(1, NUM_CLASSES):
+        # Segment-wise F1 score
         fn, fp, tp = segment_evaluation(
             all_predictions,
             all_labels,
-            class_label=class_label,
+            label=label,
             threshold=0.5,
             debug_plot=DEBUG_PLOT,
         )
-        denominator = 2 * tp + fp + fn
-        f1 = 2 * tp / denominator if denominator != 0 else 0.0
+        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
 
-        class_metrics[f"class_{class_label}"] = {
+        metrics_segment[f"{label}"] = {
             "fn": int(fn),
             "fp": int(fp),
             "tp": int(tp),
             "f1": float(f1),
         }
-        class_f1_scores.append(f1)
 
-    avg_f1 = np.mean(class_f1_scores)
+        # Sample-wise F1 score
+        fp = np.sum((all_predictions == 1) & (all_labels != 1))
+        fn = np.sum((all_predictions != 1) & (all_labels == 1))
+        tp = np.sum((all_predictions == 1) & (all_labels == 1))
+        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+        metrics_sample[f"{label}"] = {
+            "fn": int(fn),
+            "fp": int(fp),
+            "tp": int(tp),
+            "f1": float(f1),
+        }
+
+    # Average F1 score
+    avg_f1 = np.mean([metrics_sample[label]["f1"] for label in range(1, NUM_CLASSES)])
 
     # Record testing statistics
     testing_statistics.append(
@@ -240,8 +254,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             "date": datetime.now().strftime("%Y-%m-%d"),
             "time": datetime.now().strftime("%H:%M:%S"),
             "fold": fold + 1,
-            "average_f1": float(avg_f1),
-            "class_metrics": class_metrics,
+            "metrics_segment": metrics_segment,
+            "metrics_sample": metrics_sample,
         }
     )
     loso_f1_scores.append(avg_f1)
@@ -250,12 +264,12 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     if avg_f1 > best_f1_score:
         best_f1_score = avg_f1
         save_checkpoint(
+            path=CHECKPOINT_PATH,
             model=model,
             optimizer=optimizer,
             epoch=epoch,
             fold=fold,
             f1_score=avg_f1,
-            is_best=True,
         )
 
 # Save results and configuration
@@ -282,8 +296,6 @@ config_info = {
     "batch_size": BATCH_SIZE,
     "augmentation": FLAG_AUGMENT,
     "mirroring": FLAG_MIRROR,
-    "best_avg_f1": float(np.mean(loso_f1_scores)),
-    "f1_std": float(np.std(loso_f1_scores)),
 }
 
 with open(CONFIG_FILE, "w") as f:

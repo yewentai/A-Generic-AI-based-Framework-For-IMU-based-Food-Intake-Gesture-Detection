@@ -1,31 +1,0 @@
-SLURM_JOB_ID: 63414106
-SLURM_JOB_USER: vsc37097
-SLURM_JOB_ACCOUNT: lp-emedia
-SLURM_JOB_NAME: project.slurm
-SLURM_CLUSTER_NAME: wice
-SLURM_JOB_PARTITION: gpu_h100
-SLURM_NNODES: 1
-SLURM_NODELIST: s16g15
-SLURM_JOB_CPUS_PER_NODE: 16
-SLURM_JOB_GPUS: 2
-Date: Wed Jan 22 20:53:51 CET 2025
-Walltime: 01-00:00:00
-========================================================================
-Using device: cuda
-7-Fold:   0%|          | 0/7 [00:00<?, ?it/s]
-Training Fold 1:   0%|          | 0/10 [00:00<?, ?it/s][A
-Training Fold 1:  10%|█         | 1/10 [1:27:23<13:06:35, 5243.90s/it][A
-Training Fold 1:  20%|██        | 2/10 [2:53:29<11:33:00, 5197.55s/it][A
-Training Fold 1:  30%|███       | 3/10 [4:19:34<10:04:39, 5182.78s/it][A
-Training Fold 1:  40%|████      | 4/10 [5:44:25<8:34:38, 5146.49s/it] [A
-Training Fold 1:  50%|█████     | 5/10 [7:11:00<7:10:20, 5164.15s/it][A
-Training Fold 1:  60%|██████    | 6/10 [8:36:22<5:43:19, 5149.92s/it][A
-Training Fold 1:  70%|███████   | 7/10 [10:02:11<4:17:28, 5149.63s/it][A
-Training Fold 1:  80%|████████  | 8/10 [11:28:48<2:52:09, 5164.74s/it][A
-Training Fold 1:  90%|█████████ | 9/10 [12:54:11<1:25:51, 5151.51s/it][A
-Training Fold 1: 100%|██████████| 10/10 [14:21:58<00:00, 5187.15s/it] [A
-                                                                     [A7-Fold:   0%|          | 0/7 [14:22:09<?, ?it/s]
-Traceback (most recent call last):
-  File "/vsc-hard-mounts/leuven-data/370/vsc37097/thesis/train_mstcn_fd_kfold.py", line 199, in <module>
-    f1_segment_10 = 2 * tp_10 / (2 * tp_10 + fp_10 + fn_10)
-ZeroDivisionError: division by zero

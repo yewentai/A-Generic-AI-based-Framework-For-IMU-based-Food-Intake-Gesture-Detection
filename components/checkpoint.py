@@ -2,7 +2,7 @@ import torch
 import os
 
 
-def save_checkpoint(model, optimizer, epoch, fold, f1_score, is_best=False):
+def save_checkpoint(path, model, optimizer, epoch, fold, f1_score):
     """
     Save model checkpoint to file
 
@@ -24,10 +24,7 @@ def save_checkpoint(model, optimizer, epoch, fold, f1_score, is_best=False):
         "f1_score": f1_score,
     }
 
-    # If best model, save a copy
-    if is_best:
-        best_path = f"checkpoints/fold{fold}_best.pth"
-        torch.save(checkpoint, best_path)
+    torch.save(checkpoint, path)
 
 
 # Function to load checkpoint

@@ -13,7 +13,7 @@ sys.path.append(project_root)
 
 # Configuration
 DATA_PATH = "./dataset/DX/DX-I/"
-SAVE_DIR = "./figs/DXI_analysis/"
+SAVE_DIR = "./analysis/DXI_analysis/"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 
