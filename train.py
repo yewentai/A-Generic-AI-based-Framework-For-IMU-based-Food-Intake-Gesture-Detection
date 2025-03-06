@@ -35,11 +35,11 @@ WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 DEBUG_PLOT = False
 NUM_FOLDS = 7
-NUM_EPOCHS = 100
+NUM_EPOCHS = 20
 BATCH_SIZE = 32
 NUM_WORKERS = 16
 FLAG_AUGMENT = False
-FLAG_MIRROR = True
+FLAG_MIRROR = False
 
 # Configure parameters based on dataset type
 if DATASET.startswith("DX"):
@@ -80,12 +80,6 @@ with open(X_R_PATH, "rb") as f:
     X_R = np.array(pickle.load(f), dtype=object)
 with open(Y_R_PATH, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
-
-# Skip the 5th subject (index 4)
-# X_L = np.delete(X_L, 4, axis=0)
-# Y_L = np.delete(Y_L, 4, axis=0)
-# X_R = np.delete(X_R, 4, axis=0)
-# Y_R = np.delete(Y_R, 4, axis=0)
 
 # Hand mirroring processing
 if FLAG_MIRROR:
@@ -220,7 +214,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         fn, fp, tp = segment_evaluation(
             all_predictions,
             all_labels,
-            label=label,
+            class_label=label,
             threshold=0.5,
             debug_plot=DEBUG_PLOT,
         )
@@ -246,7 +240,9 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         }
 
     # Average F1 score
-    avg_f1 = np.mean([metrics_sample[label]["f1"] for label in range(1, NUM_CLASSES)])
+    avg_f1 = np.mean(
+        [metrics_sample[str(label)]["f1"] for label in range(1, NUM_CLASSES)]
+    )
 
     # Record testing statistics
     testing_statistics.append(
