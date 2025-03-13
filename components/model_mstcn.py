@@ -105,46 +105,28 @@ class MSTCN(nn.Module):
 
 
 def MSTCN_Loss(outputs, targets):
-    total_loss = 0
-    # Ensure targets are LongTensors
+    # 保证 targets 为 LongTensor
     targets = targets.long()
+    loss_ce_fn = nn.CrossEntropyLoss(ignore_index=-100)
+    loss_mse_fn = nn.MSELoss(reduction="none")
 
-    # Cross-Entropy Loss
-    ce_loss_fn = nn.CrossEntropyLoss()
-    for output in outputs:
-        batch_size, num_classes, seq_len = output.size()
-        # Reshape output and targets for CrossEntropyLoss
-        output = output.permute(0, 2, 1)  # [batch_size, seq_len, num_classes]
-        output_reshaped = output.reshape(
-            -1, num_classes
-        )  # [batch_size*seq_len, num_classes]
-        targets_reshaped = targets.reshape(-1)  # [batch_size*seq_len]
+    total_loss = 0
+    # 遍历所有 stage 的预测，计算总 loss
+    for p in outputs:
+        # p 的尺寸为 [batch_size, num_classes, seq_len]
+        # 交叉熵损失：先将 p 转置为 [batch_size, seq_len, num_classes]，
+        # 再 reshape 为 [batch_size*seq_len, num_classes]；targets reshape 为 [batch_size*seq_len]
+        ce_loss = loss_ce_fn(
+            p.transpose(2, 1).contiguous().view(-1, p.size(1)), targets.view(-1)
+        )
 
-        # Compute classification loss
-        ce_loss = ce_loss_fn(output_reshaped, targets_reshaped)
+        # 平滑损失：对时间维度上相邻时刻的 log_softmax 结果计算 MSE
+        mse_loss_value = loss_mse_fn(
+            F.log_softmax(p[:, :, 1:], dim=1),
+            F.log_softmax(p.detach()[:, :, :-1], dim=1),
+        )
+        # 对 mse_loss 进行 clamp 操作，然后求均值
+        mse_loss_value = torch.clamp(mse_loss_value, min=0, max=16)
+        mse_loss_mean = torch.mean(mse_loss_value)
 
-    # Smoothing Loss L_T-MSE with Weighted Time Differences
-    log_probs = F.log_softmax(output, dim=2)  # [batch_size, seq_len, num_classes]
-    log_probs = log_probs.permute(0, 2, 1)  # [batch_size, num_classes, seq_len]
-    log_probs_t = log_probs[:, :, 1:]  # [batch_size, num_classes, seq_len-1]
-    log_probs_t_minus_one = log_probs[:, :, :-1]  # [batch_size, num_classes, seq_len-1]
-
-    # Calculate absolute difference
-    delta = (log_probs_t - log_probs_t_minus_one).abs()
-
-    # Generate weights for time steps
-    seq_len = delta.size(2)  # Sequence length (seq_len-1 due to delta calculation)
-    weights = torch.linspace(1.0, 0.1, steps=seq_len).to(
-        delta.device
-    )  # Linear decay from 1.0 to 0.1
-
-    # Apply weights to the time differences
-    weighted_delta = delta * weights.unsqueeze(0).unsqueeze(
-        0
-    )  # Add batch and num_classes dimensions
-
-    # Clamp values and compute weighted MSE loss
-    weighted_delta = torch.clamp(weighted_delta, min=0, max=16)
-    mse_loss = (weighted_delta**2).mean()
-
-    return ce_loss, mse_loss
+    return ce_loss, mse_loss_mean
