@@ -1,4 +1,5 @@
-from calendar import c
+# -*- coding: utf-8 -*-
+
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
@@ -7,6 +8,9 @@ import pickle
 import os
 from datetime import datetime
 from tqdm import tqdm
+from torchmetrics.functional import f1_score as F1S
+from torchmetrics import CohenKappa
+from torchmetrics import MatthewsCorrCoef
 
 from components.augmentation import augment_orientation
 from components.datasets import IMUDataset, create_balanced_subject_folds
@@ -17,7 +21,7 @@ from components.checkpoint import save_checkpoint
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # ********************** Configuration Parameters **********************
-DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII
+DATASET = "DXII"  # Options: DXI/DXII or FDI/FDII
 NUM_STAGES = 2
 NUM_LAYERS = 9
 NUM_HEADS = 8
@@ -35,7 +39,7 @@ WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 DEBUG_PLOT = False
 NUM_FOLDS = 7
-NUM_EPOCHS = 100
+NUM_EPOCHS = 20
 BATCH_SIZE = 32
 NUM_WORKERS = 16
 FLAG_AUGMENT = False
@@ -49,11 +53,13 @@ if DATASET.startswith("DX"):
         DATASET.replace("DX", "").upper() or "I"
     )  # Handle formats like DX/DXII
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
 elif DATASET.startswith("FD"):
     NUM_CLASSES = 3
     dataset_type = "FD"
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
@@ -64,7 +70,7 @@ X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
 Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
 
 # Result file paths
-version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:8]
+version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:10]
 TRAINING_STATS_FILE = f"result/{version_prefix}_training_stats_{DATASET.lower()}.npy"
 TESTING_STATS_FILE = f"result/{version_prefix}_testing_stats_{DATASET.lower()}.npy"
 CONFIG_FILE = f"result/{version_prefix}_config_{DATASET.lower()}.txt"
@@ -105,7 +111,6 @@ os.makedirs("result", exist_ok=True)
 # Initialize statistics records
 training_statistics = []
 testing_statistics = []
-loso_f1_scores = []
 
 # Cross-validation main loop
 for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)):
@@ -203,12 +208,12 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             ]  # Shape: [batch_size, num_classes, seq_len]
             probabilities = F.softmax(last_stage_output, dim=1)
 
-            # Make sure batch_y's shape matches predictions
+            # Get predictions along the class dimension
             predictions = torch.argmax(
                 probabilities, dim=1
             )  # Shape: [batch_size, seq_len]
 
-            # Flatten both predictions and labels the same way
+            # Flatten both predictions and labels
             all_predictions.extend(predictions.view(-1).cpu().numpy())
             all_labels.extend(batch_y.view(-1).cpu().numpy())
 
@@ -216,11 +221,9 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     all_predictions = post_process_predictions(np.array(all_predictions))
     all_labels = np.array(all_labels)
 
-    # Multi-class evaluation
+    # Segment-wise evaluation (using the custom function)
     metrics_segment = {}
-    metrics_sample = {}
     for label in range(1, NUM_CLASSES):
-        # Segment-wise F1 score
         fn, fp, tp = segment_evaluation(
             all_predictions,
             all_labels,
@@ -229,7 +232,6 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             debug_plot=DEBUG_PLOT,
         )
         f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-
         metrics_segment[f"{label}"] = {
             "fn": int(fn),
             "fp": int(fp),
@@ -237,22 +239,24 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             "f1": float(f1),
         }
 
-        # Sample-wise F1 score
-        fp = np.sum((all_predictions == label) & (all_labels != label))
-        fn = np.sum((all_predictions != label) & (all_labels == label))
-        tp = np.sum((all_predictions == label) & (all_labels == label))
-        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-        metrics_sample[f"{label}"] = {
-            "fn": int(fn),
-            "fp": int(fp),
-            "tp": int(tp),
-            "f1": float(f1),
-        }
-
-    # Average F1 score
-    avg_f1 = np.mean(
-        [metrics_sample[str(label)]["f1"] for label in range(1, NUM_CLASSES)]
+    # Sample-wise evaluation using torchmetrics' F1S
+    preds_tensor = torch.tensor(all_predictions)
+    labels_tensor = torch.tensor(all_labels)
+    # Compute per-class F1 scores (no averaging)
+    f1_scores_sample = F1S(
+        preds_tensor,
+        labels_tensor,
+        average=None,
+        num_classes=NUM_CLASSES,
+        task=TASK,
     )
+    # Compute additional metrics: Cohen's Kappa and Matthews Correlation Coefficient
+    cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
+    matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
 
     # Record testing statistics
     testing_statistics.append(
@@ -261,22 +265,11 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             "time": datetime.now().strftime("%H:%M:%S"),
             "fold": fold + 1,
             "metrics_segment": metrics_segment,
-            "metrics_sample": metrics_sample,
+            "f1_scores_sample": f1_scores_sample,
+            "cohen_kappa": cohen_kappa_val,
+            "matthews_corrcoef": matthews_corrcoef_val,
         }
     )
-    loso_f1_scores.append(avg_f1)
-
-    # Save best model
-    if avg_f1 > best_f1_score:
-        best_f1_score = avg_f1
-        save_checkpoint(
-            path=CHECKPOINT_PATH,
-            model=model,
-            optimizer=optimizer,
-            epoch=epoch,
-            fold=fold,
-            f1_score=avg_f1,
-        )
 
 # Save results and configuration
 np.save(TRAINING_STATS_FILE, training_statistics)

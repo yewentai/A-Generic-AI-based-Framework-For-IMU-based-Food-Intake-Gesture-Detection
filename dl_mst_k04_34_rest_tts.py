@@ -126,7 +126,7 @@ data_freq = sample_freq // DOWNSAMPLING
 seg_length = data_freq * duration
 strde_length = sample_freq * strde
 cohenkappa = CohenKappa(num_classes=num_class, task="multiclass")
-matthews_corrcoef = MatthewsCorrCoef(num_classes=num_class)
+matthews_corrcoef = MatthewsCorrCoef(num_classes=num_class, task="multiclass")
 # %%
 print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
 with open("/scratch/leuven/341/vsc34197/pkl_data/meal_X_no_overlap.pkl", "rb") as f:

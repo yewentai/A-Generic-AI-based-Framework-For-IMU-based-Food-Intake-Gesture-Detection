@@ -12,10 +12,10 @@ class IMUDataset(Dataset):
         Initialize the IMUDataset.
 
         Parameters:
-            X (list of np.ndarray): List of IMU data arrays for each subject.
-            Y (list of np.ndarray): List of label arrays for each subject.
+            X (list of np.ndarray): IMU data for each subject, each array has shape (N, 6)
+            Y (list of np.ndarray): Label arrays for each subject, each array has shape (N,)
             sequence_length (int): Length of each sequence segment.
-            downsample_factor (int): Factor by which to downsample the data.
+            downsample_factor (int): Downsampling factor.
             apply_antialias (bool): Whether to apply anti-aliasing filter before downsampling.
         """
         self.data = []
@@ -35,14 +35,40 @@ class IMUDataset(Dataset):
             imu_data = self.normalize(imu_data)
             num_samples = len(labels)
 
+            # Process complete sequence segments
             for i in range(0, num_samples - sequence_length + 1, sequence_length):
                 imu_segment = imu_data[i : i + sequence_length]
                 label_segment = labels[i : i + sequence_length]
+                self.data.append(imu_segment)
+                self.labels.append(label_segment)
+                self.subject_indices.append(subject_idx)
 
-                if len(imu_segment) == sequence_length:
-                    self.data.append(imu_segment)
-                    self.labels.append(label_segment)
-                    self.subject_indices.append(subject_idx)
+            # Process remaining segments that are less than sequence_length, zero-padding
+            remainder = num_samples % sequence_length
+            if remainder > 0:
+                start = num_samples - remainder
+                imu_segment = imu_data[start:]
+                label_segment = labels[start:]
+                pad_length = sequence_length - remainder
+
+                # Zero-pad imu_segment in 2D (pad rows, keep 6 features unchanged)
+                imu_segment_padded = np.pad(
+                    imu_segment,
+                    pad_width=((0, pad_length), (0, 0)),
+                    mode="constant",
+                    constant_values=0,
+                )
+                # Zero-pad label_segment in 1D
+                label_segment_padded = np.pad(
+                    label_segment,
+                    pad_width=(0, pad_length),
+                    mode="constant",
+                    constant_values=0,
+                )
+
+                self.data.append(imu_segment_padded)
+                self.labels.append(label_segment_padded)
+                self.subject_indices.append(subject_idx)
 
     def downsample(self, data, factor, apply_antialias=True):
         """
