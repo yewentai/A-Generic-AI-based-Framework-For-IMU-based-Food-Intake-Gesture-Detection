@@ -125,7 +125,7 @@ strde = 60
 data_freq = sample_freq // DOWNSAMPLING
 seg_length = data_freq * duration
 strde_length = sample_freq * strde
-cohenkappa = CohenKappa(num_classes=num_class)
+cohenkappa = CohenKappa(num_classes=num_class, task="multiclass")
 matthews_corrcoef = MatthewsCorrCoef(num_classes=num_class)
 # %%
 print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
