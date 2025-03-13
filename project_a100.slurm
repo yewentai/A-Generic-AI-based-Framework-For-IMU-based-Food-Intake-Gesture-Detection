@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=18                  # Number of CPU cores to use per node (Maximum 72 cores)
 #SBATCH --gpus-per-node=4                     # Number of GPUs to request per node (Maximum 4 GPUs)
 #SBATCH --partition=gpu_a100                  # Partition to use (A100 GPUs)
-#SBATCH --time=3-24:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=logs/ddp_train_%j.out
 
 # Load Miniconda
