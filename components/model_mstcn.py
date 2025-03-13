@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# 修改后的 DilatedResidualLayer：ReLU -> 1x1卷积 -> dropout -> skip connection
+# Modified DilatedResidualLayer: ReLU -> 1x1 Conv -> dropout -> skip connection
 class DilatedResidualLayer(nn.Module):
     def __init__(self, num_filters, dilation, kernel_size=3, dropout=0.3):
         super(DilatedResidualLayer, self).__init__()
@@ -22,7 +22,7 @@ class DilatedResidualLayer(nn.Module):
         return x + out
 
 
-# 单阶段 TCN 模块 SSTCN
+# Single-stage TCN module SSTCN
 class SSTCN(nn.Module):
     def __init__(
         self,
@@ -53,7 +53,7 @@ class SSTCN(nn.Module):
         return out
 
 
-# 多阶段 TCN 模型 MSTCN
+# Multi-stage TCN model MSTCN
 class MSTCN(nn.Module):
     def __init__(
         self,
@@ -67,11 +67,11 @@ class MSTCN(nn.Module):
     ):
         super(MSTCN, self).__init__()
         self.stages = nn.ModuleList()
-        # 第一个阶段输入原始特征
+        # First stage takes the original features as input
         self.stages.append(
             SSTCN(num_layers, input_dim, num_classes, num_filters, kernel_size, dropout)
         )
-        # 后续阶段输入为上个阶段的预测（类别数）
+        # Subsequent stages take the predictions (number of classes) from the previous stage as input
         for s in range(1, num_stages):
             self.stages.append(
                 SSTCN(
@@ -86,14 +86,14 @@ class MSTCN(nn.Module):
 
     def forward(self, x):
         outputs = []
-        # 第一阶段直接输出
+        # First stage output
         out = self.stages[0](x)
         outputs.append(out.unsqueeze(0))
-        # 后续阶段：先对上一阶段输出做 softmax 再作为输入
+        # Subsequent stages: apply softmax to the output of the previous stage before using it as input
         for stage in self.stages[1:]:
             out = stage(F.softmax(out, dim=1))
             outputs.append(out.unsqueeze(0))
-        # 拼接各阶段输出，并调整维度为 (batch, stages, num_classes, time)
+        # Concatenate outputs from all stages and adjust dimensions to (batch, stages, num_classes, time)
         outputs = torch.cat(outputs, dim=0)
         outputs = outputs.permute(1, 0, 2, 3)
         return outputs

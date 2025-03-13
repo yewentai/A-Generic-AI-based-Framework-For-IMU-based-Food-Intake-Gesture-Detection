@@ -196,10 +196,20 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         for batch_x, batch_y in test_loader:
             batch_x = batch_x.permute(0, 2, 1).to(device)
             outputs = model(batch_x)
-            probabilities = F.softmax(outputs[-1], dim=1)
-            all_predictions.extend(
-                torch.argmax(probabilities, dim=1).view(-1).cpu().numpy()
-            )
+
+            # For MS-TCN, we take the last stage's predictions
+            last_stage_output = outputs[
+                :, -1, :, :
+            ]  # Shape: [batch_size, num_classes, seq_len]
+            probabilities = F.softmax(last_stage_output, dim=1)
+
+            # Make sure batch_y's shape matches predictions
+            predictions = torch.argmax(
+                probabilities, dim=1
+            )  # Shape: [batch_size, seq_len]
+
+            # Flatten both predictions and labels the same way
+            all_predictions.extend(predictions.view(-1).cpu().numpy())
             all_labels.extend(batch_y.view(-1).cpu().numpy())
 
     # Post-processing
