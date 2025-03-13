@@ -228,9 +228,9 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         }
 
         # Sample-wise F1 score
-        fp = np.sum((all_predictions == 1) & (all_labels != 1))
-        fn = np.sum((all_predictions != 1) & (all_labels == 1))
-        tp = np.sum((all_predictions == 1) & (all_labels == 1))
+        fp = np.sum((all_predictions == label) & (all_labels != label))
+        fn = np.sum((all_predictions != label) & (all_labels == label))
+        tp = np.sum((all_predictions == label) & (all_labels == label))
         f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
         metrics_sample[f"{label}"] = {
             "fn": int(fn),
