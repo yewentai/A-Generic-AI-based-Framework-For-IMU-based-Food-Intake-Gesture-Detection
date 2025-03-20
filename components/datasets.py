@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import scipy.signal as signal
 from torch.utils.data import Dataset
+import os
 
 
 class IMUDataset(Dataset):
@@ -156,3 +157,29 @@ def create_balanced_subject_folds(dataset, num_folds=7):
     #     print(f"Fold {i+1}: {len(fold)} subjects, {count} samples")
 
     return folds
+
+
+def load_predefined_validate_folds(
+    num_folds=7, base_dir="dataset/FD/FD1_7_fold_id_list"
+):
+    """
+    Load predefined test folds from .npy files.
+
+    Each fold is stored in a subdirectory (named "0", "1", ..., etc.) under base_dir.
+    The test split is stored in a file named "test.npy" in each fold directory.
+
+    Args:
+        num_folds (int): Total number of folds.
+        base_dir (str): Directory containing the fold subdirectories.
+
+    Returns:
+        List[List[int]]: A list of test folds, where each inner list contains subject IDs for that fold.
+    """
+    test_folds = []
+    for i in range(num_folds):
+        fold_dir = os.path.join(base_dir, str(i))
+        test_path = os.path.join(fold_dir, "test.npy")
+        test_subjects = np.load(test_path)
+        # Convert to a regular Python list if needed
+        test_folds.append(test_subjects.tolist())
+    return test_folds

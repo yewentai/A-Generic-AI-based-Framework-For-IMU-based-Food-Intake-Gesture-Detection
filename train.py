@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
+from calendar import c
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, ConcatDataset
 import numpy as np
 import pickle
 import os
@@ -13,7 +14,11 @@ from torchmetrics import CohenKappa
 from torchmetrics import MatthewsCorrCoef
 
 from components.augmentation import augment_orientation
-from components.datasets import IMUDataset, create_balanced_subject_folds
+from components.datasets import (
+    IMUDataset,
+    create_balanced_subject_folds,
+    load_predefined_validate_folds,
+)
 from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.post_processing import post_process_predictions
@@ -21,7 +26,7 @@ from components.checkpoint import save_checkpoint
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # ********************** Configuration Parameters **********************
-DATASET = "DXII"  # Options: DXI/DXII or FDI/FDII
+DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
 NUM_STAGES = 2
 NUM_LAYERS = 9
 NUM_HEADS = 8
@@ -40,10 +45,10 @@ WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 DEBUG_PLOT = False
 NUM_FOLDS = 7
 NUM_EPOCHS = 20
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 NUM_WORKERS = 16
 FLAG_AUGMENT = False
-FLAG_MIRROR = False
+FLAG_MIRROR = True
 
 # Configure parameters based on dataset type
 if DATASET.startswith("DX"):
@@ -70,9 +75,9 @@ X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
 Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
 
 # Result file paths
-version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:10]
+version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
 TRAINING_STATS_FILE = f"result/{version_prefix}_training_stats_{DATASET.lower()}.npy"
-TESTING_STATS_FILE = f"result/{version_prefix}_testing_stats_{DATASET.lower()}.npy"
+TESTING_STATS_FILE = f"result/{version_prefix}_validating_stats_{DATASET.lower()}.npy"
 CONFIG_FILE = f"result/{version_prefix}_config_{DATASET.lower()}.txt"
 CHECKPOINT_PATH = f"checkpoints/{version_prefix}_checkpoint_{DATASET.lower()}.pth"
 # ****************************************************
@@ -98,8 +103,27 @@ Y = np.concatenate([Y_L, Y_R], axis=0)
 # Create dataset
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
 
+# If the selected dataset is FDII or FDI, load FDIII data to add more training samples.
+fdiii_dataset = None
+if DATASET in ["FDII", "FDI"]:
+    fdiii_dir = "./dataset/FD/FD-III"
+    with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
+        X_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
+        Y_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
+        X_R_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
+        Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+    X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
+    Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
+    fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
+
 # Create balanced cross-validation folds
-test_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
+# validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
+
+# Use the predefined folds if available
+validate_folds = load_predefined_validate_folds()
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -110,21 +134,33 @@ os.makedirs("result", exist_ok=True)
 
 # Initialize statistics records
 training_statistics = []
-testing_statistics = []
+validating_statistics = []
 
 # Cross-validation main loop
-for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)):
-    # Split training and testing sets
+for fold, validate_subjects in enumerate(
+    tqdm(validate_folds, desc="K-Fold", leave=True)
+):
+    if fold != 0:
+        continue
+    # Split training and validating sets
     train_indices = [
         i
         for i, subject in enumerate(full_dataset.subject_indices)
-        if subject not in test_subjects
+        if subject not in validate_subjects
     ]
-    test_indices = [
+    validate_indices = [
         i
         for i, subject in enumerate(full_dataset.subject_indices)
-        if subject in test_subjects
+        if subject in validate_subjects
     ]
+
+    # If using FDII/FDI, augment training data with FDIII samples
+    if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
+        train_dataset = ConcatDataset(
+            [Subset(full_dataset, train_indices), fdiii_dataset]
+        )
+    else:
+        train_dataset = Subset(full_dataset, train_indices)
 
     # Create data loaders
     train_loader = DataLoader(
@@ -134,8 +170,8 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
-    test_loader = DataLoader(
-        Subset(full_dataset, test_indices),
+    validate_loader = DataLoader(
+        Subset(full_dataset, validate_indices),
         batch_size=BATCH_SIZE,
         shuffle=False,
         num_workers=NUM_WORKERS,
@@ -179,6 +215,29 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             training_loss_ce += ce_loss.item()
             training_loss_mse += mse_loss.item()
 
+        # After finishing training for the epoch, switch to evaluation mode on training data
+        model.eval()
+        train_predictions = []
+        train_labels = []
+        with torch.no_grad():
+            for batch_x, batch_y in train_loader:
+                batch_x = batch_x.permute(0, 2, 1).to(device)
+                outputs = model(batch_x)
+                # For MS-TCN, take the last stage's output
+                last_stage_output = outputs[:, -1, :, :]
+                probabilities = F.softmax(last_stage_output, dim=1)
+                predictions = torch.argmax(probabilities, dim=1)
+                # Flatten predictions and labels and accumulate
+                train_predictions.extend(predictions.view(-1).cpu().numpy())
+                train_labels.extend(batch_y.view(-1).cpu().numpy())
+
+        # Convert to tensors and compute Matthews CorrCoef for the epoch
+        train_preds_tensor = torch.tensor(train_predictions)
+        train_labels_tensor = torch.tensor(train_labels)
+        train_mcc = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
+            train_preds_tensor, train_labels_tensor
+        ).item()
+
         # Record training statistics
         training_statistics.append(
             {
@@ -189,6 +248,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
                 "train_loss": training_loss / len(train_loader),
                 "train_loss_ce": training_loss_ce / len(train_loader),
                 "train_loss_mse": training_loss_mse / len(train_loader),
+                "matthews_corrcoef": train_mcc,
             }
         )
 
@@ -198,7 +258,7 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     all_labels = []
 
     with torch.no_grad():
-        for batch_x, batch_y in test_loader:
+        for batch_x, batch_y in validate_loader:
             batch_x = batch_x.permute(0, 2, 1).to(device)
             outputs = model(batch_x)
 
@@ -221,6 +281,10 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
     all_predictions = post_process_predictions(np.array(all_predictions))
     all_labels = np.array(all_labels)
 
+    # Label distribution
+    unique_labels, counts = np.unique(all_labels, return_counts=True)
+    label_distribution = dict(zip(unique_labels, counts))
+
     # Segment-wise evaluation (using the custom function)
     metrics_segment = {}
     for label in range(1, NUM_CLASSES):
@@ -239,17 +303,18 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
             "f1": float(f1),
         }
 
-    # Sample-wise evaluation using torchmetrics' F1S
+    # Sample-wise evaluation
     preds_tensor = torch.tensor(all_predictions)
     labels_tensor = torch.tensor(all_labels)
-    # Compute per-class F1 scores (no averaging)
-    f1_scores_sample = F1S(
-        preds_tensor,
-        labels_tensor,
-        average=None,
-        num_classes=NUM_CLASSES,
-        task=TASK,
-    )
+    metrics_sample = {}
+    for label in range(1, NUM_CLASSES):
+        tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
+        fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
+        fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
+        denominator = 2 * tp + fp + fn
+        f1 = 2 * tp / denominator if denominator != 0 else 0.0
+        metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
+
     # Compute additional metrics: Cohen's Kappa and Matthews Correlation Coefficient
     cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
         preds_tensor, labels_tensor
@@ -258,22 +323,23 @@ for fold, test_subjects in enumerate(tqdm(test_folds, desc="K-Fold", leave=True)
         preds_tensor, labels_tensor
     ).item()
 
-    # Record testing statistics
-    testing_statistics.append(
+    # Record validating statistics
+    validating_statistics.append(
         {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "time": datetime.now().strftime("%H:%M:%S"),
             "fold": fold + 1,
             "metrics_segment": metrics_segment,
-            "f1_scores_sample": f1_scores_sample,
+            "metrics_sample": metrics_sample,
             "cohen_kappa": cohen_kappa_val,
             "matthews_corrcoef": matthews_corrcoef_val,
+            "label_distribution": label_distribution,
         }
     )
 
 # Save results and configuration
 np.save(TRAINING_STATS_FILE, training_statistics)
-np.save(TESTING_STATS_FILE, testing_statistics)
+np.save(TESTING_STATS_FILE, validating_statistics)
 
 config_info = {
     "dataset": DATASET,

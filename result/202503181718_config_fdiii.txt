@@ -1,5 +1,5 @@
-dataset: DXI
-num_classes: 2
+dataset: FDIII
+num_classes: 3
 num_stages: 2
 num_layers: 9
 num_heads: 8
@@ -13,7 +13,7 @@ learning_rate: 0.0005
 sampling_freq: 16
 window_size: 960
 num_folds: 7
-num_epochs: 20
+num_epochs: 100
 batch_size: 32
-augmentation: False
+augmentation: True
 mirroring: False

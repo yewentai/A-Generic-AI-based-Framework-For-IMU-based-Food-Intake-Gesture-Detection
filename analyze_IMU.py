@@ -12,8 +12,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
 # Configuration
-DATA_PATH = "./dataset/DX/DX-I/"
-SAVE_DIR = "./analysis/DXI_analysis/"
+DATA_PATH = "./dataset/FD/MO/"
+SAVE_DIR = "./analysis/FDMO_analysis/"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 
@@ -26,11 +26,31 @@ def load_data(side="L"):
     return X, Y
 
 
-def basic_statistics(X, Y):
-    """Print basic dataset statistics and write to a txt file"""
+def basic_statistics(X, Y, side):
+    """Print detailed dataset statistics and write to a txt file"""
     stats_file = os.path.join(SAVE_DIR, "basic_statistics.txt")
-    with open(stats_file, "w") as f:
-        f.write("Basic Statistics:\n")
+
+    # Compute label distribution per subject
+    label_counts_per_subject = []
+
+    for subj_idx, y in enumerate(Y):
+        label_counts = {0: 0, 1: 0, 2: 0}
+        unique, counts = np.unique(y, return_counts=True)
+        for label, count in zip(unique, counts):
+            label_counts[label] = count
+
+        label_counts_per_subject.append(
+            (subj_idx + 1, label_counts[0], label_counts[1], label_counts[2])
+        )
+
+    # Compute overall label counts
+    total_counts = np.sum(
+        [[count[1], count[2], count[3]] for count in label_counts_per_subject], axis=0
+    )
+
+    # Write to file
+    with open(stats_file, "a") as f:  # Append to existing file
+        f.write(f"\nBasic Statistics ({side} side):\n")
         f.write(f"Number of subjects: {len(X)}\n")
         f.write(f"Input features: {X[0].shape[1]}\n")  # Assuming [time, features]
 
@@ -40,19 +60,56 @@ def basic_statistics(X, Y):
         unique_labels = np.unique(np.concatenate(Y))
         f.write(f"Unique labels: {unique_labels}\n")
 
-    print("Basic Statistics are saved to:", stats_file)
+        # Write overall label-specific counts
+        f.write(f"Samples with label 0: {total_counts[0]:,}\n")
+        f.write(f"Samples with label 1: {total_counts[1]:,}\n")
+        f.write(f"Samples with label 2: {total_counts[2]:,}\n")
+
+        # Write per-subject statistics
+        f.write("\nSubject-wise Sample Distribution:\n")
+        f.write("Subject_ID | Label_0 | Label_1 | Label_2\n")
+        f.write("------------------------------------\n")
+        for subj_idx, count_0, count_1, count_2 in label_counts_per_subject:
+            f.write(f"{subj_idx:<10} | {count_0:<7} | {count_1:<7} | {count_2:<7}\n")
+
+    print(f"Basic Statistics ({side} side) are saved to:", stats_file)
 
 
 def plot_sample_distribution(Y, side):
-    """Plot distribution of samples per subject"""
-    samples_per_subject = [len(y) for y in Y]
+    """Plot distribution of samples per subject with label breakdown"""
+    label_colors = {0: "blue", 1: "green", 2: "red"}
+    label_names = {0: "Label 0", 1: "Label 1", 2: "Label 2"}
 
-    plt.figure(figsize=(10, 6))
-    plt.bar(range(len(samples_per_subject)), samples_per_subject)
-    plt.title(f"Sample Distribution ({side} side)")
-    plt.xlabel("Subject ID")
-    plt.ylabel("Number of Samples")
-    plt.savefig(os.path.join(SAVE_DIR, f"sample_distribution_{side}.png"))
+    num_subjects = len(Y)
+    label_counts = {0: [], 1: [], 2: []}
+
+    # Count samples for each label per subject
+    for y in Y:
+        counts = {label: np.sum(np.array(y) == label) for label in [0, 1, 2]}
+        for label in [0, 1, 2]:
+            label_counts[label].append(counts[label])
+
+    # Stack plot
+    fig, ax = plt.subplots(figsize=(12, 6))
+    bottom = np.zeros(num_subjects)  # Track the bottom for stacking
+
+    for label in [0, 1, 2]:
+        ax.bar(
+            range(num_subjects),
+            label_counts[label],
+            label=label_names[label],
+            color=label_colors[label],
+            bottom=bottom,
+        )
+        bottom += np.array(label_counts[label])  # Update bottom for next stack
+
+    ax.set_title(f"Sample Distribution by Label ({side} side)")
+    ax.set_xlabel("Subject ID")
+    ax.set_ylabel("Number of Samples")
+    ax.legend()
+    ax.grid(axis="y", linestyle="--", alpha=0.6)
+
+    plt.savefig(os.path.join(SAVE_DIR, f"sample_distribution_{side}.png"), dpi=150)
     plt.close()
 
 
@@ -89,7 +146,6 @@ def analyze_segments(X, Y, side="L"):
     os.makedirs(save_dir, exist_ok=True)
 
     fs = 16  # Sampling frequency (Hz)
-    # subject_indices = random.sample(range(len(X)), 3)  # Randomly select 3 subjects
     subject_indices = [4, 5, 6]
 
     for subj_idx in subject_indices:
@@ -99,7 +155,7 @@ def analyze_segments(X, Y, side="L"):
         # Get 0, 1, 2 segments for the current subject
         segments_dict = segment_by_label(labels)
 
-        # Randomly select 3 segments (0, 1, 2)
+        # Randomly select one segment for each label (0, 1, 2)
         selected_segments = []
         for label in [0, 1, 2]:
             if len(segments_dict[label]) > 0:
@@ -120,14 +176,14 @@ def analyze_segments(X, Y, side="L"):
                     alpha=0.7,
                 )
 
-            plt.title(f"Subject {subj_idx+1} - Label {seg_idx} - Time Domain ({side})")
+            plt.title(f"Subject {subj_idx+1} - Label {label} - Time Domain ({side})")
             plt.xlabel("Time (s)")
             plt.ylabel("Amplitude")
             plt.legend()
             plt.grid(True, alpha=0.3)
             plt.savefig(
                 os.path.join(
-                    save_dir, f"subj{subj_idx+1}_label{seg_idx}_time_{side}.png"
+                    save_dir, f"subj{subj_idx+1}_label{label}_time_{side}.png"
                 ),
                 dpi=150,
             )
@@ -135,21 +191,23 @@ def analyze_segments(X, Y, side="L"):
 
             # --- 2. Time-frequency analysis (STFT) ---
             feature_idx = 0  # Perform STFT on the first channel only
+            segment_length = imu_segment.shape[0]  # Get segment length
+            nperseg = min(128, segment_length)  # Adjust dynamically
+            noverlap = min(nperseg // 2, nperseg - 1)  # Ensure valid overlap
+
             f, t, Zxx = signal.stft(
-                imu_segment[:, feature_idx], fs=fs, nperseg=128, noverlap=64
+                imu_segment[:, feature_idx], fs=fs, nperseg=nperseg, noverlap=noverlap
             )
 
             plt.figure(figsize=(12, 6))
             plt.pcolormesh(t, f, np.abs(Zxx), shading="gouraud")
-            plt.title(
-                f"Subject {subj_idx+1} - Label {seg_idx} - Time-Frequency ({side})"
-            )
+            plt.title(f"Subject {subj_idx+1} - Label {label} - Time-Frequency ({side})")
             plt.xlabel("Time (s)")
             plt.ylabel("Frequency (Hz)")
             plt.colorbar(label="Magnitude")
             plt.savefig(
                 os.path.join(
-                    save_dir, f"subj{subj_idx+1}_label{seg_idx}_stft_{side}.png"
+                    save_dir, f"subj{subj_idx+1}_label{label}_stft_{side}.png"
                 ),
                 dpi=150,
             )
@@ -163,7 +221,7 @@ def main():
         X, Y = load_data(side)
 
         # Basic statistics
-        basic_statistics(X, Y)
+        basic_statistics(X, Y, side)
         plot_sample_distribution(Y, side)
         analyze_segments(X, Y, side=side)
 

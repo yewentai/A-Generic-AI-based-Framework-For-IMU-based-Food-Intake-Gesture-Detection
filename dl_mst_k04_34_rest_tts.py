@@ -116,7 +116,7 @@ num_layer = 9
 num_filter = 64
 num_feature = 6
 num_class = 3
-Epoch = 100
+Epoch = 20
 learning_rate = 5e-4
 DOWNSAMPLING = 4
 sample_freq = 64
@@ -129,60 +129,40 @@ cohenkappa = CohenKappa(num_classes=num_class, task="multiclass")
 matthews_corrcoef = MatthewsCorrCoef(num_classes=num_class, task="multiclass")
 # %%
 print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
-with open("/scratch/leuven/341/vsc34197/pkl_data/meal_X_no_overlap.pkl", "rb") as f:
+with open("/home/wsl/codes_linux/thesis/dataset/FD/FD-III/X.pkl", "rb") as f:
     dataset = pkl.load(f)
-with open("/scratch/leuven/341/vsc34197/pkl_data/meal_Y_no_overlap.pkl", "rb") as f:
+with open("/home/wsl/codes_linux/thesis/dataset/FD/FD-III/Y.pkl", "rb") as f:
     annoLabel = pkl.load(f)
-with open("/scratch/leuven/341/vsc34197/pkl_data/dl_34_X_rest.pkl", "rb") as f:
+with open("/home/wsl/codes_linux/thesis/dataset/FD/FD-I/X.pkl", "rb") as f:
     DL_data = pkl.load(f)
-with open("/scratch/leuven/341/vsc34197/pkl_data/dl_34_Y_rest.pkl", "rb") as f:
+with open("/home/wsl/codes_linux/thesis/dataset/FD/FD-I/Y.pkl", "rb") as f:
     DL_anno = pkl.load(f)
-with open("/scratch/leuven/341/vsc34197/pkl_data/oreba_100_X.pkl", "rb") as f:
-    OR_data = pkl.load(f)
-with open("/scratch/leuven/341/vsc34197/pkl_data/oreba_100_Y.pkl", "rb") as f:
-    OR_anno = pkl.load(f)
+# with open("/scratch/leuven/341/vsc34197/pkl_data/oreba_100_X.pkl", "rb") as f:
+#     OR_data = pkl.load(f)
+# with open("/scratch/leuven/341/vsc34197/pkl_data/oreba_100_Y.pkl", "rb") as f:
+#     OR_anno = pkl.load(f)
 
 # %%
 str_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 # %%
-for times in range(0, 4):
+for times in range(0, 7):
     print(
         "-------------------------------Round {} start-------------------------------".format(
             times + 1
         )
     )
-    str_org = (
-        "/data/leuven/341/vsc34197/day_long/data_split/k_fold/"
-        + "20230815_170535"
-        + "/"
-        + str(times)
-    )
+    str_org = "dataset/FD/FD1_7_fold_id_list/" + str(times)
     pa_train = str_org + "/train.npy"
-    pa_valid = str_org + "/valid.npy"
+    pa_valid = str_org + "/test.npy"
     pa_test = str_org + "/test.npy"
     train_list = np.load(pa_train)
     valid_list = np.load(pa_valid)
     test_list = np.load(pa_test)
     print(train_list)
     print(valid_list)
-    print(test_list)
-    model_dir = (
-        "/data/leuven/341/vsc34197/day_long/model/mst/fd_34_rest/tts/"
-        + str_time
-        + "/"
-        + str(times)
-        + "/"
-    )
-    results_dir = (
-        "/data/leuven/341/vsc34197/day_long/results/mst/fd_34_rest/tts/"
-        + str_time
-        + "/"
-        + str(times)
-        + "/"
-    )
-    model_dir_temp = (
-        "/data/leuven/341/vsc34197/day_long/mst/fd_34_rest/tts/" + str_time + "/"
-    )
+    model_dir = "model"
+    results_dir = "result"
+    model_dir_temp = "model_temp"
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
     if not os.path.exists(results_dir):
@@ -197,9 +177,9 @@ for times in range(0, 4):
             x_train = np.concatenate((x_train, dataset[i]), axis=0)
             y_train = np.concatenate((y_train, annoLabel[i]), axis=0)
 
-    for i in range(len(OR_anno)):
-        x_train = np.concatenate((x_train, OR_data[i]), axis=0)
-        y_train = np.concatenate((y_train, OR_anno[i]), axis=0)
+    # for i in range(len(OR_anno)):
+    #     x_train = np.concatenate((x_train, OR_data[i]), axis=0)
+    #     y_train = np.concatenate((y_train, OR_anno[i]), axis=0)
     # print(x_train.shape)
     # print(y_train.shape)
     # train set

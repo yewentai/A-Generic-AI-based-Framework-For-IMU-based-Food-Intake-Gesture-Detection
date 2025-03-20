@@ -3,87 +3,183 @@ import matplotlib.pyplot as plt
 import os
 
 # Configuration
-DATASET = "DXI"  # Adjust if needed; ensure it matches the saved results
-RESULT_VERSION = "20250313"  # Use the version prefix from your result files
-result_dir = "result"
+DATASET = "FDI"  # Dataset name, ensure it matches the dataset used in training
+RESULT_VERSION = "202503201553"  # Version identifier for the saved results
+RESULT_DIR = "result"  # Directory where result files are stored
 
-# Load data using the corrected file naming scheme
-testing_stats = np.load(
-    os.path.join(result_dir, f"{RESULT_VERSION}_testing_stats_{DATASET.lower()}.npy"),
-    allow_pickle=True,
+# Load training and validation statistics from saved .npy files
+training_stats_file = os.path.join(
+    RESULT_DIR, f"{RESULT_VERSION}_training_stats_{DATASET.lower()}.npy"
 )
-training_stats = np.load(
-    os.path.join(result_dir, f"{RESULT_VERSION}_training_stats_{DATASET.lower()}.npy"),
-    allow_pickle=True,
+validating_stats_file = os.path.join(
+    RESULT_DIR, f"{RESULT_VERSION}_validating_stats_{DATASET.lower()}.npy"
 )
 
-# Convert testing_stats to a list for easier processing (if not already)
-testing_stats = list(testing_stats)
+training_stats = np.load(training_stats_file, allow_pickle=True)
+validating_stats = np.load(validating_stats_file, allow_pickle=True)
 
-# Statistical analysis
-# Compute average sample-wise F1 per fold using the "f1_scores_sample" dictionary.
-# Each entry in "f1_scores_sample" is assumed to be a dict like {"1": {"f1": value}, "2": {"f1": value}, ...}
-f1_scores = []
-for e in testing_stats:
-    fold_scores = [v["f1"] for v in e["f1_scores_sample"].values()]
-    f1_scores.append(np.mean(fold_scores))
+# Convert loaded data to lists for easier processing
+training_stats = list(training_stats)
+validating_stats = list(validating_stats)
 
-# Extract Cohen Kappa and Matthews CorrCoef scores from each fold
-cohen_kappa_scores = [e["cohen_kappa"] for e in testing_stats]
-matthews_corrcoef_scores = [e["matthews_corrcoef"] for e in testing_stats]
+# Extract epoch-wise training statistics
+# Initialize dictionaries to store losses and metrics for each epoch
+epochs = sorted(set(entry["epoch"] for entry in training_stats))
+loss_per_epoch = {epoch: [] for epoch in epochs}
+loss_ce_per_epoch = {epoch: [] for epoch in epochs}  # Cross-entropy loss
+loss_mse_per_epoch = {epoch: [] for epoch in epochs}  # Mean squared error loss
+matthews_corrcoef_per_epoch = {epoch: [] for epoch in epochs}  # MCC metric
 
-# For segment metrics, use class "1" as an example.
-tp_total = sum(e["metrics_segment"].get("1", {}).get("tp", 0) for e in testing_stats)
-fp_total = sum(e["metrics_segment"].get("1", {}).get("fp", 0) for e in testing_stats)
-fn_total = sum(e["metrics_segment"].get("1", {}).get("fn", 0) for e in testing_stats)
+# Populate dictionaries with data from training statistics
+for entry in training_stats:
+    loss_per_epoch[entry["epoch"]].append(entry["train_loss"])
+    loss_ce_per_epoch[entry["epoch"]].append(entry["train_loss_ce"])
+    loss_mse_per_epoch[entry["epoch"]].append(entry["train_loss_mse"])
+    matthews_corrcoef_per_epoch[entry["epoch"]].append(entry["matthews_corrcoef"])
 
-print(f"\n{' Results Summary ':=^40}")
-print(f"Average F1 (sample-wise): {np.mean(f1_scores):.4f} ± {np.std(f1_scores):.4f}")
-print(f"Total TP (Segment Class 1): {tp_total}  FP: {fp_total}  FN: {fn_total}")
-print(
-    f"Average Cohen Kappa: {np.mean(cohen_kappa_scores):.4f} ± {np.std(cohen_kappa_scores):.4f}"
+# Compute mean values for each epoch
+mean_loss_per_epoch = [np.mean(loss_per_epoch[epoch]) for epoch in epochs]
+mean_loss_ce_per_epoch = [np.mean(loss_ce_per_epoch[epoch]) for epoch in epochs]
+mean_loss_mse_per_epoch = [np.mean(loss_mse_per_epoch[epoch]) for epoch in epochs]
+mean_matthews_corrcoef_per_epoch = [
+    np.mean(matthews_corrcoef_per_epoch[epoch]) for epoch in epochs
+]
+
+# Extract fold-wise validation metrics
+# Initialize lists to store metrics for each fold
+label_distribution = []  # Label distribution
+f1_scores_sample = []  # Sample-wise F1 scores
+f1_scores_segment = []  # Segment-wise F1 scores
+cohen_kappa_scores = []  # Cohen's kappa scores
+matthews_corrcoef_scores = []  # MCC scores
+
+# Populate lists with data from validation statistics
+for entry in validating_stats:
+    label_dist = entry["label_distribution"]  # dictionary: {label: count}
+
+    # Compute weighted average F1 for sample-wise metrics
+    total_weight_sample = 0.0
+    weighted_f1_sample = 0.0
+    for label_str, stats in entry["metrics_sample"].items():
+        label_int = int(label_str)  # Convert key to int if necessary
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_sample += stats["f1"] * weight
+        total_weight_sample += weight
+    f1_sample_weighted = (
+        weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
+    )
+
+    # Compute weighted average F1 for segment-wise metrics
+    total_weight_segment = 0.0
+    weighted_f1_segment = 0.0
+    for label_str, stats in entry["metrics_segment"].items():
+        label_int = int(label_str)
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_segment += stats["f1"] * weight
+        total_weight_segment += weight
+    f1_segment_weighted = (
+        weighted_f1_segment / total_weight_segment if total_weight_segment > 0 else 0.0
+    )
+
+    # Append results
+    label_distribution.append(label_dist)
+    f1_scores_sample.append(f1_sample_weighted)
+    f1_scores_segment.append(f1_segment_weighted)
+    cohen_kappa_scores.append(entry["cohen_kappa"])
+    matthews_corrcoef_scores.append(entry["matthews_corrcoef"])
+
+# Plot1.1: Training Losses Over Epochs
+plt.figure(figsize=(10, 6))
+plt.subplot(121)
+plt.plot(
+    epochs,
+    mean_loss_per_epoch,
+    marker="o",
+    linestyle="-",
+    color="blue",
+    label="Total Loss",
 )
-print(
-    f"Average Matthews CorrCoef: {np.mean(matthews_corrcoef_scores):.4f} ± {np.std(matthews_corrcoef_scores):.4f}"
+plt.plot(
+    epochs,
+    mean_loss_ce_per_epoch,
+    marker="s",
+    linestyle="--",
+    color="red",
+    label="CE Loss",
 )
+plt.plot(
+    epochs,
+    mean_loss_mse_per_epoch,
+    marker="^",
+    linestyle=":",
+    color="green",
+    label="MSE Loss",
+)
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("Training Losses Over Epochs")
+plt.grid()
+plt.legend()
+plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_training_loss_plot.png"))
 
-# Visualization
+# Plot1.2: Matthews Correlation Coefficient Over Epochs
+plt.subplot(122)
+plt.plot(
+    epochs,
+    mean_matthews_corrcoef_per_epoch,
+    marker="o",
+    linestyle="-",
+    color="purple",
+)
+plt.xlabel("Epoch")
+plt.ylabel("Matthews Correlation Coefficient")
+plt.title("Matthews Correlation Coefficient Over Epochs")
+plt.grid()
+plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_matthews_corrcoef_plot.png"))
+plt.tight_layout()
+plt.show()
+
+# Plot2: Fold-wise Performance Metrics
+# Bar plot for Cohen Kappa, MCC, Sample-wise F1, and Segment-wise F1 scores
 plt.figure(figsize=(12, 6))
+width = 0.2  # Width of each bar
+folds = np.arange(1, len(cohen_kappa_scores) + 1)  # Fold indices
 
-# F1 distribution boxplot
-plt.subplot(131)
-plt.boxplot(
-    f1_scores,
-    vert=False,
-    widths=0.6,
-    patch_artist=True,
-    boxprops=dict(facecolor="lightblue"),
-)
-plt.title("F1 Score Distribution")
-plt.xlim(0, 1)
-
-# Fold-wise performance bar plot for F1 scores
-plt.subplot(132)
-plt.bar(range(1, len(f1_scores) + 1), f1_scores, color="skyblue")
-plt.xticks(range(1, len(f1_scores) + 1))
-plt.xlabel("Fold")
-plt.ylabel("F1 Score")
-plt.title("F1 Score per Fold")
-plt.ylim(0, 1)
-
-# Additional visualization: Cohen Kappa and Matthews CorrCoef per fold
-plt.subplot(133)
-width = 0.35
-folds = np.arange(1, len(cohen_kappa_scores) + 1)
-plt.bar(folds - width / 2, cohen_kappa_scores, width=width, label="Cohen Kappa")
 plt.bar(
-    folds + width / 2, matthews_corrcoef_scores, width=width, label="Matthews CorrCoef"
+    folds - width * 1.5,
+    cohen_kappa_scores,
+    width=width,
+    label="Cohen Kappa",
+    color="orange",
 )
+plt.bar(
+    folds - width / 2,
+    matthews_corrcoef_scores,
+    width=width,
+    label="MCC",
+    color="purple",
+)
+plt.bar(
+    folds + width / 2,
+    f1_scores_sample,
+    width=width,
+    label="Sample-wise F1",
+    color="blue",
+)
+plt.bar(
+    folds + width * 1.5,
+    f1_scores_segment,
+    width=width,
+    label="Segment-wise F1",
+    color="green",
+)
+
 plt.xticks(folds)
 plt.xlabel("Fold")
 plt.ylabel("Score")
-plt.title("Other Metrics per Fold")
+plt.title("Fold-wise Performance Metrics")
 plt.legend()
-
+plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
+plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_test_metrics_plot.png"))
 plt.show()
