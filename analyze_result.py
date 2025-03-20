@@ -3,18 +3,18 @@ import matplotlib.pyplot as plt
 import os
 
 # Configuration
-DATASET = "FDI"  # Dataset name, ensure it matches the dataset used in training
+DATASET = "FDI"  # Ensure this matches the dataset used in training
 RESULT_VERSION = "202503201553"  # Version identifier for the saved results
-RESULT_DIR = "result"  # Directory where result files are stored
+RESULT_DIR = "result"  # Base directory where result files are stored
+
+# Define the specific directory for this version
+RESULT_PATH = os.path.join(RESULT_DIR, RESULT_VERSION)
 
 # Load training and validation statistics from saved .npy files
-training_stats_file = os.path.join(
-    RESULT_DIR, f"{RESULT_VERSION}_training_stats_{DATASET.lower()}.npy"
-)
+training_stats_file = os.path.join(RESULT_PATH, f"training_stats_{DATASET.lower()}.npy")
 validating_stats_file = os.path.join(
-    RESULT_DIR, f"{RESULT_VERSION}_validating_stats_{DATASET.lower()}.npy"
+    RESULT_PATH, f"validating_stats_{DATASET.lower()}.npy"
 )
-
 training_stats = np.load(training_stats_file, allow_pickle=True)
 validating_stats = np.load(validating_stats_file, allow_pickle=True)
 
@@ -120,7 +120,6 @@ plt.ylabel("Loss")
 plt.title("Training Losses Over Epochs")
 plt.grid()
 plt.legend()
-plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_training_loss_plot.png"))
 
 # Plot1.2: Matthews Correlation Coefficient Over Epochs
 plt.subplot(122)
@@ -135,9 +134,8 @@ plt.xlabel("Epoch")
 plt.ylabel("Matthews Correlation Coefficient")
 plt.title("Matthews Correlation Coefficient Over Epochs")
 plt.grid()
-plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_matthews_corrcoef_plot.png"))
 plt.tight_layout()
-plt.show()
+plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_matthews_corrcoef_plot.png"))
 
 # Plot2: Fold-wise Performance Metrics
 # Bar plot for Cohen Kappa, MCC, Sample-wise F1, and Segment-wise F1 scores
@@ -182,4 +180,3 @@ plt.legend()
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_test_metrics_plot.png"))
-plt.show()

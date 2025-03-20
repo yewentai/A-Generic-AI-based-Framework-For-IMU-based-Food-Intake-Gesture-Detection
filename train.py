@@ -74,12 +74,20 @@ Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
 X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
 Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
 
-# Result file paths
+# Generate the version prefix from the current datetime
 version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
-TRAINING_STATS_FILE = f"result/{version_prefix}_training_stats_{DATASET.lower()}.npy"
-TESTING_STATS_FILE = f"result/{version_prefix}_validating_stats_{DATASET.lower()}.npy"
-CONFIG_FILE = f"result/{version_prefix}_config_{DATASET.lower()}.txt"
-CHECKPOINT_PATH = f"checkpoints/{version_prefix}_checkpoint_{DATASET.lower()}.pth"
+
+# Create new directories using version_prefix
+result_dir = os.path.join("result", version_prefix)
+checkpoint_dir = os.path.join("checkpoints", version_prefix)
+os.makedirs(result_dir, exist_ok=True)
+os.makedirs(checkpoint_dir, exist_ok=True)
+
+# Build file paths without the version_prefix in the filenames
+TRAINING_STATS_FILE = os.path.join(result_dir, f"training_stats_{DATASET.lower()}.npy")
+TESTING_STATS_FILE = os.path.join(result_dir, f"validating_stats_{DATASET.lower()}.npy")
+CONFIG_FILE = os.path.join(result_dir, f"config_{DATASET.lower()}.txt")
+CHECKPOINT_PATH = os.path.join(checkpoint_dir, f"checkpoint_{DATASET.lower()}.pth")
 # ****************************************************
 
 # Load data
