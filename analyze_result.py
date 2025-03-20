@@ -4,7 +4,7 @@ import os
 
 # Configuration
 DATASET = "FDI"  # Ensure this matches the dataset used in training
-RESULT_VERSION = "202503201553"  # Version identifier for the saved results
+RESULT_VERSION = "202503201709"  # Version identifier for the saved results
 RESULT_DIR = "result"  # Base directory where result files are stored
 
 # Define the specific directory for this version
@@ -135,7 +135,7 @@ plt.ylabel("Matthews Correlation Coefficient")
 plt.title("Matthews Correlation Coefficient Over Epochs")
 plt.grid()
 plt.tight_layout()
-plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_matthews_corrcoef_plot.png"))
+plt.savefig(os.path.join(RESULT_PATH, "train_metrics_plot.png"))
 
 # Plot2: Fold-wise Performance Metrics
 # Bar plot for Cohen Kappa, MCC, Sample-wise F1, and Segment-wise F1 scores
@@ -179,4 +179,4 @@ plt.title("Fold-wise Performance Metrics")
 plt.legend()
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(os.path.join(RESULT_DIR, f"{RESULT_VERSION}_test_metrics_plot.png"))
+plt.savefig(os.path.join(RESULT_PATH, "validate_metrics_plot.png"))
