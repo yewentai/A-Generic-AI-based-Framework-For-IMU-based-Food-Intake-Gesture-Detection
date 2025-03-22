@@ -1,29 +1,39 @@
-import torch
 import os
+import torch
 
 
-def save_checkpoint(path, model, optimizer, epoch, fold):
+def save_best_model(
+    model, fold, current_metric, best_metric, checkpoint_dir, mode="max"
+):
     """
-    Save model checkpoint to file
+    Save the best model for a given fold based on a performance metric.
 
-    Args:
-        model: The PyTorch model to save
-        optimizer: The optimizer used for training
-        epoch: Current epoch number
-        fold: Current fold number
-        f1_score: F1 score on validation/test set
-        is_best: Boolean indicating if this is the best model so far
+    Parameters:
+        model (torch.nn.Module): The model to save.
+        fold (int): Current fold number (e.g., 1, 2, ...).
+        current_metric (float): The evaluation metric value from the current epoch.
+        best_metric (float): The best metric value recorded so far.
+        checkpoint_dir (str): Directory where the best model will be saved.
+        mode (str): 'max' if higher metric values are better (e.g., accuracy),
+                    'min' if lower metric values are better (e.g., loss).
+
+    Returns:
+        float: The updated best metric value.
     """
-    os.makedirs("checkpoints", exist_ok=True)
+    # Determine if the current metric is better than the best metric so far
+    is_better = (
+        (current_metric > best_metric)
+        if mode == "max"
+        else (current_metric < best_metric)
+    )
 
-    checkpoint = {
-        "fold": fold,
-        "epoch": epoch,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-    }
+    if is_better:
+        best_metric = current_metric
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        checkpoint_path = os.path.join(checkpoint_dir, f"best_model_fold{fold}.pth")
+        torch.save(model.state_dict(), checkpoint_path)
 
-    torch.save(checkpoint, path)
+    return best_metric
 
 
 # Function to load checkpoint
