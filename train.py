@@ -9,7 +9,6 @@ import pickle
 import os
 from datetime import datetime
 from tqdm import tqdm
-from torchmetrics.functional import f1_score as F1S
 from torchmetrics import CohenKappa
 from torchmetrics import MatthewsCorrCoef
 
@@ -22,7 +21,6 @@ from components.datasets import (
 from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.post_processing import post_process_predictions
-from components.checkpoint import save_checkpoint
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # ********************** Configuration Parameters **********************
@@ -128,10 +126,10 @@ if DATASET in ["FDII", "FDI"]:
     fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
 
 # Create balanced cross-validation folds
-# validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
+validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
 
 # Use the predefined folds if available
-validate_folds = load_predefined_validate_folds()
+# validate_folds = load_predefined_validate_folds()
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -148,8 +146,8 @@ validating_statistics = []
 for fold, validate_subjects in enumerate(
     tqdm(validate_folds, desc="K-Fold", leave=True)
 ):
-    if fold != 0:
-        continue
+    # if fold != 0:
+    #     continue
     # Split training and validating sets
     train_indices = [
         i
@@ -197,7 +195,6 @@ for fold, validate_subjects in enumerate(
         dropout=DROPOUT,
     ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    best_f1_score = 0.0
 
     # Training loop
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
@@ -205,6 +202,7 @@ for fold, validate_subjects in enumerate(
         training_loss = 0.0
         training_loss_ce = 0.0
         training_loss_mse = 0.0
+        checkpoint_path = os.path.join(CHECKPOINT_PATH, f"fold{fold+1}.pth")
 
         for batch_x, batch_y in train_loader:
             if FLAG_AUGMENT:
@@ -223,28 +221,48 @@ for fold, validate_subjects in enumerate(
             training_loss_ce += ce_loss.item()
             training_loss_mse += mse_loss.item()
 
-        # After finishing training for the epoch, switch to evaluation mode on training data
-        model.eval()
-        train_predictions = []
-        train_labels = []
-        with torch.no_grad():
-            for batch_x, batch_y in train_loader:
-                batch_x = batch_x.permute(0, 2, 1).to(device)
-                outputs = model(batch_x)
-                # For MS-TCN, take the last stage's output
-                last_stage_output = outputs[:, -1, :, :]
-                probabilities = F.softmax(last_stage_output, dim=1)
-                predictions = torch.argmax(probabilities, dim=1)
-                # Flatten predictions and labels and accumulate
-                train_predictions.extend(predictions.view(-1).cpu().numpy())
-                train_labels.extend(batch_y.view(-1).cpu().numpy())
+        # model.eval()
+        # train_predictions = []
+        # train_labels = []
+        # with torch.no_grad():
+        #     for batch_x, batch_y in train_loader:
+        #         batch_x = batch_x.permute(0, 2, 1).to(device)
+        #         outputs = model(batch_x)
+        #         # For MS-TCN, take the last stage's output
+        #         last_stage_output = outputs[:, -1, :, :]
+        #         probabilities = F.softmax(last_stage_output, dim=1)
+        #         predictions = torch.argmax(probabilities, dim=1)
+        #         # Flatten predictions and labels and accumulate
+        #         train_predictions.extend(predictions.view(-1).cpu().numpy())
+        #         train_labels.extend(batch_y.view(-1).cpu().numpy())
 
-        # Convert to tensors and compute Matthews CorrCoef for the epoch
-        train_preds_tensor = torch.tensor(train_predictions)
-        train_labels_tensor = torch.tensor(train_labels)
-        train_mcc = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
-            train_preds_tensor, train_labels_tensor
-        ).item()
+        # # Convert to tensors and compute Matthews CorrCoef for the epoch
+        # train_preds_tensor = torch.tensor(train_predictions)
+        # train_labels_tensor = torch.tensor(train_labels)
+        # train_mcc = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
+        #     train_preds_tensor, train_labels_tensor
+        # ).item()
+
+        # val_predictions = []
+        # val_labels = []
+        # with torch.no_grad():
+        #     for batch_x, batch_y in validate_loader:
+        #         batch_x = batch_x.permute(0, 2, 1).to(device)
+        #         outputs = model(batch_x)
+        #         # For MS-TCN, take the last stage's output
+        #         last_stage_output = outputs[:, -1, :, :]
+        #         probabilities = F.softmax(last_stage_output, dim=1)
+        #         predictions = torch.argmax(probabilities, dim=1)
+        #         # Flatten predictions and labels and accumulate
+        #         val_predictions.extend(predictions.view(-1).cpu().numpy())
+        #         val_labels.extend(batch_y.view(-1).cpu().numpy())
+
+        # # Compute metrics on the validation set
+        # val_preds_tensor = torch.tensor(val_predictions)
+        # val_labels_tensor = torch.tensor(val_labels)
+        # val_mcc = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
+        #     val_preds_tensor, val_labels_tensor
+        # ).item()
 
         # Record training statistics
         training_statistics.append(
@@ -256,7 +274,8 @@ for fold, validate_subjects in enumerate(
                 "train_loss": training_loss / len(train_loader),
                 "train_loss_ce": training_loss_ce / len(train_loader),
                 "train_loss_mse": training_loss_mse / len(train_loader),
-                "matthews_corrcoef": train_mcc,
+                # "train_matthews_corrcoef": train_mcc,
+                # "val_matthews_corrcoef": val_mcc,
             }
         )
 
@@ -269,47 +288,21 @@ for fold, validate_subjects in enumerate(
         for batch_x, batch_y in validate_loader:
             batch_x = batch_x.permute(0, 2, 1).to(device)
             outputs = model(batch_x)
-
-            # For MS-TCN, we take the last stage's predictions
-            last_stage_output = outputs[
-                :, -1, :, :
-            ]  # Shape: [batch_size, num_classes, seq_len]
+            # For MS-TCN, take the last stage's output
+            last_stage_output = outputs[:, -1, :, :]
             probabilities = F.softmax(last_stage_output, dim=1)
-
-            # Get predictions along the class dimension
-            predictions = torch.argmax(
-                probabilities, dim=1
-            )  # Shape: [batch_size, seq_len]
-
-            # Flatten both predictions and labels
+            predictions = torch.argmax(probabilities, dim=1)
+            # Flatten predictions and labels and accumulate
             all_predictions.extend(predictions.view(-1).cpu().numpy())
             all_labels.extend(batch_y.view(-1).cpu().numpy())
 
-    # Post-processing
-    all_predictions = post_process_predictions(np.array(all_predictions))
-    all_labels = np.array(all_labels)
+        # Flatten both predictions and labels
+        all_predictions.extend(predictions.view(-1).cpu().numpy())
+        all_labels.extend(batch_y.view(-1).cpu().numpy())
 
     # Label distribution
     unique_labels, counts = np.unique(all_labels, return_counts=True)
     label_distribution = dict(zip(unique_labels, counts))
-
-    # Segment-wise evaluation (using the custom function)
-    metrics_segment = {}
-    for label in range(1, NUM_CLASSES):
-        fn, fp, tp = segment_evaluation(
-            all_predictions,
-            all_labels,
-            class_label=label,
-            threshold=0.5,
-            debug_plot=DEBUG_PLOT,
-        )
-        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-        metrics_segment[f"{label}"] = {
-            "fn": int(fn),
-            "fp": int(fp),
-            "tp": int(tp),
-            "f1": float(f1),
-        }
 
     # Sample-wise evaluation
     preds_tensor = torch.tensor(all_predictions)
@@ -330,6 +323,28 @@ for fold, validate_subjects in enumerate(
     matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
         preds_tensor, labels_tensor
     ).item()
+
+    # Post-processing
+    all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
+    all_labels = np.array(all_labels)
+
+    # Segment-wise evaluation (using the custom function)
+    metrics_segment = {}
+    for label in range(1, NUM_CLASSES):
+        fn, fp, tp = segment_evaluation(
+            all_predictions,
+            all_labels,
+            class_label=label,
+            threshold=0.5,
+            debug_plot=DEBUG_PLOT,
+        )
+        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+        metrics_segment[f"{label}"] = {
+            "fn": int(fn),
+            "fp": int(fp),
+            "tp": int(tp),
+            "f1": float(f1),
+        }
 
     # Record validating statistics
     validating_statistics.append(
@@ -372,5 +387,11 @@ config_info = {
 }
 
 with open(CONFIG_FILE, "w") as f:
+    # Write basic configuration info
     for key, value in config_info.items():
         f.write(f"{key}: {value}\n")
+
+    # Write fold information
+    f.write("validate_folds:\n")
+    for i, fold in enumerate(validate_folds, start=1):
+        f.write(f"  Fold {i}: {fold}\n")

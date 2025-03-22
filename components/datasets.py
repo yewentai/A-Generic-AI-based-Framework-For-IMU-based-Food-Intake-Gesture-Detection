@@ -151,11 +151,6 @@ def create_balanced_subject_folds(dataset, num_folds=7):
         folds[min_fold_idx].append(subject)
         fold_sample_counts[min_fold_idx] += count
 
-    # Print distribution statistics
-    # print("Fold distribution statistics:")
-    # for i, (fold, count) in enumerate(zip(folds, fold_sample_counts)):
-    #     print(f"Fold {i+1}: {len(fold)} subjects, {count} samples")
-
     return folds
 
 

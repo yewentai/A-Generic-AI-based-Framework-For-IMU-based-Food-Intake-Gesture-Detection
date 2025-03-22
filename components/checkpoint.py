@@ -2,7 +2,7 @@ import torch
 import os
 
 
-def save_checkpoint(path, model, optimizer, epoch, fold, f1_score):
+def save_checkpoint(path, model, optimizer, epoch, fold):
     """
     Save model checkpoint to file
 
@@ -21,7 +21,6 @@ def save_checkpoint(path, model, optimizer, epoch, fold, f1_score):
         "epoch": epoch,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
-        "f1_score": f1_score,
     }
 
     torch.save(checkpoint, path)
