@@ -66,7 +66,7 @@ NUM_WORKERS = 16
 DEBUG_PLOT = False
 DEBUG_LOG = False
 FLAG_AUGMENT = True
-FLAG_MIRROR = False
+FLAG_MIRROR = True
 
 # =============================================================================
 #                         Dataset Configuration
@@ -109,9 +109,9 @@ os.makedirs(result_dir, exist_ok=True)
 os.makedirs(checkpoint_dir, exist_ok=True)
 
 # Define file paths for saving statistics and configuration
-TRAINING_STATS_FILE = os.path.join(result_dir, f"training_stats_{DATASET.lower()}.npy")
-TESTING_STATS_FILE = os.path.join(result_dir, f"validating_stats_{DATASET.lower()}.npy")
-CONFIG_FILE = os.path.join(result_dir, f"config_{DATASET.lower()}.txt")
+TRAINING_STATS_FILE = os.path.join(result_dir, f"train_stats.npy")
+TESTING_STATS_FILE = os.path.join(result_dir, f"validate_stats.npy")
+CONFIG_FILE = os.path.join(result_dir, f"config.txt")
 # CHECKPOINT_DIR is reused to save best models per fold
 
 # =============================================================================

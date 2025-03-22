@@ -2,9 +2,11 @@
 __pycache__/
 
 # Dataset folders
+dataset/
 *.pkl
 
 # Model checkpoints and outputs
+checkpoints/
 *.pth
 *.h5
 *.ckpt
@@ -15,4 +17,5 @@ __pycache__/
 # Ignore VSCode settings
 .vscode/
 
+# Ignore dataset analysis files
 analysis/

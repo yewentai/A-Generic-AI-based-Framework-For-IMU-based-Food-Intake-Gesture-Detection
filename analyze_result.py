@@ -1,35 +1,35 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import glob
 
 # -------------------------
 # Configuration
-
-DATASET = "FDI"  # Dataset name, must match training
-RESULT_VERSION = "202503221617"  # Timestamp/version identifier
 RESULT_DIR = "result"  # Root folder for all results
+
+# Automatically select the latest version based on timestamp
+all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
+RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
 RESULT_PATH = os.path.join(RESULT_DIR, RESULT_VERSION)  # Path to this version
 
 # -------------------------
 # Load Training and Validation Stats
 
-training_stats_file = os.path.join(RESULT_PATH, f"training_stats_{DATASET.lower()}.npy")
-validating_stats_file = os.path.join(
-    RESULT_PATH, f"validating_stats_{DATASET.lower()}.npy"
-)
+train_stats_file = os.path.join(RESULT_PATH, f"train_stats.npy")
+validate_stats_file = os.path.join(RESULT_PATH, f"validate_stats.npy")
 
-training_stats = list(np.load(training_stats_file, allow_pickle=True))
-validating_stats = list(np.load(validating_stats_file, allow_pickle=True))
+train_stats = list(np.load(train_stats_file, allow_pickle=True))
+validate_stats = list(np.load(validate_stats_file, allow_pickle=True))
 
 # -------------------------
 # Training Curve: Plot Loss Per Fold
 
 # Identify all unique folds
-folds = sorted(set(entry["fold"] for entry in training_stats))
+folds = sorted(set(entry["fold"] for entry in train_stats))
 
 for fold in folds:
     # Filter entries belonging to the current fold
-    stats_fold = [entry for entry in training_stats if entry["fold"] == fold]
+    stats_fold = [entry for entry in train_stats if entry["fold"] == fold]
 
     # Extract all unique epochs in this fold
     epochs = sorted(set(entry["epoch"] for entry in stats_fold))
@@ -63,7 +63,7 @@ for fold in folds:
     plt.grid(True, which="both", linestyle="--", alpha=0.6)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(RESULT_PATH, f"train_metrics_fold{fold}.png"), dpi=300)
+    plt.savefig(os.path.join(RESULT_PATH, f"train_loss_fold{fold}.png"), dpi=300)
     plt.close()
 
 # -------------------------
@@ -77,7 +77,7 @@ cohen_kappa_scores = []
 matthews_corrcoef_scores = []
 
 # Process each fold's validation results
-for entry in validating_stats:
+for entry in validate_stats:
     label_dist = entry["label_distribution"]  # e.g., {0: count, 1: count}
     label_distribution.append(label_dist)
 
@@ -152,5 +152,5 @@ plt.title("Fold-wise Performance Metrics")
 plt.legend()
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(os.path.join(RESULT_PATH, "validate_metrics_plot.png"), dpi=300)
+plt.savefig(os.path.join(RESULT_PATH, "validate_metrics.png"), dpi=300)
 plt.close()
