@@ -6,7 +6,7 @@ import os
 # Configuration
 
 DATASET = "FDI"  # Dataset name, must match training
-RESULT_VERSION = "202503220941"  # Timestamp/version identifier
+RESULT_VERSION = "202503221617"  # Timestamp/version identifier
 RESULT_DIR = "result"  # Root folder for all results
 RESULT_PATH = os.path.join(RESULT_DIR, RESULT_VERSION)  # Path to this version
 
