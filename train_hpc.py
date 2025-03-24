@@ -4,10 +4,10 @@
 ===============================================================================
 MSTCN IMU Training Script (Distributed Version)
 -------------------------------------------------------------------------------
-Author      : Joseph Yep (adapted for distributed training)
+Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Version     : 1.0
-Created     : 2025-03-22
+Created     : 2025-03-24
 Description : This script trains an MSTCN model on IMU data using cross-validation.
               It has been adapted to run on an HPC with multiple GPUs using PyTorch’s
               DistributedDataParallel. The code initializes a distributed process group,
@@ -38,7 +38,7 @@ from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.post_processing import post_process_predictions
-from components.model_mstcn_backup import MSTCN, MSTCN_Loss
+from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # =============================================================================
 #                         Configuration Parameters
@@ -393,10 +393,6 @@ def main(local_rank, world_size):
 
     dist.destroy_process_group()
 
-
-# =============================================================================
-#                             Script Launcher
-# =============================================================================
 
 if __name__ == "__main__":
     main()
