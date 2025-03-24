@@ -94,17 +94,6 @@ Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
 X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
 Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
 
-# Create result and checkpoint directories using a datetime prefix
-version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
-result_dir = os.path.join("result", version_prefix)
-checkpoint_dir = os.path.join("checkpoints", version_prefix)
-os.makedirs(result_dir, exist_ok=True)
-os.makedirs(checkpoint_dir, exist_ok=True)
-
-# File paths for saving statistics and configuration
-TRAINING_STATS_FILE = os.path.join(result_dir, "train_stats.npy")
-TESTING_STATS_FILE = os.path.join(result_dir, "validate_stats.npy")
-CONFIG_FILE = os.path.join(result_dir, "config.txt")
 
 config_info = {
     "dataset": DATASET,
@@ -157,6 +146,15 @@ def main(local_rank, world_size):
         print(f"[Rank {local_rank}] Using device: {device}")
         overall_start = datetime.now()
         print("Training started at:", overall_start)
+        version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+        result_dir = os.path.join("result", version_prefix)
+        checkpoint_dir = os.path.join("checkpoints", version_prefix)
+        os.makedirs(result_dir, exist_ok=True)
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        # File paths for saving statistics and configuration
+        TRAINING_STATS_FILE = os.path.join(result_dir, "train_stats.npy")
+        TESTING_STATS_FILE = os.path.join(result_dir, "validate_stats.npy")
+        CONFIG_FILE = os.path.join(result_dir, "config.txt")
 
     # -------------------- Dataset Loading --------------------
     # Load left-hand and right-hand data from pickle files
@@ -291,7 +289,8 @@ def main(local_rank, world_size):
             # -------------------- Logging and Checkpointing (Rank 0 Only) --------------------
             if local_rank == 0:
                 avg_loss = training_loss / len(train_loader)
-                print(f"[Fold {fold+1}] Epoch {epoch+1} Loss: {avg_loss:.4f}")
+                if (epoch + 1) % 10 == 0:
+                    print(f"[Fold {fold+1}] Epoch {epoch+1} Loss: {avg_loss:.4f}")
                 best_loss = save_best_model(
                     model,
                     fold=fold + 1,
