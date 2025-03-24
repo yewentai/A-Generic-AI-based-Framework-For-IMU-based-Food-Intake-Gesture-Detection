@@ -1,0 +1,190 @@
+SLURM_JOB_ID: 64113674
+SLURM_JOB_USER: vsc37097
+SLURM_JOB_ACCOUNT: lp-emedia
+SLURM_JOB_NAME: project_h100.slurm
+SLURM_CLUSTER_NAME: wice
+SLURM_JOB_PARTITION: gpu_h100
+SLURM_NNODES: 1
+SLURM_NODELIST: s16g15
+SLURM_JOB_CPUS_PER_NODE: 16
+SLURM_JOB_GPUS: 2
+Date: Mon Mar 24 12:03:42 CET 2025
+Walltime: 01-00:00:00
+========================================================================
+[E324 12:13:46.038339187 socket.cpp:1011] [c10d] The client socket has timed out after 600000ms while trying to connect to (localhost, 12355).
+[W324 12:13:46.430590122 TCPStore.cpp:358] [c10d] TCP client failed to connect/validate to host localhost:12355 - retrying (try=0, timeout=600000ms, delay=41966ms): The client socket has timed out after 600000ms while trying to connect to (localhost, 12355).
+Exception raised from throwTimeoutError at ../torch/csrc/distributed/c10d/socket.cpp:1013 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x96 (0x151aa0e51446 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x15e04c6 (0x151ad74874c6 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x6029d95 (0x151adbed0d95 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x6029f36 (0x151adbed0f36 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: <unknown function> + 0x602a3a4 (0x151adbed13a4 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: <unknown function> + 0x5fe8016 (0x151adbe8f016 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #6: c10d::TCPStore::TCPStore(std::string, c10d::TCPStoreOptions const&) + 0x20c (0x151adbe91f7c in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #7: <unknown function> + 0xd9acdd (0x151aeb8a6cdd in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_python.so)
+frame #8: <unknown function> + 0x4cb474 (0x151aeafd7474 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_python.so)
+frame #9: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x4fcaf7]
+frame #10: _PyObject_MakeTpCall + 0x25b (0x4f657b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #11: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x50878a]
+frame #12: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5064ff]
+frame #13: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x4f68e6]
+frame #14: <unknown function> + 0x4c9ccb (0x151aeafd5ccb in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_python.so)
+frame #15: _PyObject_MakeTpCall + 0x25b (0x4f657b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #16: _PyEval_EvalFrameDefault + 0x4deb (0x4f215b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #17: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #18: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #19: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x56edd7]
+frame #20: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x4fd124]
+frame #21: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #22: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #23: PyObject_Call + 0xb8 (0x508cd8 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #24: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #25: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #26: PyObject_Call + 0xb8 (0x508cd8 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #27: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #28: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #29: _PyEval_EvalFrameDefault + 0x13b2 (0x4ee722 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #30: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #31: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #32: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #33: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #34: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #35: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #36: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #37: _PyEval_EvalFrameDefault + 0x731 (0x4edaa1 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #38: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #39: _PyEval_EvalFrameDefault + 0x731 (0x4edaa1 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #40: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #41: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #42: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #43: _PyEval_EvalFrameDefault + 0x13b2 (0x4ee722 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #44: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5924f2]
+frame #45: PyEval_EvalCode + 0x87 (0x592437 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #46: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5c3237]
+frame #47: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5be380]
+frame #48: PyRun_StringFlags + 0x7b (0x5b646b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #49: PyRun_SimpleStringFlags + 0x3b (0x5b62ab in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #50: Py_RunMain + 0x26c (0x5b530c in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #51: Py_BytesMain + 0x39 (0x585609 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #52: __libc_start_main + 0xe5 (0x151b1c51a7e5 in /lib64/libc.so.6)
+frame #53: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5854be]
+
+[E324 12:23:53.828955647 socket.cpp:1011] [c10d] The client socket has timed out after 600000ms while trying to connect to (localhost, 12355).
+[E324 12:23:53.829524482 TCPStore.cpp:346] [c10d] TCP client failed to connect/validate to host localhost:12355 - timed out (try=1, timeout=600000ms): The client socket has timed out after 600000ms while trying to connect to (localhost, 12355).
+Exception raised from throwTimeoutError at ../torch/csrc/distributed/c10d/socket.cpp:1013 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x96 (0x151aa0e51446 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x15e04c6 (0x151ad74874c6 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x6029d95 (0x151adbed0d95 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x6029f36 (0x151adbed0f36 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: <unknown function> + 0x602a3a4 (0x151adbed13a4 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: <unknown function> + 0x5fe8016 (0x151adbe8f016 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #6: c10d::TCPStore::TCPStore(std::string, c10d::TCPStoreOptions const&) + 0x20c (0x151adbe91f7c in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_cpu.so)
+frame #7: <unknown function> + 0xd9acdd (0x151aeb8a6cdd in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_python.so)
+frame #8: <unknown function> + 0x4cb474 (0x151aeafd7474 in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_python.so)
+frame #9: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x4fcaf7]
+frame #10: _PyObject_MakeTpCall + 0x25b (0x4f657b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #11: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x50878a]
+frame #12: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5064ff]
+frame #13: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x4f68e6]
+frame #14: <unknown function> + 0x4c9ccb (0x151aeafd5ccb in /data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/lib/libtorch_python.so)
+frame #15: _PyObject_MakeTpCall + 0x25b (0x4f657b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #16: _PyEval_EvalFrameDefault + 0x4deb (0x4f215b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #17: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #18: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #19: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x56edd7]
+frame #20: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x4fd124]
+frame #21: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #22: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #23: PyObject_Call + 0xb8 (0x508cd8 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #24: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #25: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #26: PyObject_Call + 0xb8 (0x508cd8 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #27: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #28: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #29: _PyEval_EvalFrameDefault + 0x13b2 (0x4ee722 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #30: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #31: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #32: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #33: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #34: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #35: _PyEval_EvalFrameDefault + 0x2de4 (0x4f0154 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #36: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #37: _PyEval_EvalFrameDefault + 0x731 (0x4edaa1 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #38: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #39: _PyEval_EvalFrameDefault + 0x731 (0x4edaa1 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #40: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #41: _PyEval_EvalFrameDefault + 0x31f (0x4ed68f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #42: _PyFunction_Vectorcall + 0x6f (0x4fcf3f in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #43: _PyEval_EvalFrameDefault + 0x13b2 (0x4ee722 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #44: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5924f2]
+frame #45: PyEval_EvalCode + 0x87 (0x592437 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #46: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5c3237]
+frame #47: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5be380]
+frame #48: PyRun_StringFlags + 0x7b (0x5b646b in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #49: PyRun_SimpleStringFlags + 0x3b (0x5b62ab in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #50: Py_RunMain + 0x26c (0x5b530c in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #51: Py_BytesMain + 0x39 (0x585609 in /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python)
+frame #52: __libc_start_main + 0xe5 (0x151b1c51a7e5 in /lib64/libc.so.6)
+frame #53: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python() [0x5854be]
+
+Traceback (most recent call last):
+  File "/vsc-hard-mounts/leuven-data/370/vsc37097/thesis/train_hpc.py", line 415, in <module>
+    mp.spawn(main, args=(world_size,), nprocs=world_size)
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/multiprocessing/spawn.py", line 328, in spawn
+    return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/multiprocessing/spawn.py", line 284, in start_processes
+    while not context.join():
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/multiprocessing/spawn.py", line 203, in join
+    raise ProcessRaisedException(msg, error_index, failed_process.pid)
+torch.multiprocessing.spawn.ProcessRaisedException: 
+
+-- Process 0 terminated with the following error:
+Traceback (most recent call last):
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/multiprocessing/spawn.py", line 90, in _wrap
+    fn(i, *args)
+  File "/vsc-hard-mounts/leuven-data/370/vsc37097/thesis/train_hpc.py", line 143, in main
+    setup_distributed(local_rank, world_size)
+  File "/vsc-hard-mounts/leuven-data/370/vsc37097/thesis/train_hpc.py", line 129, in setup_distributed
+    dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/c10d_logger.py", line 97, in wrapper
+    func_return = func(*args, **kwargs)
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py", line 1520, in init_process_group
+    store, rank, world_size = next(rendezvous_iterator)
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/rendezvous.py", line 269, in _env_rendezvous_handler
+    store = _create_c10d_store(
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/rendezvous.py", line 185, in _create_c10d_store
+    tcp_store = TCPStore(hostname, port, world_size, False, timeout)
+torch.distributed.DistNetworkError: The client socket has timed out after 600000ms while trying to connect to (localhost, 12355).
+
+E0324 12:23:56.467000 1132499 /vsc-hard-mounts/leuven-data/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/api.py:869] failed (exitcode: 1) local_rank: 0 (pid: 1132519) of binary: /data/leuven/370/vsc37097/miniconda3/envs/torch/bin/python
+Traceback (most recent call last):
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/bin/torchrun", line 8, in <module>
+    sys.exit(main())
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 355, in wrapper
+    return f(*args, **kwargs)
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/run.py", line 919, in main
+    run(args)
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/run.py", line 910, in run
+    elastic_launch(
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/data/leuven/370/vsc37097/miniconda3/envs/torch/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 269, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+train_hpc.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2025-03-24_12:23:56
+  host      : s16g15.tier2.hpc.kuleuven.be
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 1132519)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

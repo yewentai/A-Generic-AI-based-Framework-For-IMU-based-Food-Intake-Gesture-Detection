@@ -117,22 +117,6 @@ config_info = {
     "mirroring": FLAG_MIRROR,
 }
 
-# =============================================================================
-#                   Distributed Training Setup Functions
-# =============================================================================
-
-
-def setup_distributed(local_rank, world_size):
-    # Set master address and port – adjust for your HPC settings if needed
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-    dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
-    torch.cuda.set_device(local_rank)
-
-
-def cleanup_distributed():
-    dist.destroy_process_group()
-
 
 # =============================================================================
 #                             Main Training Function
@@ -140,8 +124,13 @@ def cleanup_distributed():
 
 
 def main(local_rank, world_size):
-    setup_distributed(local_rank, world_size)
+    # read LOCAL_RANK from environment
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
+    torch.cuda.set_device(local_rank)
     device = torch.device("cuda", local_rank)
+
     if local_rank == 0:
         print(f"[Rank {local_rank}] Using device: {device}")
         overall_start = datetime.now()
@@ -402,7 +391,7 @@ def main(local_rank, world_size):
         print("Training ended at:", overall_end)
         print("Total training time:", overall_end - overall_start)
 
-    cleanup_distributed()
+    dist.destroy_process_group()
 
 
 # =============================================================================
@@ -410,6 +399,4 @@ def main(local_rank, world_size):
 # =============================================================================
 
 if __name__ == "__main__":
-    # Set world_size as the number of GPUs available (adjust if needed by your scheduler)
-    world_size = torch.cuda.device_count()
-    mp.spawn(main, args=(world_size,), nprocs=world_size)
+    main()

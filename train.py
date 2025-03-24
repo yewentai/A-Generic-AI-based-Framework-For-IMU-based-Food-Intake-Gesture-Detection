@@ -37,7 +37,7 @@ from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.post_processing import post_process_predictions
-from components.model_mstcn_backup import MSTCN, MSTCN_Loss
+from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # =============================================================================
 #                         Configuration Parameters
