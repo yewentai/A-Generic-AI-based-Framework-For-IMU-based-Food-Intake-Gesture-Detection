@@ -169,7 +169,9 @@ for fold, validate_subjects in enumerate(
 
     # Load the checkpoint for the current fold
     state_dict = torch.load(CHECKPOINT_PATH, map_location=device, weights_only=True)
-    model.load_state_dict(state_dict)
+    # Remove 'module.' prefix if it exists.
+    new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+    model.load_state_dict(new_state_dict)
 
     # Split validation indices based on subject IDs
     validate_indices = [
@@ -355,7 +357,8 @@ for fold in folds:
     )
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.title(f"train Losses Over Epochs (Fold {fold})")
+    plt.yscale("log")
+    plt.title(f"Train Losses Over Epochs (Fold {fold})")
     plt.grid()
     plt.legend()
     plt.tight_layout()

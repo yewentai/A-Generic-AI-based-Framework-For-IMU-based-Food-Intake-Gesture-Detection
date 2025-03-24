@@ -19,6 +19,7 @@ Description : This script trains an MSTCN model on IMU data using cross-validati
 import os
 import json
 import pickle
+import re
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -57,7 +58,7 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 NUM_FOLDS = 7
-NUM_EPOCHS = 100
+NUM_EPOCHS = 2
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 FLAG_AUGMENT = True
@@ -83,12 +84,10 @@ def main(local_rank=None, world_size=None):
         print("Training started at:", overall_start)
         version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
         result_dir = os.path.join("result", version_prefix)
-        checkpoint_dir = os.path.join("checkpoints", version_prefix)
         os.makedirs(result_dir, exist_ok=True)
-        os.makedirs(checkpoint_dir, exist_ok=True)
         # File paths for saving statistics and configuration
         TRAINING_STATS_FILE = os.path.join(result_dir, "train_stats.npy")
-        CONFIG_FILE = os.path.join(result_dir, "config.txt")
+        CONFIG_FILE = os.path.join(result_dir, "config.json")
 
     # -------------------- Dataset Loading --------------------
     if DATASET.startswith("DX"):
@@ -220,14 +219,12 @@ def main(local_rank=None, world_size=None):
             # -------------------- Logging and Checkpointing (Rank 0 Only) --------------------
             if local_rank == 0:
                 avg_loss = training_loss / len(train_loader)
-                if (epoch + 1) % 10 == 0:
-                    print(f"[Fold {fold+1}] Epoch {epoch+1} Loss: {avg_loss:.4f}")
                 best_loss = save_best_model(
                     model,
                     fold=fold + 1,
                     current_metric=loss.item(),
                     best_metric=best_loss,
-                    checkpoint_dir=checkpoint_dir,
+                    checkpoint_dir=result_dir,
                     mode="min",
                 )
                 stats = {
