@@ -2,17 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-MSTCN IMU Testing Script
+MSTCN IMU Validating Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Version     : 2.0
 Created     : 2025-03-24
-Description : This script tests a trained MSTCN model on the full IMU dataset.
+Description : This script validates a trained MSTCN model on the full IMU dataset.
               It loads the dataset and saved checkpoints for each fold,
               runs inference, and computes comprehensive evaluation metrics.
 Usage       : Execute the script in your terminal:
-              $ python test.py
+              $ python validate.py
 ===============================================================================
 """
 
@@ -40,7 +40,7 @@ from components.pre_processing import hand_mirroring
 #                   Configuration and Parameters
 # -----------------------------------------------------------------------------
 
-# Automatically select the latest version based on timestamp
+# Automatically select the lavalidate version based on timestamp
 RESULT_DIR = "result"
 all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
 RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
@@ -79,8 +79,8 @@ elif DATASET.startswith("FD"):
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
-# Testing DataLoader parameters
-NUM_WORKERS = 4  # Fewer workers are typically sufficient for testing
+# Validating DataLoader parameters
+NUM_WORKERS = 4  # Fewer workers are typically sufficient for validating
 
 # -----------------------------------------------------------------------------
 #                        Data Loading and Pre-processing
@@ -135,11 +135,11 @@ if validate_folds is None:
     raise ValueError("No 'validate_folds' found in the configuration file.")
 
 # -----------------------------------------------------------------------------
-#                    Cross-Validation Loop for Testing
+#                    Cross-Validation Loop for Validating
 # -----------------------------------------------------------------------------
 
 # Create a results storage for cross-validation evaluations
-testing_statistics = []
+validating_statistics = []
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -196,7 +196,7 @@ for fold, validate_subjects in enumerate(
 
     with torch.no_grad():
         for batch_x, batch_y in tqdm(
-            validate_loader, desc=f"Testing Fold {fold+1}", leave=False
+            validate_loader, desc=f"Validating Fold {fold+1}", leave=False
         ):
             # Rearrange dimensions and send to device
             batch_x = batch_x.permute(0, 2, 1).to(device)
@@ -261,7 +261,7 @@ for fold, validate_subjects in enumerate(
             "f1": float(f1),
         }
 
-    # Record testing statistics for the current fold
+    # Record validating statistics for the current fold
     fold_statistics = {
         "date": datetime.now().strftime("%Y-%m-%d"),
         "time": datetime.now().strftime("%H:%M:%S"),
@@ -272,16 +272,16 @@ for fold, validate_subjects in enumerate(
         "matthews_corrcoef": matthews_corrcoef_val,
         "label_distribution": label_distribution,
     }
-    testing_statistics.append(fold_statistics)
+    validating_statistics.append(fold_statistics)
 
 # -----------------------------------------------------------------------------
 #                         Save Evaluation Results
 # -----------------------------------------------------------------------------
 
-# Save testing statistics
-TESTING_STATS_FILE = os.path.join(result_dir, "test_stats.npy")
-np.save(TESTING_STATS_FILE, testing_statistics)
-print(f"\nTesting statistics saved to {TESTING_STATS_FILE}")
+# Save validating statistics
+TESTING_STATS_FILE = os.path.join(result_dir, "validate_stats.npy")
+np.save(TESTING_STATS_FILE, validating_statistics)
+print(f"\nValidating statistics saved to {TESTING_STATS_FILE}")
 
 
 # =============================================================================
@@ -294,13 +294,13 @@ RESULT_PATH = os.path.join(RESULT_DIR, RESULT_VERSION)
 
 # Load train and validation statistics from saved .npy files
 train_stats_file = os.path.join(RESULT_PATH, f"train_stats.npy")
-test_stats_file = os.path.join(RESULT_PATH, f"test_stats.npy")
+validate_stats_file = os.path.join(RESULT_PATH, f"validate_stats.npy")
 train_stats = np.load(train_stats_file, allow_pickle=True)
-test_stats = np.load(test_stats_file, allow_pickle=True)
+validate_stats = np.load(validate_stats_file, allow_pickle=True)
 
 # Convert loaded data to lists for easier processing
 train_stats = list(train_stats)
-test_stats = list(test_stats)
+validate_stats = list(validate_stats)
 
 # -------------------------
 # Plot train Curves per Fold
@@ -359,7 +359,7 @@ for fold in folds:
     plt.grid()
     plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(RESULT_PATH, f"train_metrics_fold{fold}.png"), dpi=300)
+    plt.savefig(os.path.join(RESULT_PATH, f"train_loss_fold{fold}.png"), dpi=300)
     plt.close()
 
 # -------------------------
@@ -372,7 +372,7 @@ f1_scores_segment = []  # Segment-wise F1 scores
 cohen_kappa_scores = []  # Cohen's kappa scores
 matthews_corrcoef_scores = []  # MCC scores
 
-for entry in test_stats:
+for entry in validate_stats:
     label_dist = entry["label_distribution"]  # dictionary: {label: count}
 
     # Compute weighted average F1 for sample-wise metrics

@@ -57,7 +57,7 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 NUM_FOLDS = 7
-NUM_EPOCHS = 2
+NUM_EPOCHS = 200
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 FLAG_AUGMENT = True
@@ -308,3 +308,6 @@ config_info = {
 # Save the configuration as JSON
 with open(CONFIG_FILE, "w") as f:
     json.dump(config_info, f, indent=4)
+
+# Run validate.py
+os.system(f"python validate.py")
