@@ -6,25 +6,28 @@ MSTCN IMU Testing Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 1.0
-Created     : 2025-03-22
+Version     : 2.0
+Created     : 2025-03-24
 Description : This script tests a trained MSTCN model on the full IMU dataset.
-              It loads the dataset and a saved checkpoint, runs inference,
-              post-processes the predictions, and computes evaluation metrics.
+              It loads the dataset and saved checkpoints for each fold,
+              runs inference, and computes comprehensive evaluation metrics.
 Usage       : Execute the script in your terminal:
               $ python test.py
 ===============================================================================
 """
 
 import os
+import json
 import glob
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
+from datetime import datetime
 from tqdm import tqdm
 from torchmetrics import CohenKappa, MatthewsCorrCoef
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 # Import model and utility modules from components package
 from components.model_mstcn import MSTCN
@@ -37,45 +40,46 @@ from components.pre_processing import hand_mirroring
 #                   Configuration and Parameters
 # -----------------------------------------------------------------------------
 
-# Directory where checkpoints are saved
-CHECKPOINT_DIR = "checkpoints"
+# Automatically select the latest version based on timestamp
+RESULT_DIR = "result"
+all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
+RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
+result_dir = os.path.join(RESULT_DIR, RESULT_VERSION)
+CONFIG_FILE = os.path.join(RESULT_DIR, RESULT_VERSION, "config.json")
 
-# Dataset and model configuration (should match train.py)
-DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
+# Load the configuration parameters from the JSON file
+with open(CONFIG_FILE, "r") as f:
+    config_info = json.load(f)
+
+# Set configuration parameters from the loaded JSON
+DATASET = config_info["dataset"]
+NUM_CLASSES = config_info["num_classes"]
+NUM_STAGES = config_info["num_stages"]
+NUM_LAYERS = config_info["num_layers"]
+NUM_HEADS = config_info["num_heads"]
+INPUT_DIM = config_info["input_dim"]
+NUM_FILTERS = config_info["num_filters"]
+KERNEL_SIZE = config_info["kernel_size"]
+DROPOUT = config_info["dropout"]
+SAMPLING_FREQ = config_info["sampling_freq"]
+WINDOW_SIZE = config_info["window_size"]
+BATCH_SIZE = config_info["batch_size"]
+FLAG_MIRROR = config_info.get("mirroring", False)
+NUM_FOLDS = config_info.get("num_folds", 7)
+DEBUG_PLOT = False  # You can make this configurable if needed
+
 if DATASET.startswith("DX"):
-    NUM_CLASSES = 2
     sub_version = DATASET.replace("DX", "").upper() or "I"
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
 elif DATASET.startswith("FD"):
-    NUM_CLASSES = 3
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
     TASK = "multiclass"
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
-# Model hyperparameters (as used in train.py)
-NUM_STAGES = 2
-NUM_LAYERS = 9
-NUM_HEADS = 8
-INPUT_DIM = 6
-NUM_FILTERS = 128
-KERNEL_SIZE = 3
-DROPOUT = 0.3
-
-# Sampling and window parameters
-SAMPLING_FREQ_ORIGINAL = 64
-DOWNSAMPLE_FACTOR = 4
-SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
-WINDOW_LENGTH = 60
-WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
-
-# Data augmentation / pre-processing flags
-FLAG_MIRROR = False  # Apply hand mirroring
-
 # Testing DataLoader parameters
-BATCH_SIZE = 64
 NUM_WORKERS = 4  # Fewer workers are typically sufficient for testing
 
 # -----------------------------------------------------------------------------
@@ -109,218 +113,338 @@ Y = np.concatenate([Y_L, Y_R], axis=0)
 # Create the full dataset with the defined window size
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
 
-# Create a DataLoader for the full dataset
-test_loader = DataLoader(
-    full_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=False,
-    num_workers=NUM_WORKERS,
-    pin_memory=True,
-)
+# Augment Dataset with FDIII (if using FDII/FDI)
+fdiii_dataset = None
+if DATASET in ["FDII", "FDI"]:
+    fdiii_dir = "./dataset/FD/FD-III"
+    with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
+        X_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
+        Y_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
+        X_R_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
+        Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+    X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
+    Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
+    fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
+
+# Load cross-validation folds from the JSON configuration
+validate_folds = config_info.get("validate_folds")
+if validate_folds is None:
+    raise ValueError("No 'validate_folds' found in the configuration file.")
 
 # -----------------------------------------------------------------------------
-#                      Model Initialization and Checkpoint Loading
+#                    Cross-Validation Loop for Testing
 # -----------------------------------------------------------------------------
+
+# Create a results storage for cross-validation evaluations
+testing_statistics = []
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# Initialize the MSTCN model with the specified parameters
-model = MSTCN(
-    num_stages=NUM_STAGES,
-    num_layers=NUM_LAYERS,
-    num_classes=NUM_CLASSES,
-    input_dim=INPUT_DIM,
-    num_filters=NUM_FILTERS,
-    kernel_size=KERNEL_SIZE,
-    dropout=DROPOUT,
-).to(device)
+for fold, validate_subjects in enumerate(
+    tqdm(validate_folds, desc="K-Fold", leave=True)
+):
+    # Construct the checkpoint path for the current fold
+    CHECKPOINT_PATH = os.path.join(
+        RESULT_DIR, RESULT_VERSION, f"best_model_fold{fold+1}.pth"
+    )
 
-# Automatically select the latest version based on timestamp
-all_versions = glob.glob(os.path.join(CHECKPOINT_DIR, "*"))
-RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
-CHECKPOINT_PATH = os.path.join(CHECKPOINT_DIR, RESULT_VERSION, f"best_model_fold1.pth")
+    # Check if the checkpoint for this fold exists
+    if not os.path.exists(CHECKPOINT_PATH):
+        continue
 
-if os.path.exists(CHECKPOINT_PATH):
+    # Initialize the MSTCN model with the specified parameters
+    model = MSTCN(
+        num_stages=NUM_STAGES,
+        num_layers=NUM_LAYERS,
+        num_classes=NUM_CLASSES,
+        input_dim=INPUT_DIM,
+        num_filters=NUM_FILTERS,
+        kernel_size=KERNEL_SIZE,
+        dropout=DROPOUT,
+    ).to(device)
+
+    # Load the checkpoint for the current fold
     state_dict = torch.load(CHECKPOINT_PATH, map_location=device, weights_only=True)
     model.load_state_dict(state_dict)
-    print("Checkpoint loaded successfully.")
-else:
-    print(f"Checkpoint not found at {CHECKPOINT_PATH}. Exiting.")
-    exit(1)
 
-model.eval()
+    # Split validation indices based on subject IDs
+    validate_indices = [
+        i
+        for i, subject in enumerate(full_dataset.subject_indices)
+        if subject in validate_subjects
+    ]
 
-# -----------------------------------------------------------------------------
-#                          Model Testing / Inference
-# -----------------------------------------------------------------------------
-
-all_predictions = []
-all_labels = []
-
-with torch.no_grad():
-    for batch_x, batch_y in tqdm(test_loader, desc="Testing"):
-        # Rearrange dimensions and send to device
-        batch_x = batch_x.permute(0, 2, 1).to(device)
-        outputs = model(batch_x)
-        # Use the output from the last stage for predictions
-        last_stage_output = outputs[:, -1, :, :]
-        probabilities = F.softmax(last_stage_output, dim=1)
-        predictions = torch.argmax(probabilities, dim=1)
-        all_predictions.extend(predictions.view(-1).cpu().numpy())
-        all_labels.extend(batch_y.view(-1).cpu().numpy())
-
-# -----------------------------------------------------------------------------
-#                        Evaluation Metrics Calculation
-# -----------------------------------------------------------------------------
-
-# Compute label distribution
-unique_labels, counts = np.unique(all_labels, return_counts=True)
-label_distribution = {
-    float(label): int(count) for label, count in zip(unique_labels, counts)
-}
-print("Label distribution:", label_distribution)
-
-preds_tensor = torch.tensor(all_predictions)
-labels_tensor = torch.tensor(all_labels)
-
-metrics_sample = {}
-for label in range(1, NUM_CLASSES):
-    tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
-    fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
-    fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
-    denominator = 2 * tp + fp + fn
-    f1 = 2 * tp / denominator if denominator != 0 else 0.0
-    metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
-
-cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
-    preds_tensor, labels_tensor
-).item()
-matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
-    preds_tensor, labels_tensor
-).item()
-
-print("Sample-wise Evaluation Metrics:")
-for class_label, metrics in metrics_sample.items():
-    print(f"Class {class_label}: {metrics}")
-print(f"Cohen's Kappa: {cohen_kappa_val:.4f}")
-print(f"Matthews CorrCoef: {matthews_corrcoef_val:.4f}")
-
-# all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
-# all_labels = np.array(all_labels)
-
-# # Segment-wise evaluation
-# metrics_segment = {}
-# for label in range(1, NUM_CLASSES):
-#     fn, fp, tp = segment_evaluation(
-#         all_predictions, all_labels, class_label=label, threshold=0.5, debug_plot=True
-#     )
-#     f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-#     metrics_segment[f"Class {label}"] = {
-#         "fn": int(fn),
-#         "fp": int(fp),
-#         "tp": int(tp),
-#         "f1": f1,
-#     }
-
-# print("Segment-wise Evaluation Metrics:")
-# for class_label, metrics in metrics_segment.items():
-#     print(f"{class_label}: {metrics}")
-
-# -----------------------------------------------------------------------------
-#           Two-Phase Line Search for Optimal Post-processing Parameters
-# -----------------------------------------------------------------------------
-
-# Phase 1: Optimize min_length_sec while holding merge_distance_sec fixed
-default_merge_distance = 0.1
-min_length_values = np.linspace(
-    0.0, 1.0, 11
-)  # 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 seconds
-
-best_avg_f1_phase1 = 0.0
-best_min_length = None
-
-print(
-    "\nPhase 1: Optimizing min_length_sec with merge_distance_sec fixed at "
-    f"{default_merge_distance:.2f} seconds..."
-)
-
-for min_length in min_length_values:
-    processed_preds = post_process_predictions(
-        all_predictions,
-        SAMPLING_FREQ,
-        min_length_sec=min_length,
-        merge_distance_sec=default_merge_distance,
+    # Create DataLoader for the validation subset of the current fold
+    validate_loader = DataLoader(
+        Subset(full_dataset, validate_indices),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
     )
-    # Evaluate average F1 score over classes 1..NUM_CLASSES-1
-    f1_list = []
+
+    # Explicitly set the model to evaluation mode
+    model.eval()
+
+    # Inference and Prediction Collection
+    all_predictions = []
+    all_labels = []
+
+    with torch.no_grad():
+        for batch_x, batch_y in tqdm(
+            validate_loader, desc=f"Testing Fold {fold+1}", leave=False
+        ):
+            # Rearrange dimensions and send to device
+            batch_x = batch_x.permute(0, 2, 1).to(device)
+            outputs = model(batch_x)
+            # Use the output from the last stage for predictions
+            last_stage_output = outputs[:, -1, :, :]
+            probabilities = F.softmax(last_stage_output, dim=1)
+            predictions = torch.argmax(probabilities, dim=1)
+            all_predictions.extend(predictions.view(-1).cpu().numpy())
+            all_labels.extend(batch_y.view(-1).cpu().numpy())
+
+    # -----------------------------------------------------------------------------
+    #                        Evaluation Metrics Calculation
+    # -----------------------------------------------------------------------------
+
+    # Compute label distribution
+    unique_labels, counts = np.unique(all_labels, return_counts=True)
+    label_distribution = {
+        float(label): int(count) for label, count in zip(unique_labels, counts)
+    }
+
+    preds_tensor = torch.tensor(all_predictions)
+    labels_tensor = torch.tensor(all_labels)
+
+    # Sample-wise metrics for each class
+    metrics_sample = {}
+    for label in range(1, NUM_CLASSES):
+        tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
+        fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
+        fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
+        denominator = 2 * tp + fp + fn
+        f1 = 2 * tp / denominator if denominator != 0 else 0.0
+        metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
+
+    # Additional sample-wise metrics
+    cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
+    matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
+
+    # Post-process predictions
+    all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
+    all_labels = np.array(all_labels)
+
+    # Segment-wise evaluation metrics
+    metrics_segment = {}
     for label in range(1, NUM_CLASSES):
         fn, fp, tp = segment_evaluation(
-            processed_preds,
+            all_predictions,
             all_labels,
             class_label=label,
-            threshold=0.1,
-            debug_plot=False,
+            threshold=0.5,
+            debug_plot=DEBUG_PLOT,
         )
         f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-        f1_list.append(f1)
-    avg_f1 = np.mean(f1_list)
-    print(f"min_length_sec: {min_length:.2f}, avg F1: {avg_f1:.4f}")
+        metrics_segment[f"{label}"] = {
+            "fn": int(fn),
+            "fp": int(fp),
+            "tp": int(tp),
+            "f1": float(f1),
+        }
 
-    if avg_f1 > best_avg_f1_phase1:
-        best_avg_f1_phase1 = avg_f1
-        best_min_length = min_length
+    # Record testing statistics for the current fold
+    fold_statistics = {
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "fold": fold + 1,
+        "metrics_segment": metrics_segment,
+        "metrics_sample": metrics_sample,
+        "cohen_kappa": cohen_kappa_val,
+        "matthews_corrcoef": matthews_corrcoef_val,
+        "label_distribution": label_distribution,
+    }
+    testing_statistics.append(fold_statistics)
 
-print(
-    f"\nBest min_length_sec found: {best_min_length:.2f} seconds with avg F1: {best_avg_f1_phase1:.4f}"
-)
+# -----------------------------------------------------------------------------
+#                         Save Evaluation Results
+# -----------------------------------------------------------------------------
+
+# Save testing statistics
+TESTING_STATS_FILE = os.path.join(result_dir, "test_stats.npy")
+np.save(TESTING_STATS_FILE, testing_statistics)
+print(f"\nTesting statistics saved to {TESTING_STATS_FILE}")
 
 
-# Phase 2: Optimize merge_distance_sec while holding min_length_sec fixed at best_min_length
-merge_distance_values = np.linspace(
-    0.0, 0.3, 7
-)  # 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3 seconds
+# =============================================================================
+#                               PLOTTING SECTION
+# =============================================================================
 
-best_avg_f1_phase2 = 0.0
-best_merge_distance = None
 
-print(
-    "\nPhase 2: Optimizing merge_distance_sec with min_length_sec fixed at "
-    f"{best_min_length:.2f} seconds..."
-)
+# Define the specific directory for this version
+RESULT_PATH = os.path.join(RESULT_DIR, RESULT_VERSION)
 
-for merge_distance in merge_distance_values:
-    processed_preds = post_process_predictions(
-        all_predictions,
-        SAMPLING_FREQ,
-        min_length_sec=best_min_length,
-        merge_distance_sec=merge_distance,
+# Load train and validation statistics from saved .npy files
+train_stats_file = os.path.join(RESULT_PATH, f"train_stats.npy")
+test_stats_file = os.path.join(RESULT_PATH, f"test_stats.npy")
+train_stats = np.load(train_stats_file, allow_pickle=True)
+test_stats = np.load(test_stats_file, allow_pickle=True)
+
+# Convert loaded data to lists for easier processing
+train_stats = list(train_stats)
+test_stats = list(test_stats)
+
+# -------------------------
+# Plot train Curves per Fold
+
+# Get list of unique folds present in train_stats
+folds = sorted(set(entry["fold"] for entry in train_stats))
+
+for fold in folds:
+    # Filter train stats for this fold only
+    stats_fold = [entry for entry in train_stats if entry["fold"] == fold]
+    # Group by epoch
+    epochs = sorted(set(entry["epoch"] for entry in stats_fold))
+    loss_per_epoch = {epoch: [] for epoch in epochs}
+    loss_ce_per_epoch = {epoch: [] for epoch in epochs}
+    loss_mse_per_epoch = {epoch: [] for epoch in epochs}
+
+    for entry in stats_fold:
+        loss_per_epoch[entry["epoch"]].append(entry["train_loss"])
+        loss_ce_per_epoch[entry["epoch"]].append(entry["train_loss_ce"])
+        loss_mse_per_epoch[entry["epoch"]].append(entry["train_loss_mse"])
+
+    # Compute mean loss values for each epoch
+    mean_loss_per_epoch = [np.mean(loss_per_epoch[epoch]) for epoch in epochs]
+    mean_loss_ce_per_epoch = [np.mean(loss_ce_per_epoch[epoch]) for epoch in epochs]
+    mean_loss_mse_per_epoch = [np.mean(loss_mse_per_epoch[epoch]) for epoch in epochs]
+
+    # Plot train losses for this fold
+    plt.figure(figsize=(10, 6))
+    plt.plot(
+        epochs,
+        mean_loss_per_epoch,
+        marker="o",
+        linestyle="-",
+        color="blue",
+        label="Total Loss",
     )
-    # Evaluate average F1 score over classes 1..NUM_CLASSES-1
-    f1_list = []
-    for label in range(1, NUM_CLASSES):
-        fn, fp, tp = segment_evaluation(
-            processed_preds,
-            all_labels,
-            class_label=label,
-            threshold=0.1,
-            debug_plot=False,
-        )
-        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-        f1_list.append(f1)
-    avg_f1 = np.mean(f1_list)
-    print(f"merge_distance_sec: {merge_distance:.2f}, avg F1: {avg_f1:.4f}")
+    plt.plot(
+        epochs,
+        mean_loss_ce_per_epoch,
+        marker="s",
+        linestyle="--",
+        color="red",
+        label="CE Loss",
+    )
+    plt.plot(
+        epochs,
+        mean_loss_mse_per_epoch,
+        marker="^",
+        linestyle=":",
+        color="green",
+        label="MSE Loss",
+    )
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title(f"train Losses Over Epochs (Fold {fold})")
+    plt.grid()
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(RESULT_PATH, f"train_metrics_fold{fold}.png"), dpi=300)
+    plt.close()
 
-    if avg_f1 > best_avg_f1_phase2:
-        best_avg_f1_phase2 = avg_f1
-        best_merge_distance = merge_distance
+# -------------------------
+# Plot Fold-wise Performance Metrics (Validation)
 
-print(
-    f"\nBest merge_distance_sec found: {best_merge_distance:.2f} seconds with avg F1: {best_avg_f1_phase2:.4f}"
+# Initialize lists to store validation metrics for each fold
+label_distribution = []  # Label distribution
+f1_scores_sample = []  # Sample-wise F1 scores
+f1_scores_segment = []  # Segment-wise F1 scores
+cohen_kappa_scores = []  # Cohen's kappa scores
+matthews_corrcoef_scores = []  # MCC scores
+
+for entry in test_stats:
+    label_dist = entry["label_distribution"]  # dictionary: {label: count}
+
+    # Compute weighted average F1 for sample-wise metrics
+    total_weight_sample = 0.0
+    weighted_f1_sample = 0.0
+    for label_str, stats in entry["metrics_sample"].items():
+        label_int = int(label_str)
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_sample += stats["f1"] * weight
+        total_weight_sample += weight
+    f1_sample_weighted = (
+        weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
+    )
+
+    # Compute weighted average F1 for segment-wise metrics
+    total_weight_segment = 0.0
+    weighted_f1_segment = 0.0
+    for label_str, stats in entry["metrics_segment"].items():
+        label_int = int(label_str)
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_segment += stats["f1"] * weight
+        total_weight_segment += weight
+    f1_segment_weighted = (
+        weighted_f1_segment / total_weight_segment if total_weight_segment > 0 else 0.0
+    )
+
+    label_distribution.append(label_dist)
+    f1_scores_sample.append(f1_sample_weighted)
+    f1_scores_segment.append(f1_segment_weighted)
+    cohen_kappa_scores.append(entry["cohen_kappa"])
+    matthews_corrcoef_scores.append(entry["matthews_corrcoef"])
+
+# Create a bar plot for validation metrics across folds
+plt.figure(figsize=(12, 6))
+width = 0.2  # Width of each bar
+fold_indices = np.arange(1, len(cohen_kappa_scores) + 1)
+
+plt.bar(
+    fold_indices - width * 1.5,
+    cohen_kappa_scores,
+    width=width,
+    label="Cohen Kappa",
+    color="orange",
+)
+plt.bar(
+    fold_indices - width / 2,
+    matthews_corrcoef_scores,
+    width=width,
+    label="MCC",
+    color="purple",
+)
+plt.bar(
+    fold_indices + width / 2,
+    f1_scores_sample,
+    width=width,
+    label="Sample-wise F1",
+    color="blue",
+)
+plt.bar(
+    fold_indices + width * 1.5,
+    f1_scores_segment,
+    width=width,
+    label="Segment-wise F1",
+    color="green",
 )
 
-# Final Best Parameters
-print("\nOverall Optimal Post-processing Parameters:")
-print(f"min_length_sec = {best_min_length:.2f} seconds")
-print(f"merge_distance_sec = {best_merge_distance:.2f} seconds")
-print(f"Optimized segment-wise average F1 score: {best_avg_f1_phase2:.4f}")
+plt.xticks(fold_indices)
+plt.xlabel("Fold")
+plt.ylabel("Score")
+plt.title("Fold-wise Performance Metrics")
+plt.legend()
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.savefig(os.path.join(RESULT_PATH, "validate_metrics_plot.png"), dpi=300)
+plt.close()

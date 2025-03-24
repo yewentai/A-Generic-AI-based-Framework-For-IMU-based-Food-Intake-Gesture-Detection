@@ -6,7 +6,7 @@ MSTCN IMU Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 1.0
+Version     : 2.0
 Created     : 2025-03-22
 Description : This script trains an MSTCN model on IMU (Inertial Measurement Unit) data
               using cross-validation. It supports multiple datasets (DXI/DXII or FDI/FDII/FDIII)
@@ -17,14 +17,13 @@ Description : This script trains an MSTCN model on IMU (Inertial Measurement Uni
 """
 
 import os
+import json
 import pickle
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset, ConcatDataset
 from datetime import datetime
 from tqdm import tqdm
-from torchmetrics import CohenKappa, MatthewsCorrCoef
 
 # Import custom modules from components package
 from components.augmentation import augment_orientation
@@ -33,10 +32,8 @@ from components.datasets import (
     create_balanced_subject_folds,
     load_predefined_validate_folds,
 )
-from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
-from components.post_processing import post_process_predictions
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # =============================================================================
@@ -60,11 +57,9 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 NUM_FOLDS = 7
-NUM_EPOCHS = 100
+NUM_EPOCHS = 2
 BATCH_SIZE = 64
 NUM_WORKERS = 16
-DEBUG_PLOT = False
-DEBUG_LOG = False
 FLAG_AUGMENT = True
 FLAG_MIRROR = True
 
@@ -114,17 +109,13 @@ version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
 
 # Create result and checkpoint directories using version_prefix
 result_dir = os.path.join("result", version_prefix)
-checkpoint_dir = os.path.join("checkpoints", version_prefix)
 os.makedirs(result_dir, exist_ok=True)
-os.makedirs(checkpoint_dir, exist_ok=True)
 
 # Define file paths for saving statistics and configuration
 TRAINING_STATS_FILE = os.path.join(result_dir, f"train_stats.npy")
-TESTING_STATS_FILE = os.path.join(result_dir, f"validate_stats.npy")
-CONFIG_FILE = os.path.join(result_dir, f"config.txt")
+CONFIG_FILE = os.path.join(result_dir, "config.json")
 
 training_statistics = []
-validating_statistics = []
 
 # =============================================================================
 #                          Data Pre-processing
@@ -181,8 +172,8 @@ for fold, validate_subjects in enumerate(
     tqdm(validate_folds, desc="K-Fold", leave=True)
 ):
     # Process only the first fold for demonstration; remove the condition to run all folds.
-    if fold != 0:
-        continue
+    # if fold != 0:
+    #     continue
 
     # Split training and validation indices based on subject IDs
     train_indices = [
@@ -263,57 +254,13 @@ for fold, validate_subjects in enumerate(
             training_loss_ce += ce_loss.item()
             training_loss_mse += mse_loss.item()
 
-        # ------------------ Optional Debug Logging ------------------
-        if DEBUG_LOG:
-            model.eval()
-            # Collect training predictions and labels
-            train_predictions = []
-            train_labels = []
-            with torch.no_grad():
-                for batch_x, batch_y in train_loader:
-                    batch_x = batch_x.permute(0, 2, 1).to(device)
-                    outputs = model(batch_x)
-                    # For MS-TCN, use the output of the last stage
-                    last_stage_output = outputs[:, -1, :, :]
-                    probabilities = F.softmax(last_stage_output, dim=1)
-                    predictions = torch.argmax(probabilities, dim=1)
-                    train_predictions.extend(predictions.view(-1).cpu().numpy())
-                    train_labels.extend(batch_y.view(-1).cpu().numpy())
-
-            # Calculate Matthews CorrCoef for training set
-            train_preds_tensor = torch.tensor(train_predictions)
-            train_labels_tensor = torch.tensor(train_labels)
-            train_mcc = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
-                train_preds_tensor, train_labels_tensor
-            ).item()
-
-            # Collect validation predictions and labels
-            val_predictions = []
-            val_labels = []
-            with torch.no_grad():
-                for batch_x, batch_y in validate_loader:
-                    batch_x = batch_x.permute(0, 2, 1).to(device)
-                    outputs = model(batch_x)
-                    last_stage_output = outputs[:, -1, :, :]
-                    probabilities = F.softmax(last_stage_output, dim=1)
-                    predictions = torch.argmax(probabilities, dim=1)
-                    val_predictions.extend(predictions.view(-1).cpu().numpy())
-                    val_labels.extend(batch_y.view(-1).cpu().numpy())
-
-            # Calculate Matthews CorrCoef for validation set
-            val_preds_tensor = torch.tensor(val_predictions)
-            val_labels_tensor = torch.tensor(val_labels)
-            val_mcc = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
-                val_preds_tensor, val_labels_tensor
-            ).item()
-
         # ------------------ Save the Best Model Based on Loss ------------------
         best_loss = save_best_model(
             model,
             fold=fold + 1,
             current_metric=loss.item(),
             best_metric=best_loss,
-            checkpoint_dir=checkpoint_dir,
+            checkpoint_dir=result_dir,
             mode="min",
         )
 
@@ -327,100 +274,13 @@ for fold, validate_subjects in enumerate(
             "train_loss_ce": training_loss_ce / len(train_loader),
             "train_loss_mse": training_loss_mse / len(train_loader),
         }
-        if DEBUG_LOG:
-            stats["train_matthews_corrcoef"] = train_mcc
-            stats["val_matthews_corrcoef"] = val_mcc
-        training_statistics.append(stats)
 
-    # =============================================================================
-    #                              Evaluation Phase
-    # =============================================================================
-
-    model.eval()
-    all_predictions = []
-    all_labels = []
-    with torch.no_grad():
-        for batch_x, batch_y in validate_loader:
-            batch_x = batch_x.permute(0, 2, 1).to(device)
-            outputs = model(batch_x)
-            last_stage_output = outputs[:, -1, :, :]
-            probabilities = F.softmax(last_stage_output, dim=1)
-            predictions = torch.argmax(probabilities, dim=1)
-            all_predictions.extend(predictions.view(-1).cpu().numpy())
-            all_labels.extend(batch_y.view(-1).cpu().numpy())
-
-        # Append any remaining predictions (if applicable)
-        all_predictions.extend(predictions.view(-1).cpu().numpy())
-        all_labels.extend(batch_y.view(-1).cpu().numpy())
-
-    # ------------------ Compute Evaluation Metrics ------------------
-
-    # Label distribution
-    unique_labels, counts = np.unique(all_labels, return_counts=True)
-    label_distribution = dict(zip(unique_labels, counts))
-
-    # Sample-wise evaluation metrics
-    preds_tensor = torch.tensor(all_predictions)
-    labels_tensor = torch.tensor(all_labels)
-    metrics_sample = {}
-    for label in range(1, NUM_CLASSES):
-        tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
-        fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
-        fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
-        denominator = 2 * tp + fp + fn
-        f1 = 2 * tp / denominator if denominator != 0 else 0.0
-        metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
-
-    # Additional metrics: Cohen's Kappa and Matthews CorrCoef
-    cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
-        preds_tensor, labels_tensor
-    ).item()
-    matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
-        preds_tensor, labels_tensor
-    ).item()
-
-    # ------------------ Post-processing ------------------
-    all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
-    all_labels = np.array(all_labels)
-
-    # ------------------ Segment-wise Evaluation ------------------
-    metrics_segment = {}
-    for label in range(1, NUM_CLASSES):
-        fn, fp, tp = segment_evaluation(
-            all_predictions,
-            all_labels,
-            class_label=label,
-            threshold=0.5,
-            debug_plot=DEBUG_PLOT,
-        )
-        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-        metrics_segment[f"{label}"] = {
-            "fn": int(fn),
-            "fp": int(fp),
-            "tp": int(tp),
-            "f1": float(f1),
-        }
-
-    # Record validating statistics for the current fold
-    validating_statistics.append(
-        {
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "fold": fold + 1,
-            "metrics_segment": metrics_segment,
-            "metrics_sample": metrics_sample,
-            "cohen_kappa": cohen_kappa_val,
-            "matthews_corrcoef": matthews_corrcoef_val,
-            "label_distribution": label_distribution,
-        }
-    )
 
 # =============================================================================
 #                         Save Results and Configuration
 # =============================================================================
 
 np.save(TRAINING_STATS_FILE, training_statistics)
-np.save(TESTING_STATS_FILE, validating_statistics)
 
 config_info = {
     "dataset": DATASET,
@@ -442,13 +302,9 @@ config_info = {
     "batch_size": BATCH_SIZE,
     "augmentation": FLAG_AUGMENT,
     "mirroring": FLAG_MIRROR,
+    "validate_folds": validate_folds,
 }
 
+# Save the configuration as JSON
 with open(CONFIG_FILE, "w") as f:
-    # Write basic configuration information
-    for key, value in config_info.items():
-        f.write(f"{key}: {value}\n")
-    # Write cross-validation fold information
-    f.write("validate_folds:\n")
-    for i, fold in enumerate(validate_folds, start=1):
-        f.write(f"  Fold {i}: {fold}\n")
+    json.dump(config_info, f, indent=4)
