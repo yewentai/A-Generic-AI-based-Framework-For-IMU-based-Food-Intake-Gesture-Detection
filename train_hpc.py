@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Distributed Version)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 1.0
+Version     : 2.0
 Created     : 2025-03-24
 Description : This script trains an MSTCN model on IMU data using cross-validation.
               It has been adapted to run on an HPC with multiple GPUs using PyTorch’s
@@ -17,15 +17,13 @@ Description : This script trains an MSTCN model on IMU data using cross-validati
 """
 
 import os
+import json
 import pickle
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.distributed as dist
-import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, Subset, ConcatDataset, DistributedSampler
 from datetime import datetime
-from torchmetrics import CohenKappa, MatthewsCorrCoef
 
 # Import your custom modules
 from components.augmentation import augment_orientation
@@ -34,10 +32,8 @@ from components.datasets import (
     create_balanced_subject_folds,
     load_predefined_validate_folds,
 )
-from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
-from components.post_processing import post_process_predictions
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # =============================================================================
@@ -64,58 +60,8 @@ NUM_FOLDS = 7
 NUM_EPOCHS = 100
 BATCH_SIZE = 64
 NUM_WORKERS = 16
-DEBUG_PLOT = False
-DEBUG_LOG = False
 FLAG_AUGMENT = True
 FLAG_MIRROR = True
-
-# =============================================================================
-#                   Dataset and Result/Checkpoint Directories
-# =============================================================================
-
-if DATASET.startswith("DX"):
-    NUM_CLASSES = 2
-    dataset_type = "DX"
-    sub_version = DATASET.replace("DX", "").upper() or "I"
-    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
-    TASK = "binary"
-elif DATASET.startswith("FD"):
-    NUM_CLASSES = 3
-    dataset_type = "FD"
-    sub_version = DATASET.replace("FD", "").upper() or "I"
-    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
-    TASK = "multiclass"
-else:
-    raise ValueError(f"Invalid dataset: {DATASET}")
-
-# Define dataset file paths
-X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
-Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
-X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
-Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
-
-
-config_info = {
-    "dataset": DATASET,
-    "num_classes": NUM_CLASSES,
-    "num_stages": NUM_STAGES,
-    "num_layers": NUM_LAYERS,
-    "num_heads": NUM_HEADS,
-    "input_dim": INPUT_DIM,
-    "num_filters": NUM_FILTERS,
-    "kernel_size": KERNEL_SIZE,
-    "dropout": DROPOUT,
-    "lambda_coef": LAMBDA_COEF,
-    "tau": TAU,
-    "learning_rate": LEARNING_RATE,
-    "sampling_freq": SAMPLING_FREQ,
-    "window_size": WINDOW_SIZE,
-    "num_folds": NUM_FOLDS,
-    "num_epochs": NUM_EPOCHS,
-    "batch_size": BATCH_SIZE,
-    "augmentation": FLAG_AUGMENT,
-    "mirroring": FLAG_MIRROR,
-}
 
 
 # =============================================================================
@@ -123,10 +69,10 @@ config_info = {
 # =============================================================================
 
 
-def main(local_rank, world_size):
-    # read LOCAL_RANK from environment
-    local_rank = int(os.environ["LOCAL_RANK"])
-    world_size = int(os.environ["WORLD_SIZE"])
+def main(local_rank=None, world_size=None):
+    if local_rank is None or world_size is None:
+        local_rank = int(os.environ["LOCAL_RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
     dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
     torch.cuda.set_device(local_rank)
     device = torch.device("cuda", local_rank)
@@ -142,10 +88,26 @@ def main(local_rank, world_size):
         os.makedirs(checkpoint_dir, exist_ok=True)
         # File paths for saving statistics and configuration
         TRAINING_STATS_FILE = os.path.join(result_dir, "train_stats.npy")
-        TESTING_STATS_FILE = os.path.join(result_dir, "validate_stats.npy")
         CONFIG_FILE = os.path.join(result_dir, "config.txt")
 
     # -------------------- Dataset Loading --------------------
+    if DATASET.startswith("DX"):
+        NUM_CLASSES = 2
+        sub_version = DATASET.replace("DX", "").upper() or "I"
+        DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    elif DATASET.startswith("FD"):
+        NUM_CLASSES = 3
+        sub_version = DATASET.replace("FD", "").upper() or "I"
+        DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    else:
+        raise ValueError(f"Invalid dataset: {DATASET}")
+
+    # Define dataset file paths
+    X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+    Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+    X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+    Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+
     # Load left-hand and right-hand data from pickle files
     with open(X_L_PATH, "rb") as f:
         X_L = np.array(pickle.load(f), dtype=object)
@@ -184,24 +146,14 @@ def main(local_rank, world_size):
     # Create balanced cross-validation folds
     validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
     training_statistics = []
-    validating_statistics = []
 
     # -------------------- Cross-Validation Loop --------------------
     for fold, validate_subjects in enumerate(validate_folds):
-        # For demonstration, process only the first fold; remove this condition to run all folds.
-        # if fold != 0:
-        #     continue
-
         # Split training and validation indices based on subject IDs
         train_indices = [
             i
             for i, subject in enumerate(full_dataset.subject_indices)
             if subject not in validate_subjects
-        ]
-        validate_indices = [
-            i
-            for i, subject in enumerate(full_dataset.subject_indices)
-            if subject in validate_subjects
         ]
 
         # Augment training data with FDIII if applicable
@@ -211,8 +163,6 @@ def main(local_rank, world_size):
         else:
             train_dataset = Subset(full_dataset, train_indices)
 
-        val_dataset = Subset(full_dataset, validate_indices)
-
         # Create DistributedSampler for training data to partition it across GPUs
         train_sampler = DistributedSampler(
             train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True
@@ -221,14 +171,6 @@ def main(local_rank, world_size):
             train_dataset,
             batch_size=BATCH_SIZE,
             sampler=train_sampler,
-            num_workers=NUM_WORKERS,
-            pin_memory=True,
-        )
-        # For validation, a regular DataLoader is sufficient; evaluation will be performed on rank 0
-        validate_loader = DataLoader(
-            val_dataset,
-            batch_size=BATCH_SIZE,
-            shuffle=False,
             num_workers=NUM_WORKERS,
             pin_memory=True,
         )
@@ -300,92 +242,35 @@ def main(local_rank, world_size):
                 # Optionally add debug metrics if DEBUG_LOG is True
                 training_statistics.append(stats)
 
-        # -------------------- Evaluation Phase (Rank 0) --------------------
-        if local_rank == 0:
-            model.eval()
-            all_predictions = []
-            all_labels = []
-            with torch.no_grad():
-                for batch_x, batch_y in validate_loader:
-                    batch_x = batch_x.permute(0, 2, 1).to(device)
-                    outputs = model(batch_x)
-                    last_stage_output = outputs[:, -1, :, :]
-                    probabilities = F.softmax(last_stage_output, dim=1)
-                    predictions = torch.argmax(probabilities, dim=1)
-                    all_predictions.extend(predictions.view(-1).cpu().numpy())
-                    all_labels.extend(batch_y.view(-1).cpu().numpy())
-
-            # Compute evaluation metrics
-            unique_labels, counts = np.unique(all_labels, return_counts=True)
-            label_distribution = dict(zip(unique_labels, counts))
-            preds_tensor = torch.tensor(all_predictions)
-            labels_tensor = torch.tensor(all_labels)
-            metrics_sample = {}
-            for label in range(1, NUM_CLASSES):
-                tp = torch.sum(
-                    (preds_tensor == label) & (labels_tensor == label)
-                ).item()
-                fp = torch.sum(
-                    (preds_tensor == label) & (labels_tensor != label)
-                ).item()
-                fn = torch.sum(
-                    (preds_tensor != label) & (labels_tensor == label)
-                ).item()
-                denominator = 2 * tp + fp + fn
-                f1 = 2 * tp / denominator if denominator != 0 else 0.0
-                metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
-
-            cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
-                preds_tensor, labels_tensor
-            ).item()
-            matthews_corrcoef_val = MatthewsCorrCoef(
-                num_classes=NUM_CLASSES, task=TASK
-            )(preds_tensor, labels_tensor).item()
-
-            # Post-process predictions and perform segment-wise evaluation
-            all_predictions = post_process_predictions(
-                np.array(all_predictions), SAMPLING_FREQ
-            )
-            metrics_segment = {}
-            for label in range(1, NUM_CLASSES):
-                fn, fp, tp = segment_evaluation(
-                    all_predictions,
-                    np.array(all_labels),
-                    class_label=label,
-                    threshold=0.5,
-                    debug_plot=DEBUG_PLOT,
-                )
-                f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-                metrics_segment[f"{label}"] = {
-                    "fn": int(fn),
-                    "fp": int(fp),
-                    "tp": int(tp),
-                    "f1": float(f1),
-                }
-
-            validating_statistics.append(
-                {
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "fold": fold + 1,
-                    "metrics_segment": metrics_segment,
-                    "metrics_sample": metrics_sample,
-                    "cohen_kappa": cohen_kappa_val,
-                    "matthews_corrcoef": matthews_corrcoef_val,
-                    "label_distribution": label_distribution,
-                }
-            )
-
     # -------------------- Save Results and Configuration (Rank 0) --------------------
     if local_rank == 0:
         np.save(TRAINING_STATS_FILE, training_statistics)
-        np.save(TESTING_STATS_FILE, validating_statistics)
+        config_info = {
+            "dataset": DATASET,
+            "num_classes": NUM_CLASSES,
+            "num_stages": NUM_STAGES,
+            "num_layers": NUM_LAYERS,
+            "num_heads": NUM_HEADS,
+            "input_dim": INPUT_DIM,
+            "num_filters": NUM_FILTERS,
+            "kernel_size": KERNEL_SIZE,
+            "dropout": DROPOUT,
+            "lambda_coef": LAMBDA_COEF,
+            "tau": TAU,
+            "learning_rate": LEARNING_RATE,
+            "sampling_freq": SAMPLING_FREQ,
+            "window_size": WINDOW_SIZE,
+            "num_folds": NUM_FOLDS,
+            "num_epochs": NUM_EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "augmentation": FLAG_AUGMENT,
+            "mirroring": FLAG_MIRROR,
+            "validate_folds": validate_folds,
+        }
+
+        # Save the configuration as JSON
         with open(CONFIG_FILE, "w") as f:
-            for key, value in config_info.items():
-                f.write(f"{key}: {value}\n")
-            f.write("validate_folds:\n")
-            for i, fold in enumerate(validate_folds, start=1):
-                f.write(f"  Fold {i}: {fold}\n")
+            json.dump(config_info, f, indent=4)
 
         overall_end = datetime.now()
         print("Training ended at:", overall_end)

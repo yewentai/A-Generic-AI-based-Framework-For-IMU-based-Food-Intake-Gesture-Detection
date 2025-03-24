@@ -181,11 +181,6 @@ for fold, validate_subjects in enumerate(
         for i, subject in enumerate(full_dataset.subject_indices)
         if subject not in validate_subjects
     ]
-    validate_indices = [
-        i
-        for i, subject in enumerate(full_dataset.subject_indices)
-        if subject in validate_subjects
-    ]
 
     # Augment training data with FDIII if applicable
     if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
@@ -200,13 +195,6 @@ for fold, validate_subjects in enumerate(
         Subset(full_dataset, train_indices),
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=NUM_WORKERS,
-        pin_memory=True,
-    )
-    validate_loader = DataLoader(
-        Subset(full_dataset, validate_indices),
-        batch_size=BATCH_SIZE,
-        shuffle=False,
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
