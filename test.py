@@ -17,13 +17,14 @@ Usage       : Execute the script in your terminal:
 """
 
 import os
+import glob
 import pickle
 import numpy as np
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 from torchmetrics import CohenKappa, MatthewsCorrCoef
-import glob
+from torch.utils.data import DataLoader
 
 # Import model and utility modules from components package
 from components.model_mstcn import MSTCN
@@ -32,11 +33,12 @@ from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
 from components.pre_processing import hand_mirroring
 
-CHECKPOINT_DIR = "checkpoints"  # Directory where checkpoints are saved
-
 # -----------------------------------------------------------------------------
 #                   Configuration and Parameters
 # -----------------------------------------------------------------------------
+
+# Directory where checkpoints are saved
+CHECKPOINT_DIR = "checkpoints"
 
 # Dataset and model configuration (should match train.py)
 DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
@@ -70,7 +72,7 @@ WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 
 # Data augmentation / pre-processing flags
-FLAG_MIRROR = False  # Apply hand mirroring (if used during training)
+FLAG_MIRROR = False  # Apply hand mirroring
 
 # Testing DataLoader parameters
 BATCH_SIZE = 64
@@ -108,8 +110,6 @@ Y = np.concatenate([Y_L, Y_R], axis=0)
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
 
 # Create a DataLoader for the full dataset
-from torch.utils.data import DataLoader
-
 test_loader = DataLoader(
     full_dataset,
     batch_size=BATCH_SIZE,
@@ -142,7 +142,7 @@ RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
 CHECKPOINT_PATH = os.path.join(CHECKPOINT_DIR, RESULT_VERSION, f"best_model_fold1.pth")
 
 if os.path.exists(CHECKPOINT_PATH):
-    state_dict = torch.load(CHECKPOINT_PATH, map_location=device)
+    state_dict = torch.load(CHECKPOINT_PATH, map_location=device, weights_only=True)
     model.load_state_dict(state_dict)
     print("Checkpoint loaded successfully.")
 else:
@@ -170,17 +170,15 @@ with torch.no_grad():
         all_predictions.extend(predictions.view(-1).cpu().numpy())
         all_labels.extend(batch_y.view(-1).cpu().numpy())
 
-# Optionally post-process predictions (e.g., smoothing)
-all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
-all_labels = np.array(all_labels)
-
 # -----------------------------------------------------------------------------
 #                        Evaluation Metrics Calculation
 # -----------------------------------------------------------------------------
 
 # Compute label distribution
 unique_labels, counts = np.unique(all_labels, return_counts=True)
-label_distribution = dict(zip(unique_labels, counts))
+label_distribution = {
+    float(label): int(count) for label, count in zip(unique_labels, counts)
+}
 print("Label distribution:", label_distribution)
 
 preds_tensor = torch.tensor(all_predictions)
@@ -208,27 +206,121 @@ for class_label, metrics in metrics_sample.items():
 print(f"Cohen's Kappa: {cohen_kappa_val:.4f}")
 print(f"Matthews CorrCoef: {matthews_corrcoef_val:.4f}")
 
-all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
-all_labels = np.array(all_labels)
+# all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
+# all_labels = np.array(all_labels)
 
-# Segment-wise evaluation
-metrics_segment = {}
-for label in range(1, NUM_CLASSES):
-    fn, fp, tp = segment_evaluation(
-        all_predictions, all_labels, class_label=label, threshold=0.5, debug_plot=True
+# # Segment-wise evaluation
+# metrics_segment = {}
+# for label in range(1, NUM_CLASSES):
+#     fn, fp, tp = segment_evaluation(
+#         all_predictions, all_labels, class_label=label, threshold=0.5, debug_plot=True
+#     )
+#     f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+#     metrics_segment[f"Class {label}"] = {
+#         "fn": int(fn),
+#         "fp": int(fp),
+#         "tp": int(tp),
+#         "f1": f1,
+#     }
+
+# print("Segment-wise Evaluation Metrics:")
+# for class_label, metrics in metrics_segment.items():
+#     print(f"{class_label}: {metrics}")
+
+# -----------------------------------------------------------------------------
+#           Two-Phase Line Search for Optimal Post-processing Parameters
+# -----------------------------------------------------------------------------
+
+# Phase 1: Optimize min_length_sec while holding merge_distance_sec fixed
+default_merge_distance = 0.1
+min_length_values = np.linspace(
+    0.0, 1.0, 11
+)  # 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 seconds
+
+best_avg_f1_phase1 = 0.0
+best_min_length = None
+
+print(
+    "\nPhase 1: Optimizing min_length_sec with merge_distance_sec fixed at "
+    f"{default_merge_distance:.2f} seconds..."
+)
+
+for min_length in min_length_values:
+    processed_preds = post_process_predictions(
+        all_predictions,
+        SAMPLING_FREQ,
+        min_length_sec=min_length,
+        merge_distance_sec=default_merge_distance,
     )
-    f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-    metrics_segment[f"Class {label}"] = {
-        "fn": int(fn),
-        "fp": int(fp),
-        "tp": int(tp),
-        "f1": f1,
-    }
+    # Evaluate average F1 score over classes 1..NUM_CLASSES-1
+    f1_list = []
+    for label in range(1, NUM_CLASSES):
+        fn, fp, tp = segment_evaluation(
+            processed_preds,
+            all_labels,
+            class_label=label,
+            threshold=0.1,
+            debug_plot=False,
+        )
+        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+        f1_list.append(f1)
+    avg_f1 = np.mean(f1_list)
+    print(f"min_length_sec: {min_length:.2f}, avg F1: {avg_f1:.4f}")
 
-print("Segment-wise Evaluation Metrics:")
-for class_label, metrics in metrics_segment.items():
-    print(f"{class_label}: {metrics}")
+    if avg_f1 > best_avg_f1_phase1:
+        best_avg_f1_phase1 = avg_f1
+        best_min_length = min_length
 
-# -----------------------------------------------------------------------------
-#                                  End of Testing
-# -----------------------------------------------------------------------------
+print(
+    f"\nBest min_length_sec found: {best_min_length:.2f} seconds with avg F1: {best_avg_f1_phase1:.4f}"
+)
+
+
+# Phase 2: Optimize merge_distance_sec while holding min_length_sec fixed at best_min_length
+merge_distance_values = np.linspace(
+    0.0, 0.3, 7
+)  # 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3 seconds
+
+best_avg_f1_phase2 = 0.0
+best_merge_distance = None
+
+print(
+    "\nPhase 2: Optimizing merge_distance_sec with min_length_sec fixed at "
+    f"{best_min_length:.2f} seconds..."
+)
+
+for merge_distance in merge_distance_values:
+    processed_preds = post_process_predictions(
+        all_predictions,
+        SAMPLING_FREQ,
+        min_length_sec=best_min_length,
+        merge_distance_sec=merge_distance,
+    )
+    # Evaluate average F1 score over classes 1..NUM_CLASSES-1
+    f1_list = []
+    for label in range(1, NUM_CLASSES):
+        fn, fp, tp = segment_evaluation(
+            processed_preds,
+            all_labels,
+            class_label=label,
+            threshold=0.1,
+            debug_plot=False,
+        )
+        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+        f1_list.append(f1)
+    avg_f1 = np.mean(f1_list)
+    print(f"merge_distance_sec: {merge_distance:.2f}, avg F1: {avg_f1:.4f}")
+
+    if avg_f1 > best_avg_f1_phase2:
+        best_avg_f1_phase2 = avg_f1
+        best_merge_distance = merge_distance
+
+print(
+    f"\nBest merge_distance_sec found: {best_merge_distance:.2f} seconds with avg F1: {best_avg_f1_phase2:.4f}"
+)
+
+# Final Best Parameters
+print("\nOverall Optimal Post-processing Parameters:")
+print(f"min_length_sec = {best_min_length:.2f} seconds")
+print(f"merge_distance_sec = {best_merge_distance:.2f} seconds")
+print(f"Optimized segment-wise average F1 score: {best_avg_f1_phase2:.4f}")

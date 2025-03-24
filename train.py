@@ -37,7 +37,7 @@ from components.evaluation import segment_evaluation
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.post_processing import post_process_predictions
-from components.model_mstcn import MSTCN, MSTCN_Loss
+from components.model_mstcn_backup import MSTCN, MSTCN_Loss
 
 # =============================================================================
 #                         Configuration Parameters
@@ -69,7 +69,7 @@ FLAG_AUGMENT = True
 FLAG_MIRROR = True
 
 # =============================================================================
-#                         Dataset Configuration
+#                     Dataset Configuration and Loading
 # =============================================================================
 
 if DATASET.startswith("DX"):
@@ -89,15 +89,25 @@ elif DATASET.startswith("FD"):
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
-# =============================================================================
-#                    Data Paths and Directory Setup
-# =============================================================================
-
 # Define file paths for the dataset
 X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
 Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
 X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
 Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+
+# Load left-hand and right-hand data from pickle files
+with open(X_L_PATH, "rb") as f:
+    X_L = np.array(pickle.load(f), dtype=object)
+with open(Y_L_PATH, "rb") as f:
+    Y_L = np.array(pickle.load(f), dtype=object)
+with open(X_R_PATH, "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(Y_R_PATH, "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
+
+# =============================================================================
+#                    Result and Checkpoint Setup
+# =============================================================================
 
 # Generate version prefix from current datetime (first 12 characters)
 version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
@@ -112,21 +122,9 @@ os.makedirs(checkpoint_dir, exist_ok=True)
 TRAINING_STATS_FILE = os.path.join(result_dir, f"train_stats.npy")
 TESTING_STATS_FILE = os.path.join(result_dir, f"validate_stats.npy")
 CONFIG_FILE = os.path.join(result_dir, f"config.txt")
-# CHECKPOINT_DIR is reused to save best models per fold
 
-# =============================================================================
-#                             Data Loading
-# =============================================================================
-
-# Load left-hand and right-hand data from pickle files
-with open(X_L_PATH, "rb") as f:
-    X_L = np.array(pickle.load(f), dtype=object)
-with open(Y_L_PATH, "rb") as f:
-    Y_L = np.array(pickle.load(f), dtype=object)
-with open(X_R_PATH, "rb") as f:
-    X_R = np.array(pickle.load(f), dtype=object)
-with open(Y_R_PATH, "rb") as f:
-    Y_R = np.array(pickle.load(f), dtype=object)
+training_statistics = []
+validating_statistics = []
 
 # =============================================================================
 #                          Data Pre-processing
@@ -143,10 +141,7 @@ Y = np.concatenate([Y_L, Y_R], axis=0)
 # Create the full dataset using the defined window size
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
 
-# =============================================================================
-#           Augment Dataset with FDIII (if using FDII/FDI)
-# =============================================================================
-
+# Augment Dataset with FDIII (if using FDII/FDI)
 fdiii_dataset = None
 if DATASET in ["FDII", "FDI"]:
     fdiii_dir = "./dataset/FD/FD-III"
@@ -177,13 +172,6 @@ validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
-
-# =============================================================================
-#                         Statistics Records
-# =============================================================================
-
-training_statistics = []
-validating_statistics = []
 
 # =============================================================================
 #                     Main Cross-Validation Loop
@@ -232,7 +220,6 @@ for fold, validate_subjects in enumerate(
         pin_memory=True,
     )
 
-    # ------------------ Model Initialization ------------------
     model = MSTCN(
         num_stages=NUM_STAGES,
         num_layers=NUM_LAYERS,
