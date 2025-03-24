@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=16
 #SBATCH --gpus-per-node=1  # Adjust this if using multiple GPUs
 #SBATCH --partition=gpu_h100
-#SBATCH --time=3-24:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=logs/ddp_train_%j.out
 
 # Load Miniconda
@@ -25,4 +25,4 @@ export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1  # Helps debugging CUDA errors
 
 # Launch the training script with torchrun for DDP (Distributed Data Parallel) support
-torchrun --nnodes=1 --nproc_per_node=1 train.py
+torchrun --nnodes=1 --nproc_per_node=1 train_hpc.py

@@ -25,4 +25,4 @@ export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1  # Helps debugging CUDA errors
 
 # Launch the training script with torchrun for DDP (Distributed Data Parallel) support
-torchrun --nnodes=1 --nproc_per_node=1 train.py
+torchrun --nnodes=1 --nproc_per_node=1 train_hpc.py
