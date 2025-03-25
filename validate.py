@@ -11,7 +11,6 @@ Created     : 2025-03-24
 Description : Validates a trained MSTCN model on the full IMU dataset using
               saved checkpoints for each fold. The script performs inference,
               computes evaluation metrics, and generates performance plots.
-Usage       : $ python validate.py
 ===============================================================================
 """
 
