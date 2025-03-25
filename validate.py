@@ -58,7 +58,6 @@ def main():
     NUM_CLASSES = config_info["num_classes"]
     NUM_STAGES = config_info["num_stages"]
     NUM_LAYERS = config_info["num_layers"]
-    NUM_HEADS = config_info["num_heads"]
     INPUT_DIM = config_info["input_dim"]
     NUM_FILTERS = config_info["num_filters"]
     KERNEL_SIZE = config_info["kernel_size"]
@@ -66,10 +65,10 @@ def main():
     SAMPLING_FREQ = config_info["sampling_freq"]
     WINDOW_SIZE = config_info["window_size"]
     BATCH_SIZE = config_info["batch_size"]
-    FLAG_MIRROR = config_info.get("mirroring", False)
-    NUM_FOLDS = config_info.get("num_folds", 7)
-    DEBUG_PLOT = False
     THRESHOLD = 0.5
+    NUM_WORKERS = 4
+    FLAG_MIRROR = False
+    DEBUG_PLOT = False
 
     # Determine dataset directory and task based on dataset type
     if DATASET.startswith("DX"):
@@ -82,9 +81,6 @@ def main():
         TASK = "multiclass"
     else:
         raise ValueError(f"Invalid dataset: {DATASET}")
-
-    # Use a smaller number of workers for validation
-    NUM_WORKERS = 4
 
     # -------------------------------------------------------------------------
     # Data Loading and Pre-processing
@@ -113,22 +109,6 @@ def main():
     X = np.concatenate([X_L, X_R], axis=0)
     Y = np.concatenate([Y_L, Y_R], axis=0)
     full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
-
-    # Optionally load FDIII data for augmentation (for FDII/FDI datasets)
-    fdiii_dataset = None
-    if DATASET in ["FDII", "FDI"]:
-        fdiii_dir = os.path.join("dataset", "FD", "FD-III")
-        with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
-            X_L_fdiii = np.array(pickle.load(f), dtype=object)
-        with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
-            Y_L_fdiii = np.array(pickle.load(f), dtype=object)
-        with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
-            X_R_fdiii = np.array(pickle.load(f), dtype=object)
-        with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
-            Y_R_fdiii = np.array(pickle.load(f), dtype=object)
-        X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
-        Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-        fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
 
     # Retrieve cross-validation folds from configuration
     validate_folds = config_info.get("validate_folds")
@@ -266,7 +246,9 @@ def main():
     # -------------------------------------------------------------------------
     # Save Evaluation Results
     # -------------------------------------------------------------------------
-    validate_stats_file = os.path.join(result_dir, "validate_stats.npy")
+    validate_stats_file = os.path.join(
+        result_dir, f"validate_stats{'_mirrored' if FLAG_MIRROR else ''}.npy"
+    )
     np.save(validate_stats_file, validating_statistics)
     print(f"\nValidation statistics saved to {validate_stats_file}")
 
@@ -275,7 +257,6 @@ def main():
     # -------------------------------------------------------------------------
     # Load saved training and validation statistics
     train_stats_file = os.path.join(result_dir, "train_stats.npy")
-    validate_stats_file = os.path.join(result_dir, "validate_stats.npy")
     train_stats = list(np.load(train_stats_file, allow_pickle=True))
     validate_stats = list(np.load(validate_stats_file, allow_pickle=True))
 
@@ -333,41 +314,47 @@ def main():
         plt.close()
 
     # Plot fold-wise performance metrics
-    cohen_kappa_scores = []
-    matthews_scores = []
-    weighted_f1_sample = []
-    weighted_f1_segment = []
+    # Initialize lists to store validation metrics for each fold
+    label_distribution = []  # Label distribution
+    f1_scores_sample = []  # Sample-wise F1 scores
+    f1_scores_segment = []  # Segment-wise F1 scores
+    cohen_kappa_scores = []  # Cohen's kappa scores
+    matthews_corrcoef_scores = []  # Matthews correlation coefficient scores
 
     for entry in validate_stats:
-        label_dist = entry["label_distribution"]
-        total_weight_sample = sum(label_dist.get(lbl, 0) for lbl in label_dist)
-        weighted_f1_sample_val = sum(
-            entry["metrics_sample"].get(str(lbl), {}).get("f1", 0.0)
-            * label_dist.get(lbl, 0)
-            for lbl in label_dist
-        )
-        f1_sample = (
-            weighted_f1_sample_val / total_weight_sample
-            if total_weight_sample > 0
-            else 0.0
+        label_dist = entry["label_distribution"]  # dictionary: {label: count}
+
+        # Compute weighted average F1 for sample-wise metrics
+        total_weight_sample = 0.0
+        weighted_f1_sample = 0.0
+        for label_str, stats in entry["metrics_sample"].items():
+            label_int = int(label_str)
+            weight = label_dist.get(label_int, 0)
+            weighted_f1_sample += stats["f1"] * weight
+            total_weight_sample += weight
+        f1_sample_weighted = (
+            weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
         )
 
-        total_weight_segment = sum(label_dist.get(lbl, 0) for lbl in label_dist)
-        weighted_f1_segment_val = sum(
-            entry["metrics_segment"].get(str(lbl), {}).get("f1", 0.0)
-            * label_dist.get(lbl, 0)
-            for lbl in label_dist
-        )
-        f1_segment = (
-            weighted_f1_segment_val / total_weight_segment
+        # Compute weighted average F1 for segment-wise metrics
+        total_weight_segment = 0.0
+        weighted_f1_segment = 0.0
+        for label_str, stats in entry["metrics_segment"].items():
+            label_int = int(label_str)
+            weight = label_dist.get(label_int, 0)
+            weighted_f1_segment += stats["f1"] * weight
+            total_weight_segment += weight
+        f1_segment_weighted = (
+            weighted_f1_segment / total_weight_segment
             if total_weight_segment > 0
             else 0.0
         )
 
+        label_distribution.append(label_dist)
+        f1_scores_sample.append(f1_sample_weighted)
+        f1_scores_segment.append(f1_segment_weighted)
         cohen_kappa_scores.append(entry["cohen_kappa"])
-        matthews_scores.append(entry["matthews_corrcoef"])
-        weighted_f1_sample.append(f1_sample)
-        weighted_f1_segment.append(f1_segment)
+        matthews_corrcoef_scores.append(entry["matthews_corrcoef"])
 
     fold_indices = np.arange(1, len(cohen_kappa_scores) + 1)
     bar_width = 0.2
@@ -381,7 +368,7 @@ def main():
     )
     plt.bar(
         fold_indices - bar_width / 2,
-        matthews_scores,
+        matthews_corrcoef_scores,
         width=bar_width,
         label="Matthews CorrCoef",
         color="purple",
@@ -403,11 +390,15 @@ def main():
     plt.xticks(fold_indices)
     plt.xlabel("Fold")
     plt.ylabel("Score")
-    plt.title("Fold-wise Performance Metrics")
+    title_suffix = " (Mirrored)" if FLAG_MIRROR else ""
+    plt.title(f"Fold-wise Performance Metrics{title_suffix}")
     plt.legend(loc="lower right")
     plt.grid(axis="y", linestyle="--", alpha=0.7)
     plt.tight_layout()
-    plt.savefig(os.path.join(result_dir, "validate_metrics.png"), dpi=300)
+    filename_suffix = "_mirrored" if FLAG_MIRROR else ""
+    plt.savefig(
+        os.path.join(result_dir, f"validate_metrics{filename_suffix}.png"), dpi=300
+    )
     plt.close()
 
 
