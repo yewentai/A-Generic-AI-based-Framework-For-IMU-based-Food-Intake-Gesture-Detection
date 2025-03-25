@@ -58,7 +58,7 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 NUM_FOLDS = 7
-NUM_EPOCHS = 2
+NUM_EPOCHS = 200
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 FLAG_AUGMENT = True
@@ -236,7 +236,6 @@ def main(local_rank=None, world_size=None):
                     "train_loss_ce": training_loss_ce / len(train_loader),
                     "train_loss_mse": training_loss_mse / len(train_loader),
                 }
-                # Optionally add debug metrics if DEBUG_LOG is True
                 training_statistics.append(stats)
 
     # -------------------- Save Results and Configuration (Rank 0) --------------------

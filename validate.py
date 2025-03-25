@@ -20,6 +20,7 @@ import os
 import json
 import glob
 import pickle
+from matplotlib.dates import TH
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -66,7 +67,8 @@ WINDOW_SIZE = config_info["window_size"]
 BATCH_SIZE = config_info["batch_size"]
 FLAG_MIRROR = config_info.get("mirroring", False)
 NUM_FOLDS = config_info.get("num_folds", 7)
-DEBUG_PLOT = False  # You can make this configurable if needed
+DEBUG_PLOT = False
+THRESHOLD = 0.5
 
 if DATASET.startswith("DX"):
     sub_version = DATASET.replace("DX", "").upper() or "I"
@@ -252,7 +254,7 @@ for fold, validate_subjects in enumerate(
             all_predictions,
             all_labels,
             class_label=label,
-            threshold=0.5,
+            threshold=THRESHOLD,
             debug_plot=DEBUG_PLOT,
         )
         f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
@@ -373,7 +375,7 @@ label_distribution = []  # Label distribution
 f1_scores_sample = []  # Sample-wise F1 scores
 f1_scores_segment = []  # Segment-wise F1 scores
 cohen_kappa_scores = []  # Cohen's kappa scores
-matthews_corrcoef_scores = []  # MCC scores
+matthews_corrcoef_scores = []  # Matthews correlation coefficient scores
 
 for entry in validate_stats:
     label_dist = entry["label_distribution"]  # dictionary: {label: count}
@@ -417,28 +419,28 @@ plt.bar(
     fold_indices - width * 1.5,
     cohen_kappa_scores,
     width=width,
-    label="Cohen Kappa",
+    label="Cohen Kappa Coefficient",
     color="orange",
 )
 plt.bar(
     fold_indices - width / 2,
     matthews_corrcoef_scores,
     width=width,
-    label="MCC",
+    label="Matthews Correlation Coefficient",
     color="purple",
 )
 plt.bar(
     fold_indices + width / 2,
     f1_scores_sample,
     width=width,
-    label="Sample-wise F1",
+    label="Weighted Sample-wise F1 Score",
     color="blue",
 )
 plt.bar(
     fold_indices + width * 1.5,
     f1_scores_segment,
     width=width,
-    label="Segment-wise F1",
+    label=f"Weighted Segment-wise F1 Score (Threshold={THRESHOLD})",
     color="green",
 )
 
@@ -446,8 +448,8 @@ plt.xticks(fold_indices)
 plt.xlabel("Fold")
 plt.ylabel("Score")
 plt.title("Fold-wise Performance Metrics")
-plt.legend()
+plt.legend(loc="lower right")
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(os.path.join(RESULT_PATH, "validate_metrics_plot.png"), dpi=300)
+plt.savefig(os.path.join(RESULT_PATH, "validate_metrics.png"), dpi=300)
 plt.close()
