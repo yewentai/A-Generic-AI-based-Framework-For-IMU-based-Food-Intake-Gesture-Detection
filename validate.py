@@ -7,7 +7,7 @@ MSTCN IMU Validation Script
 Author      : Joseph Yep (improved by ChatGPT)
 Email       : yewentai126@gmail.com
 Version     : 2.1
-Created     : 2025-03-24
+Created     : 2025-03-25
 Description : Validates a trained MSTCN model on the full IMU dataset using
               saved checkpoints for each fold. The script performs inference,
               computes evaluation metrics, and generates performance plots.
