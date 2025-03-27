@@ -129,7 +129,7 @@ def MSTCN_Loss(outputs, targets):
                 F.log_softmax(stage_predictions[:, :, 1:], dim=1),
                 F.log_softmax(stage_predictions.detach()[:, :, :-1], dim=1),
             )
-            mse_loss_value = torch.clamp(mse_loss_value, min=0, max=16)
+            mse_loss_value = torch.clamp(mse_loss_value, min=0, max=4)
             mse_loss_mean += torch.mean(mse_loss_value)
     # Average the loss across stages
     ce_loss /= num_stages

@@ -2,15 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-MSTCN IMU Validation Script
+MSTCN IMU Validating Script
 -------------------------------------------------------------------------------
-Author      : Joseph Yep (improved by ChatGPT)
+Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 2.1
-Created     : 2025-03-25
-Description : Validates a trained MSTCN model on the full IMU dataset using
-              saved checkpoints for each fold. The script performs inference,
-              computes evaluation metrics, and generates performance plots.
+Version     : 2.0
+Created     : 2025-03-24
+Description : This script validates a trained MSTCN model on the full IMU dataset.
+              It loads the dataset and saved checkpoints for each fold,
+              runs inference, and computes comprehensive evaluation metrics.
+Usage       : Execute the script in your terminal:
+              $ python validate.py
 ===============================================================================
 """
 
@@ -18,119 +20,147 @@ import os
 import json
 import glob
 import pickle
-from datetime import datetime
-
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
+from datetime import datetime
 from tqdm import tqdm
 from torchmetrics import CohenKappa, MatthewsCorrCoef
 from torch.utils.data import DataLoader, Subset
 
-# Import custom modules from the components package
+# Import model and utility modules from components package
 from components.model_mstcn import MSTCN
+from components.model_tcn import TCN
+from components.model_cnnlstm import CNNLSTM
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
 from components.pre_processing import hand_mirroring
 
+# -----------------------------------------------------------------------------
+#                   Configuration and Parameters
+# -----------------------------------------------------------------------------
 
-def main():
-    # -------------------------------------------------------------------------
-    # Configuration and Setup
-    # -------------------------------------------------------------------------
-    RESULT_DIR = "result"
-    all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
-    if not all_versions:
-        raise ValueError("No result directories found in 'result'.")
-    # Select the latest result directory by modification time
-    RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
-    result_dir = os.path.join(RESULT_DIR, RESULT_VERSION)
-    config_file = os.path.join(result_dir, "config.json")
+RESULT_DIR = "result"
 
-    # Load configuration parameters from JSON file
-    with open(config_file, "r") as f:
-        config_info = json.load(f)
+# Automatically select the lastest version based on timestamp
+all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
+RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
 
-    # Set key parameters from configuration
-    DATASET = config_info["dataset"]
-    NUM_CLASSES = config_info["num_classes"]
-    NUM_STAGES = config_info["num_stages"]
-    NUM_LAYERS = config_info["num_layers"]
-    INPUT_DIM = config_info["input_dim"]
-    NUM_FILTERS = config_info["num_filters"]
-    KERNEL_SIZE = config_info["kernel_size"]
-    DROPOUT = config_info["dropout"]
-    SAMPLING_FREQ = config_info["sampling_freq"]
-    WINDOW_SIZE = config_info["window_size"]
-    BATCH_SIZE = config_info["batch_size"]
-    THRESHOLD = 0.5
-    NUM_WORKERS = 4
-    FLAG_MIRROR = False
-    DEBUG_PLOT = False
+# Or manually set the version
+# RESULT_VERSION = "202503251515"
 
-    # Determine dataset directory and task based on dataset type
-    if DATASET.startswith("DX"):
-        sub_version = DATASET.replace("DX", "").upper() or "I"
-        DATA_DIR = os.path.join("dataset", "DX", f"DX-{sub_version}")
-        TASK = "binary"
-    elif DATASET.startswith("FD"):
-        sub_version = DATASET.replace("FD", "").upper() or "I"
-        DATA_DIR = os.path.join("dataset", "FD", f"FD-{sub_version}")
-        TASK = "multiclass"
-    else:
-        raise ValueError(f"Invalid dataset: {DATASET}")
+result_dir = os.path.join(RESULT_DIR, RESULT_VERSION)
+CONFIG_FILE = os.path.join(result_dir, "config.json")
 
-    # -------------------------------------------------------------------------
-    # Data Loading and Pre-processing
-    # -------------------------------------------------------------------------
-    # Define file paths for left and right hand data
-    x_left_path = os.path.join(DATA_DIR, "X_L.pkl")
-    y_left_path = os.path.join(DATA_DIR, "Y_L.pkl")
-    x_right_path = os.path.join(DATA_DIR, "X_R.pkl")
-    y_right_path = os.path.join(DATA_DIR, "Y_R.pkl")
+# Load the configuration parameters from the JSON file
+with open(CONFIG_FILE, "r") as f:
+    config_info = json.load(f)
 
-    # Load data from pickle files
-    with open(x_left_path, "rb") as f:
-        X_L = np.array(pickle.load(f), dtype=object)
-    with open(y_left_path, "rb") as f:
-        Y_L = np.array(pickle.load(f), dtype=object)
-    with open(x_right_path, "rb") as f:
-        X_R = np.array(pickle.load(f), dtype=object)
-    with open(y_right_path, "rb") as f:
-        Y_R = np.array(pickle.load(f), dtype=object)
+# Set configuration parameters from the loaded JSON
+DATASET = config_info["dataset"]
+NUM_CLASSES = config_info["num_classes"]
+model_type = config_info["model"]
+INPUT_DIM = config_info["input_dim"]
+SAMPLING_FREQ = config_info["sampling_freq"]
+WINDOW_SIZE = config_info["window_size"]
+BATCH_SIZE = config_info["batch_size"]
+NUM_WORKERS = 4
+THRESHOLD = 0.5
+DEBUG_PLOT = False
+FLAG_MIRROR = True
 
-    # Optionally apply hand mirroring to left-hand data
-    if FLAG_MIRROR:
-        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
-    # Merge left and right data into a single dataset
-    X = np.concatenate([X_L, X_R], axis=0)
-    Y = np.concatenate([Y_L, Y_R], axis=0)
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
+# -----------------------------------------------------------------------------
+#                        Data Loading and Pre-processing
+# -----------------------------------------------------------------------------
 
-    # Retrieve cross-validation folds from configuration
-    validate_folds = config_info.get("validate_folds")
-    if validate_folds is None:
-        raise ValueError("No 'validate_folds' found in the configuration file.")
+if DATASET.startswith("DX"):
+    sub_version = DATASET.replace("DX", "").upper() or "I"
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
+elif DATASET.startswith("FD"):
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
 
-    # -------------------------------------------------------------------------
-    # Cross-Validation Loop for Model Validation
-    # -------------------------------------------------------------------------
-    validating_statistics = []
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+# Define file paths for the dataset (left and right data)
+X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
 
-    for fold, validate_subjects in enumerate(
-        tqdm(validate_folds, desc="K-Fold", leave=True)
-    ):
-        # Define the checkpoint path for the current fold
-        checkpoint_path = os.path.join(result_dir, f"best_model_fold{fold+1}.pth")
-        if not os.path.exists(checkpoint_path):
-            continue
+# Load data from pickle files
+with open(X_L_PATH, "rb") as f:
+    X_L = np.array(pickle.load(f), dtype=object)
+with open(Y_L_PATH, "rb") as f:
+    Y_L = np.array(pickle.load(f), dtype=object)
+with open(X_R_PATH, "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(Y_R_PATH, "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
 
-        # Initialize the MSTCN model and load its checkpoint
+# Optionally apply hand mirroring if the flag is set
+if FLAG_MIRROR:
+    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+# Merge left and right data
+X = np.concatenate([X_L, X_R], axis=0)
+Y = np.concatenate([Y_L, Y_R], axis=0)
+
+# Create the full dataset with the defined window size
+full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
+
+# Load cross-validation folds from the JSON configuration
+validate_folds = config_info.get("validate_folds")
+if validate_folds is None:
+    raise ValueError("No 'validate_folds' found in the configuration file.")
+
+# -----------------------------------------------------------------------------
+#                              Validating Loop
+# -----------------------------------------------------------------------------
+
+# Create a results storage for cross-validation evaluations
+validating_statistics = []
+
+
+for fold, validate_subjects in enumerate(
+    tqdm(validate_folds, desc="K-Fold", leave=True)
+):
+    # Construct the checkpoint path for the current fold
+    CHECKPOINT_PATH = os.path.join(
+        RESULT_DIR, RESULT_VERSION, f"best_model_fold{fold+1}.pth"
+    )
+
+    # Check if the checkpoint for this fold exists
+    if not os.path.exists(CHECKPOINT_PATH):
+        continue
+
+    # Instantiate the model based on the saved configuration
+    if model_type == "TCN":
+        NUM_LAYERS = config_info["num_layers"]
+        NUM_FILTERS = config_info["num_filters"]
+        KERNEL_SIZE = config_info["kernel_size"]
+        DROPOUT = config_info["dropout"]
+        model = TCN(
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+    elif model_type == "MSTCN":
+        NUM_STAGES = config_info["num_stages"]
+        NUM_LAYERS = config_info["num_layers"]
+        NUM_FILTERS = config_info["num_filters"]
+        KERNEL_SIZE = config_info["kernel_size"]
+        DROPOUT = config_info["dropout"]
         model = MSTCN(
             num_stages=NUM_STAGES,
             num_layers=NUM_LAYERS,
@@ -140,267 +170,233 @@ def main():
             kernel_size=KERNEL_SIZE,
             dropout=DROPOUT,
         ).to(device)
-        state_dict = torch.load(checkpoint_path, map_location=device, weights_only=True)
-        # Remove 'module.' prefix if present (from DistributedDataParallel)
-        new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-        model.load_state_dict(new_state_dict)
-        model.eval()
+    elif model_type == "CNN_LSTM":
+        conv_filters = config_info["conv_filters"]
+        lstm_hidden = config_info["lstm_hidden"]
+        model = CNNLSTM(
+            input_channels=INPUT_DIM,
+            conv_filters=conv_filters,
+            lstm_hidden=lstm_hidden,
+            num_classes=NUM_CLASSES,
+        ).to(device)
+    else:
+        raise ValueError(f"Invalid model: {model_type}")
 
-        # Determine validation indices based on subject IDs
-        validate_indices = [
-            i
-            for i, subject in enumerate(full_dataset.subject_indices)
-            if subject in validate_subjects
-        ]
-        validate_loader = DataLoader(
-            Subset(full_dataset, validate_indices),
-            batch_size=BATCH_SIZE,
-            shuffle=False,
-            num_workers=NUM_WORKERS,
-            pin_memory=True,
+    # Load the checkpoint for the current fold
+    state_dict = torch.load(CHECKPOINT_PATH, map_location=device, weights_only=True)
+    # Remove 'module.' prefix if it exists.
+    new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+    model.load_state_dict(new_state_dict)
+
+    # Split validation indices based on subject IDs
+    validate_indices = [
+        i
+        for i, subject in enumerate(full_dataset.subject_indices)
+        if subject in validate_subjects
+    ]
+
+    # Create DataLoader for the validation subset of the current fold
+    validate_loader = DataLoader(
+        Subset(full_dataset, validate_indices),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
+
+    # Explicitly set the model to evaluation mode
+    model.eval()
+
+    # Inference and Prediction Collection
+    all_predictions = []
+    all_labels = []
+
+    with torch.no_grad():
+        for batch_x, batch_y in tqdm(
+            validate_loader, desc=f"Validating Fold {fold+1}", leave=False
+        ):
+            batch_x = batch_x.permute(0, 2, 1).to(device)
+            outputs = model(batch_x)
+            # If the model produces outputs with multiple stages (4D tensor), select the last stage.
+            if outputs.ndim == 4:
+                logits = outputs[:, -1, :, :]
+            else:
+                logits = outputs
+            probabilities = F.softmax(logits, dim=1)
+            predictions = torch.argmax(probabilities, dim=1)
+            all_predictions.extend(predictions.view(-1).cpu().numpy())
+            all_labels.extend(batch_y.view(-1).cpu().numpy())
+
+    # -----------------------------------------------------------------------------
+    #                        Evaluation Metrics Calculation
+    # -----------------------------------------------------------------------------
+
+    # Compute label distribution
+    unique_labels, counts = np.unique(all_labels, return_counts=True)
+    label_distribution = {
+        float(label): int(count) for label, count in zip(unique_labels, counts)
+    }
+
+    preds_tensor = torch.tensor(all_predictions)
+    labels_tensor = torch.tensor(all_labels)
+
+    # Sample-wise metrics for each class
+    metrics_sample = {}
+    for label in range(1, NUM_CLASSES):
+        tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
+        fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
+        fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
+        denominator = 2 * tp + fp + fn
+        f1 = 2 * tp / denominator if denominator != 0 else 0.0
+        metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
+
+    # Additional sample-wise metrics
+    cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
+    matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
+
+    # Post-process predictions
+    all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
+    all_labels = np.array(all_labels)
+
+    # Segment-wise evaluation metrics
+    metrics_segment = {}
+    for label in range(1, NUM_CLASSES):
+        fn, fp, tp = segment_evaluation(
+            all_predictions,
+            all_labels,
+            class_label=label,
+            threshold=THRESHOLD,
+            debug_plot=DEBUG_PLOT,
         )
-
-        all_predictions = []
-        all_labels = []
-
-        # Inference loop: process each batch in validation loader
-        with torch.no_grad():
-            for batch_x, batch_y in tqdm(
-                validate_loader, desc=f"Validating Fold {fold+1}", leave=False
-            ):
-                batch_x = batch_x.permute(0, 2, 1).to(device)
-                outputs = model(batch_x)
-                # Use output from the last stage for prediction
-                last_stage_output = outputs[:, -1, :, :]
-                probabilities = F.softmax(last_stage_output, dim=1)
-                predictions = torch.argmax(probabilities, dim=1)
-                all_predictions.extend(predictions.view(-1).cpu().numpy())
-                all_labels.extend(batch_y.view(-1).cpu().numpy())
-
-        # Compute label distribution from the ground truth
-        unique_labels, counts = np.unique(all_labels, return_counts=True)
-        label_distribution = {
-            float(label): int(count) for label, count in zip(unique_labels, counts)
+        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+        metrics_segment[f"{label}"] = {
+            "fn": int(fn),
+            "fp": int(fp),
+            "tp": int(tp),
+            "f1": float(f1),
         }
 
-        preds_tensor = torch.tensor(all_predictions)
-        labels_tensor = torch.tensor(all_labels)
+    # Record validating statistics for the current fold
+    fold_statistics = {
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "fold": fold + 1,
+        "metrics_segment": metrics_segment,
+        "metrics_sample": metrics_sample,
+        "cohen_kappa": cohen_kappa_val,
+        "matthews_corrcoef": matthews_corrcoef_val,
+        "label_distribution": label_distribution,
+    }
+    validating_statistics.append(fold_statistics)
 
-        # Calculate sample-wise metrics (for each class excluding class 0)
-        metrics_sample = {}
-        for label in range(1, NUM_CLASSES):
-            tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
-            fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
-            fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
-            denominator = 2 * tp + fp + fn
-            f1 = 2 * tp / denominator if denominator != 0 else 0.0
-            metrics_sample[str(label)] = {"tp": tp, "fp": fp, "fn": fn, "f1": f1}
+# -----------------------------------------------------------------------------
+#                         Save Evaluation Results
+# -----------------------------------------------------------------------------
 
-        # Compute additional evaluation metrics: Cohen Kappa and Matthews CorrCoef
-        cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
-            preds_tensor, labels_tensor
-        ).item()
-        matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
-            preds_tensor, labels_tensor
-        ).item()
+# Save validating statistics
+VALIDATING_STATS_FILE = os.path.join(
+    result_dir, "validate_stats_mirrored.npy" if FLAG_MIRROR else "validate_stats.npy"
+)
+np.save(VALIDATING_STATS_FILE, validating_statistics)
+print(f"\nValidating statistics saved to {VALIDATING_STATS_FILE}")
 
-        # Post-process predictions and evaluate segment-wise metrics
-        processed_predictions = post_process_predictions(
-            np.array(all_predictions), SAMPLING_FREQ
-        )
-        all_labels_np = np.array(all_labels)
-        metrics_segment = {}
-        for label in range(1, NUM_CLASSES):
-            fn_seg, fp_seg, tp_seg = segment_evaluation(
-                processed_predictions,
-                all_labels_np,
-                class_label=label,
-                threshold=THRESHOLD,
-                debug_plot=DEBUG_PLOT,
-            )
-            f1_seg = (
-                2 * tp_seg / (2 * tp_seg + fp_seg + fn_seg)
-                if (fp_seg + fn_seg) != 0
-                else 0.0
-            )
-            metrics_segment[str(label)] = {
-                "tp": int(tp_seg),
-                "fp": int(fp_seg),
-                "fn": int(fn_seg),
-                "f1": float(f1_seg),
-            }
 
-        # Store validation statistics for this fold
-        fold_statistics = {
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "fold": fold + 1,
-            "metrics_sample": metrics_sample,
-            "metrics_segment": metrics_segment,
-            "cohen_kappa": cohen_kappa_val,
-            "matthews_corrcoef": matthews_corrcoef_val,
-            "label_distribution": label_distribution,
-        }
-        validating_statistics.append(fold_statistics)
+# =============================================================================
+#                               PLOTTING SECTION
+# =============================================================================
 
-    # -------------------------------------------------------------------------
-    # Save Evaluation Results
-    # -------------------------------------------------------------------------
-    validate_stats_file = os.path.join(
-        result_dir, f"validate_stats{'_mirrored' if FLAG_MIRROR else ''}.npy"
+# Define the specific directory for this version
+validate_stats = np.load(VALIDATING_STATS_FILE, allow_pickle=True).tolist()
+
+# Initialize lists to store validation metrics for each fold
+label_distribution = []  # Label distribution
+f1_scores_sample = []  # Sample-wise F1 scores
+f1_scores_segment = []  # Segment-wise F1 scores
+cohen_kappa_scores = []  # Cohen's kappa scores
+matthews_corrcoef_scores = []  # Matthews correlation coefficient scores
+
+for entry in validate_stats:
+    label_dist = entry["label_distribution"]  # dictionary: {label: count}
+
+    # Compute weighted average F1 for sample-wise metrics
+    total_weight_sample = 0.0
+    weighted_f1_sample = 0.0
+    for label_str, stats in entry["metrics_sample"].items():
+        label_int = int(label_str)
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_sample += stats["f1"] * weight
+        total_weight_sample += weight
+    f1_sample_weighted = (
+        weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
     )
-    np.save(validate_stats_file, validating_statistics)
-    print(f"\nValidation statistics saved to {validate_stats_file}")
 
-    # -------------------------------------------------------------------------
-    # Plotting Section: Training Curves and Performance Metrics
-    # -------------------------------------------------------------------------
-    # Load saved training and validation statistics
-    train_stats_file = os.path.join(result_dir, "train_stats.npy")
-    train_stats = list(np.load(train_stats_file, allow_pickle=True))
-    validate_stats = list(np.load(validate_stats_file, allow_pickle=True))
-
-    # Plot training loss curves per fold
-    folds = sorted(set(entry["fold"] for entry in train_stats))
-    for fold in folds:
-        fold_stats = [entry for entry in train_stats if entry["fold"] == fold]
-        epochs = sorted(set(entry["epoch"] for entry in fold_stats))
-        loss_total = {ep: [] for ep in epochs}
-        loss_ce = {ep: [] for ep in epochs}
-        loss_mse = {ep: [] for ep in epochs}
-
-        for entry in fold_stats:
-            loss_total[entry["epoch"]].append(entry["train_loss"])
-            loss_ce[entry["epoch"]].append(entry["train_loss_ce"])
-            loss_mse[entry["epoch"]].append(entry["train_loss_mse"])
-
-        mean_loss_total = [np.mean(loss_total[ep]) for ep in epochs]
-        mean_loss_ce = [np.mean(loss_ce[ep]) for ep in epochs]
-        mean_loss_mse = [np.mean(loss_mse[ep]) for ep in epochs]
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(
-            epochs,
-            mean_loss_total,
-            marker="o",
-            linestyle="-",
-            color="blue",
-            label="Total Loss",
-        )
-        plt.plot(
-            epochs,
-            mean_loss_ce,
-            marker="s",
-            linestyle="--",
-            color="red",
-            label="CE Loss",
-        )
-        plt.plot(
-            epochs,
-            mean_loss_mse,
-            marker="^",
-            linestyle=":",
-            color="green",
-            label="MSE Loss",
-        )
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.yscale("log")
-        plt.title(f"Training Losses (Fold {fold})")
-        plt.grid()
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(os.path.join(result_dir, f"train_loss_fold{fold}.png"), dpi=300)
-        plt.close()
-
-    # Plot fold-wise performance metrics
-    # Initialize lists to store validation metrics for each fold
-    label_distribution = []  # Label distribution
-    f1_scores_sample = []  # Sample-wise F1 scores
-    f1_scores_segment = []  # Segment-wise F1 scores
-    cohen_kappa_scores = []  # Cohen's kappa scores
-    matthews_corrcoef_scores = []  # Matthews correlation coefficient scores
-
-    for entry in validate_stats:
-        label_dist = entry["label_distribution"]  # dictionary: {label: count}
-
-        # Compute weighted average F1 for sample-wise metrics
-        total_weight_sample = 0.0
-        weighted_f1_sample = 0.0
-        for label_str, stats in entry["metrics_sample"].items():
-            label_int = int(label_str)
-            weight = label_dist.get(label_int, 0)
-            weighted_f1_sample += stats["f1"] * weight
-            total_weight_sample += weight
-        f1_sample_weighted = (
-            weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
-        )
-
-        # Compute weighted average F1 for segment-wise metrics
-        total_weight_segment = 0.0
-        weighted_f1_segment = 0.0
-        for label_str, stats in entry["metrics_segment"].items():
-            label_int = int(label_str)
-            weight = label_dist.get(label_int, 0)
-            weighted_f1_segment += stats["f1"] * weight
-            total_weight_segment += weight
-        f1_segment_weighted = (
-            weighted_f1_segment / total_weight_segment
-            if total_weight_segment > 0
-            else 0.0
-        )
-
-        label_distribution.append(label_dist)
-        f1_scores_sample.append(f1_sample_weighted)
-        f1_scores_segment.append(f1_segment_weighted)
-        cohen_kappa_scores.append(entry["cohen_kappa"])
-        matthews_corrcoef_scores.append(entry["matthews_corrcoef"])
-
-    fold_indices = np.arange(1, len(cohen_kappa_scores) + 1)
-    bar_width = 0.2
-    plt.figure(figsize=(12, 6))
-    plt.bar(
-        fold_indices - bar_width * 1.5,
-        cohen_kappa_scores,
-        width=bar_width,
-        label="Cohen Kappa",
-        color="orange",
+    # Compute weighted average F1 for segment-wise metrics
+    total_weight_segment = 0.0
+    weighted_f1_segment = 0.0
+    for label_str, stats in entry["metrics_segment"].items():
+        label_int = int(label_str)
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_segment += stats["f1"] * weight
+        total_weight_segment += weight
+    f1_segment_weighted = (
+        weighted_f1_segment / total_weight_segment if total_weight_segment > 0 else 0.0
     )
-    plt.bar(
-        fold_indices - bar_width / 2,
-        matthews_corrcoef_scores,
-        width=bar_width,
-        label="Matthews CorrCoef",
-        color="purple",
-    )
-    plt.bar(
-        fold_indices + bar_width / 2,
-        weighted_f1_sample,
-        width=bar_width,
-        label="Weighted Sample-wise F1",
-        color="blue",
-    )
-    plt.bar(
-        fold_indices + bar_width * 1.5,
-        weighted_f1_segment,
-        width=bar_width,
-        label=f"Weighted Segment-wise F1 (Threshold={THRESHOLD})",
-        color="green",
-    )
-    plt.xticks(fold_indices)
-    plt.xlabel("Fold")
-    plt.ylabel("Score")
-    title_suffix = " (Mirrored)" if FLAG_MIRROR else ""
-    plt.title(f"Fold-wise Performance Metrics{title_suffix}")
-    plt.legend(loc="lower right")
-    plt.grid(axis="y", linestyle="--", alpha=0.7)
-    plt.tight_layout()
-    filename_suffix = "_mirrored" if FLAG_MIRROR else ""
-    plt.savefig(
-        os.path.join(result_dir, f"validate_metrics{filename_suffix}.png"), dpi=300
-    )
-    plt.close()
 
+    label_distribution.append(label_dist)
+    f1_scores_sample.append(f1_sample_weighted)
+    f1_scores_segment.append(f1_segment_weighted)
+    cohen_kappa_scores.append(entry["cohen_kappa"])
+    matthews_corrcoef_scores.append(entry["matthews_corrcoef"])
 
-if __name__ == "__main__":
-    main()
+# Create a bar plot for validation metrics across folds
+plt.figure(figsize=(12, 6))
+width = 0.2  # Width of each bar
+fold_indices = np.arange(1, len(cohen_kappa_scores) + 1)
+
+plt.bar(
+    fold_indices - width * 1.5,
+    cohen_kappa_scores,
+    width=width,
+    label="Cohen Kappa Coefficient",
+    color="orange",
+)
+plt.bar(
+    fold_indices - width / 2,
+    matthews_corrcoef_scores,
+    width=width,
+    label="Matthews Correlation Coefficient",
+    color="purple",
+)
+plt.bar(
+    fold_indices + width / 2,
+    f1_scores_sample,
+    width=width,
+    label="Weighted Sample-wise F1 Score",
+    color="blue",
+)
+plt.bar(
+    fold_indices + width * 1.5,
+    f1_scores_segment,
+    width=width,
+    label=f"Weighted Segment-wise F1 Score (Threshold={THRESHOLD})",
+    color="green",
+)
+
+plt.xticks(fold_indices)
+plt.xlabel("Fold")
+plt.ylabel("Score")
+title_suffix = " (Mirrored)" if FLAG_MIRROR else ""
+filename_suffix = "_mirrored" if FLAG_MIRROR else ""
+plt.title(f"Fold-wise Performance Metrics{title_suffix}")
+plt.legend(loc="lower right")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.savefig(
+    os.path.join(RESULT_DIR, RESULT_VERSION, f"validate_metrics{filename_suffix}.png"),
+    dpi=300,
+)
+plt.close()

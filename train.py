@@ -6,8 +6,8 @@ MSTCN IMU Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 2.0
-Created     : 2025-03-22
+Version     : 3.0
+Created     : 2025-03-26
 Description : This script trains an MSTCN model on IMU (Inertial Measurement Unit) data
               using cross-validation. It supports multiple datasets (DXI/DXII or FDI/FDII/FDIII)
               and dynamically generates result and checkpoint directories based on the
@@ -34,39 +34,19 @@ from components.datasets import (
 )
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
+from components.model_cnnlstm import CNNLSTM, CNNLSTM_Loss
+from components.model_tcn import TCN, TCN_Loss
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
 # =============================================================================
 #                         Configuration Parameters
 # =============================================================================
 
+# Dataset
 DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
-NUM_STAGES = 2
-NUM_LAYERS = 9
-NUM_HEADS = 8
-INPUT_DIM = 6
-NUM_FILTERS = 128
-KERNEL_SIZE = 3
-DROPOUT = 0.3
-LAMBDA_COEF = 0.15
-TAU = 4
-LEARNING_RATE = 5e-4
 SAMPLING_FREQ_ORIGINAL = 64
 DOWNSAMPLE_FACTOR = 4
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
-WINDOW_LENGTH = 60
-WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
-NUM_FOLDS = 7
-NUM_EPOCHS = 200
-BATCH_SIZE = 64
-NUM_WORKERS = 16
-FLAG_AUGMENT = False
-FLAG_MIRROR = True
-
-# =============================================================================
-#                     Dataset Configuration and Loading
-# =============================================================================
-
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
     dataset_type = "DX"
@@ -84,6 +64,59 @@ elif DATASET.startswith("FD"):
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
+# Dataloader
+WINDOW_LENGTH = 60
+WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+BATCH_SIZE = 64
+NUM_WORKERS = 16
+
+# Model
+MODEL = "CNN_LSTM"  # Options: CNN_LSTM, TCN, MSTCN
+INPUT_DIM = 6
+LAMBDA_COEF = 0.15
+if MODEL in ["TCN", "MSTCN"]:
+    NUM_LAYERS = 9
+    NUM_FILTERS = 128
+    KERNEL_SIZE = 3
+    DROPOUT = 0.3
+    if MODEL == "MSTCN":
+        NUM_STAGES = 2
+elif MODEL == "CNN_LSTM":
+    CONV_FILTERS = (32, 64, 128)
+    LSTM_HIDDEN = 128
+else:
+    raise ValueError(f"Invalid model: {MODEL}")
+
+# Training
+LEARNING_RATE = 5e-4
+NUM_FOLDS = 7
+NUM_EPOCHS = 100
+FLAG_AUGMENT = False
+FLAG_MIRROR = False
+FLAG_SKIP = False
+
+# Check if CUDA is available and set the device accordingly
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# =============================================================================
+#                       Directory and File Management
+# =============================================================================
+
+# Generate version prefix from current datetime (first 12 characters)
+version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+
+# Create result directories using version_prefix
+result_dir = os.path.join("result", version_prefix)
+os.makedirs(result_dir, exist_ok=True)
+
+# Define file paths for saving statistics and configuration
+training_stas_file = os.path.join(result_dir, f"train_stats.npy")
+config_file = os.path.join(result_dir, "config.json")
+
+# =============================================================================
+#                       Data Loading and Pre-processing
+# =============================================================================
 # Define file paths for the dataset
 X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
 Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
@@ -99,27 +132,6 @@ with open(X_R_PATH, "rb") as f:
     X_R = np.array(pickle.load(f), dtype=object)
 with open(Y_R_PATH, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
-
-# =============================================================================
-#                    Result and Checkpoint Setup
-# =============================================================================
-
-# Generate version prefix from current datetime (first 12 characters)
-version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
-
-# Create result and checkpoint directories using version_prefix
-result_dir = os.path.join("result", version_prefix)
-os.makedirs(result_dir, exist_ok=True)
-
-# Define file paths for saving statistics and configuration
-TRAINING_STATS_FILE = os.path.join(result_dir, f"train_stats.npy")
-CONFIG_FILE = os.path.join(result_dir, "config.json")
-
-training_statistics = []
-
-# =============================================================================
-#                          Data Pre-processing
-# =============================================================================
 
 # Apply hand mirroring if flag is set
 if FLAG_MIRROR:
@@ -149,33 +161,26 @@ if DATASET in ["FDII", "FDI"]:
     fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
 
 # =============================================================================
-#                     Cross-Validation Setup
-# =============================================================================
-
-# Create balanced cross-validation folds
-validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
-# To use predefined folds, uncomment the following line:
-# validate_folds = load_predefined_validate_folds()
-
-# =============================================================================
-#                          Device Configuration
-# =============================================================================
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-
-# =============================================================================
 #                     Main Cross-Validation Loop
 # =============================================================================
+
+# Create validation folds based on the dataset type
+if DATASET == "FDI":
+    validate_folds = load_predefined_validate_folds()
+else:
+    validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
+
+training_statistics = []
 
 for fold, validate_subjects in enumerate(
     tqdm(validate_folds, desc="K-Fold", leave=True)
 ):
     # Process only the first fold for demonstration; remove the condition to run all folds.
-    # if fold != 0:
-    #     continue
+    if FLAG_SKIP:
+        FLAG_SKIP = False
+        continue
 
-    # Split training and validation indices based on subject IDs
+    # Split training indices based on subject IDs
     train_indices = [
         i
         for i, subject in enumerate(full_dataset.subject_indices)
@@ -190,33 +195,51 @@ for fold, validate_subjects in enumerate(
     else:
         train_dataset = Subset(full_dataset, train_indices)
 
-    # Create DataLoaders for training and validation
+    # Create DataLoaders for training
     train_loader = DataLoader(
-        Subset(full_dataset, train_indices),
+        dataset=train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
 
-    model = MSTCN(
-        num_stages=NUM_STAGES,
-        num_layers=NUM_LAYERS,
-        num_classes=NUM_CLASSES,
-        input_dim=INPUT_DIM,
-        num_filters=NUM_FILTERS,
-        kernel_size=KERNEL_SIZE,
-        dropout=DROPOUT,
-    ).to(device)
+    # Create Model and Optimizer
+    if MODEL == "TCN":
+        model = TCN(
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+    elif MODEL == "MSTCN":
+        model = MSTCN(
+            num_stages=NUM_STAGES,
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+    elif MODEL == "CNN_LSTM":
+        model = CNNLSTM(
+            input_channels=INPUT_DIM,
+            conv_filters=CONV_FILTERS,
+            lstm_hidden=LSTM_HIDDEN,
+            num_classes=NUM_CLASSES,
+        ).to(device)
+    else:
+        raise ValueError(f"Invalid model: {MODEL}")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Initialize best loss for saving the best model (lower loss is better)
     best_loss = float("inf")
 
-    # =============================================================================
-    #                               Training Loop
-    # =============================================================================
-
+    # Training Loop
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         model.train()
         training_loss = 0.0
@@ -230,10 +253,14 @@ for fold, validate_subjects in enumerate(
             # Rearrange dimensions and move data to the configured device
             batch_x = batch_x.permute(0, 2, 1).to(device)
             batch_y = batch_y.to(device)
-
             optimizer.zero_grad()
             outputs = model(batch_x)
-            ce_loss, mse_loss = MSTCN_Loss(outputs, batch_y)
+            loss_fn = {
+                "MSTCN": MSTCN_Loss,
+                "TCN": TCN_Loss,
+                "CNN_LSTM": CNNLSTM_Loss,
+            }[MODEL]
+            ce_loss, mse_loss = loss_fn(outputs, batch_y)
             loss = ce_loss + LAMBDA_COEF * mse_loss
             loss.backward()
             optimizer.step()
@@ -242,7 +269,7 @@ for fold, validate_subjects in enumerate(
             training_loss_ce += ce_loss.item()
             training_loss_mse += mse_loss.item()
 
-        # ------------------ Save the Best Model Based on Loss ------------------
+        # Save the Best Model Based on Loss
         best_loss = save_best_model(
             model,
             fold=fold + 1,
@@ -268,20 +295,15 @@ for fold, validate_subjects in enumerate(
 #                         Save Results and Configuration
 # =============================================================================
 
-np.save(TRAINING_STATS_FILE, training_statistics)
+np.save(training_stas_file, training_statistics)
+print(f"Training statistics saved to {training_stas_file}")
 
+# Base config info
 config_info = {
     "dataset": DATASET,
     "num_classes": NUM_CLASSES,
-    "num_stages": NUM_STAGES,
-    "num_layers": NUM_LAYERS,
-    "num_heads": NUM_HEADS,
+    "model": MODEL,
     "input_dim": INPUT_DIM,
-    "num_filters": NUM_FILTERS,
-    "kernel_size": KERNEL_SIZE,
-    "dropout": DROPOUT,
-    "lambda_coef": LAMBDA_COEF,
-    "tau": TAU,
     "learning_rate": LEARNING_RATE,
     "sampling_freq": SAMPLING_FREQ,
     "window_size": WINDOW_SIZE,
@@ -293,9 +315,21 @@ config_info = {
     "validate_folds": validate_folds,
 }
 
-# Save the configuration as JSON
-with open(CONFIG_FILE, "w") as f:
-    json.dump(config_info, f, indent=4)
+# Model-specific parameters
+if MODEL == "CNN_LSTM":
+    config_info["conv_filters"] = CONV_FILTERS
+    config_info["lstm_hidden"] = LSTM_HIDDEN
+elif MODEL in ["TCN", "MSTCN"]:
+    config_info["num_layers"] = NUM_LAYERS
+    config_info["num_filters"] = NUM_FILTERS
+    config_info["kernel_size"] = KERNEL_SIZE
+    config_info["dropout"] = DROPOUT
+    if MODEL in ["MSTCN"]:
+        config_info["num_stages"] = NUM_STAGES
+else:
+    raise ValueError(f"Invalid model: {MODEL}")
 
-# Run validate.py
-os.system(f"python validate.py")
+# Save the configuration as JSON
+with open(config_file, "w") as f:
+    json.dump(config_info, f, indent=4)
+print(f"Configuration saved to {config_file}")

@@ -1,0 +1,13 @@
+{
+    "dataset": "FDI",
+    "input_dim": 6,
+    "hidden_dim": 128,
+    "latent_dim": 64,
+    "sampling_freq": 16,
+    "window_size": 960,
+    "batch_size": 64,
+    "num_epochs": 50,
+    "learning_rate": 0.001,
+    "downsample_factor": 4,
+    "mirroring": false
+}
