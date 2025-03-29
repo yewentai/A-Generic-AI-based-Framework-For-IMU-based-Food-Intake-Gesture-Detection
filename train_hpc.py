@@ -6,8 +6,8 @@ MSTCN IMU Training Script (Distributed Version)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 2.0
-Created     : 2025-03-24
+Version     : 3.0
+Created     : 2025-03-29
 Description : This script trains an MSTCN model on IMU data using cross-validation.
               It has been adapted to run on an HPC with multiple GPUs using PyTorch’s
               DistributedDataParallel. The code initializes a distributed process group,
@@ -96,10 +96,10 @@ else:
 LEARNING_RATE = 5e-4
 NUM_FOLDS = 7
 NUM_EPOCHS = 100
-FLAG_AUGMENT_HAND_MIRRORING = False
-FLAG_AUGMENT_AXIS_PERMUTATION = False
-FLAG_AUGMENT_PLANAR_ROTATION = False
-FLAG_AUGMENT_SPATIAL_ORIENTATION = False
+FLAG_AUGMENT_HAND_MIRRORING = True
+FLAG_AUGMENT_AXIS_PERMUTATION = True
+FLAG_AUGMENT_PLANAR_ROTATION = True
+FLAG_AUGMENT_SPATIAL_ORIENTATION = True
 FLAG_DATASET_MIRROR = False
 
 # =============================================================================
