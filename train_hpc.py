@@ -26,7 +26,12 @@ from torch.utils.data import DataLoader, Subset, ConcatDataset, DistributedSampl
 from datetime import datetime
 
 # Import your custom modules
-from components.augmentation import augment_orientation, augment_mirroring
+from components.augmentation import (
+    augment_hand_mirroring,
+    augment_axis_permutation,
+    augment_planar_rotation,
+    augment_spatial_orientation,
+)
 from components.datasets import (
     IMUDataset,
     create_balanced_subject_folds,
@@ -91,9 +96,11 @@ else:
 LEARNING_RATE = 5e-4
 NUM_FOLDS = 7
 NUM_EPOCHS = 100
-FLAG_AUGMENT = True
-FLAG_MIRROR = False
-FLAG_SKIP = False
+FLAG_AUGMENT_HAND_MIRRORING = False
+FLAG_AUGMENT_AXIS_PERMUTATION = False
+FLAG_AUGMENT_PLANAR_ROTATION = False
+FLAG_AUGMENT_SPATIAL_ORIENTATION = False
+FLAG_DATASET_MIRROR = False
 
 # =============================================================================
 #                             Main Training Function
@@ -142,7 +149,7 @@ def main(local_rank=None, world_size=None):
         Y_R = np.array(pickle.load(f), dtype=object)
 
     # Apply hand mirroring if flag is set
-    if FLAG_MIRROR:
+    if FLAG_DATASET_MIRROR:
         X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
     # Merge left-hand and right-hand data
@@ -232,12 +239,16 @@ def main(local_rank=None, world_size=None):
             training_loss_mse = 0.0
 
             for batch_x, batch_y in train_loader:
-                if FLAG_AUGMENT:
-                    # Either use random orientation augmentation:
-                    # batch_x = augment_orientation(batch_x)
-
-                    # Or use the new mirroring augmentation:
-                    batch_x, batch_y = augment_mirroring(batch_x, batch_y)
+                # Optionally apply data augmentation
+                if FLAG_AUGMENT_HAND_MIRRORING:
+                    batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y)
+                if FLAG_AUGMENT_AXIS_PERMUTATION:
+                    batch_x, batch_y = augment_axis_permutation(batch_x, batch_y)
+                if FLAG_AUGMENT_PLANAR_ROTATION:
+                    batch_x, batch_y = augment_planar_rotation(batch_x, batch_y)
+                if FLAG_AUGMENT_SPATIAL_ORIENTATION:
+                    batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y)
+                # Rearrange dimensions and move data to the configured device
                 batch_x = batch_x.permute(0, 2, 1).to(device)
                 batch_y = batch_y.to(device)
 
@@ -279,24 +290,17 @@ def main(local_rank=None, world_size=None):
         np.save(training_stas_file, training_statistics)
         print(f"Training statistics saved to {training_stas_file}")
 
-        # Base config info
+        # Build the initial part of the config with keys up to "model"
         config_info = {
             "dataset": DATASET,
             "num_classes": NUM_CLASSES,
-            "model": MODEL,
-            "input_dim": INPUT_DIM,
-            "learning_rate": LEARNING_RATE,
             "sampling_freq": SAMPLING_FREQ,
             "window_size": WINDOW_SIZE,
-            "num_folds": NUM_FOLDS,
-            "num_epochs": NUM_EPOCHS,
-            "batch_size": BATCH_SIZE,
-            "augmentation": FLAG_AUGMENT,
-            "mirroring": FLAG_MIRROR,
-            "validate_folds": validate_folds,
+            "model": MODEL,
+            "input_dim": INPUT_DIM,
         }
 
-        # Model-specific parameters
+        # Insert model-specific parameters right after the "model" key
         if MODEL == "CNN_LSTM":
             config_info["conv_filters"] = CONV_FILTERS
             config_info["lstm_hidden"] = LSTM_HIDDEN
@@ -305,10 +309,25 @@ def main(local_rank=None, world_size=None):
             config_info["num_filters"] = NUM_FILTERS
             config_info["kernel_size"] = KERNEL_SIZE
             config_info["dropout"] = DROPOUT
-            if MODEL in ["MSTCN"]:
+            if MODEL == "MSTCN":
                 config_info["num_stages"] = NUM_STAGES
         else:
             raise ValueError(f"Invalid model: {MODEL}")
+
+        # Add the remaining configuration parameters after the model-specific ones
+        config_info.update(
+            {
+                "learning_rate": LEARNING_RATE,
+                "batch_size": BATCH_SIZE,
+                "num_folds": NUM_FOLDS,
+                "num_epochs": NUM_EPOCHS,
+                "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
+                "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
+                "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
+                "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
+                "validate_folds": validate_folds,
+            }
+        )
 
         # Save the configuration as JSON
         with open(config_file, "w") as f:

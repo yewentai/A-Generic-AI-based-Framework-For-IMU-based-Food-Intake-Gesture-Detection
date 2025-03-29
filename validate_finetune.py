@@ -76,7 +76,7 @@ def main():
     WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
     BATCH_SIZE = 64
     NUM_WORKERS = 16
-    FLAG_MIRROR = False  # Set to True if mirroring is needed
+    FLAG_DATASET_MIRROR = False  # Set to True if mirroring is needed
 
     # ------------------- Load Fine-Tuned Model and Configuration -------------------
     # Modify this directory to your fine-tuned model folder (should contain fine_tuned_classifier.pth and ft_config.json)
@@ -137,7 +137,7 @@ def main():
     with open(Y_R_PATH, "rb") as f:
         Y_R = np.array(pickle.load(f), dtype=object)
 
-    if FLAG_MIRROR:
+    if FLAG_DATASET_MIRROR:
         from components.pre_processing import hand_mirroring
 
         X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)

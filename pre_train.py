@@ -53,7 +53,7 @@ WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 BATCH_SIZE = 64
 NUM_WORKERS = 16
-FLAG_MIRROR = False
+FLAG_DATASET_MIRROR = False
 
 # VAE model hyperparameters
 INPUT_DIM = 6
@@ -83,7 +83,7 @@ with open(X_R_PATH, "rb") as f:
 with open(Y_R_PATH, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
 
-if FLAG_MIRROR:
+if FLAG_DATASET_MIRROR:
     X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
 # Merge left and right hand data
@@ -149,7 +149,7 @@ config = {
     "NUM_EPOCHS": NUM_EPOCHS,
     "learning_rate": LEARNING_RATE,
     "downsample_factor": DOWNSAMPLE_FACTOR,
-    "mirroring": FLAG_MIRROR,
+    "mirroring": FLAG_DATASET_MIRROR,
 }
 config_path = os.path.join(result_dir, "config.json")
 with open(config_path, "w") as f:

@@ -18,7 +18,6 @@ Usage       : Execute the script in your terminal:
 
 import os
 import json
-import glob
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
@@ -61,7 +60,7 @@ with open(CONFIG_FILE, "r") as f:
 # Set configuration parameters from the loaded JSON
 DATASET = config_info["dataset"]
 NUM_CLASSES = config_info["num_classes"]
-model_type = config_info["model"]
+MODEL = config_info["model"]
 INPUT_DIM = config_info["input_dim"]
 SAMPLING_FREQ = config_info["sampling_freq"]
 WINDOW_SIZE = config_info["window_size"]
@@ -69,7 +68,7 @@ BATCH_SIZE = config_info["batch_size"]
 NUM_WORKERS = 4
 THRESHOLD = 0.5
 DEBUG_PLOT = False
-FLAG_MIRROR = False
+FLAG_DATASET_MIRROR = False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -106,7 +105,7 @@ with open(Y_R_PATH, "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
 
 # Optionally apply hand mirroring if the flag is set
-if FLAG_MIRROR:
+if FLAG_DATASET_MIRROR:
     X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
 # Merge left and right data
@@ -142,7 +141,7 @@ for fold, validate_subjects in enumerate(
         continue
 
     # Instantiate the model based on the saved configuration
-    if model_type == "TCN":
+    if MODEL == "TCN":
         NUM_LAYERS = config_info["num_layers"]
         NUM_FILTERS = config_info["num_filters"]
         KERNEL_SIZE = config_info["kernel_size"]
@@ -155,7 +154,7 @@ for fold, validate_subjects in enumerate(
             kernel_size=KERNEL_SIZE,
             dropout=DROPOUT,
         ).to(device)
-    elif model_type == "MSTCN":
+    elif MODEL == "MSTCN":
         NUM_STAGES = config_info["num_stages"]
         NUM_LAYERS = config_info["num_layers"]
         NUM_FILTERS = config_info["num_filters"]
@@ -170,7 +169,7 @@ for fold, validate_subjects in enumerate(
             kernel_size=KERNEL_SIZE,
             dropout=DROPOUT,
         ).to(device)
-    elif model_type == "CNN_LSTM":
+    elif MODEL == "CNN_LSTM":
         conv_filters = config_info["conv_filters"]
         lstm_hidden = config_info["lstm_hidden"]
         model = CNNLSTM(
@@ -180,7 +179,7 @@ for fold, validate_subjects in enumerate(
             num_classes=NUM_CLASSES,
         ).to(device)
     else:
-        raise ValueError(f"Invalid model: {model_type}")
+        raise ValueError(f"Invalid model: {MODEL}")
 
     # Load the checkpoint for the current fold
     state_dict = torch.load(CHECKPOINT_PATH, map_location=device, weights_only=True)
@@ -299,7 +298,8 @@ for fold, validate_subjects in enumerate(
 
 # Save validating statistics
 VALIDATING_STATS_FILE = os.path.join(
-    result_dir, "validate_stats_mirrored.npy" if FLAG_MIRROR else "validate_stats.npy"
+    result_dir,
+    "validate_stats_mirrored.npy" if FLAG_DATASET_MIRROR else "validate_stats.npy",
 )
 np.save(VALIDATING_STATS_FILE, validating_statistics)
 print(f"\nValidating statistics saved to {VALIDATING_STATS_FILE}")
@@ -389,8 +389,8 @@ plt.bar(
 plt.xticks(fold_indices)
 plt.xlabel("Fold")
 plt.ylabel("Score")
-title_suffix = " (Mirrored)" if FLAG_MIRROR else ""
-filename_suffix = "_mirrored" if FLAG_MIRROR else ""
+title_suffix = " (Mirrored)" if FLAG_DATASET_MIRROR else ""
+filename_suffix = "_mirrored" if FLAG_DATASET_MIRROR else ""
 plt.title(f"Fold-wise Performance Metrics{title_suffix}")
 plt.legend(loc="lower right")
 plt.grid(axis="y", linestyle="--", alpha=0.7)

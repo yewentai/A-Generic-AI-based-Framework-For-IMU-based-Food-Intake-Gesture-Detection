@@ -122,7 +122,7 @@ def main():
     WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
     BATCH_SIZE = 64
     NUM_WORKERS = 16
-    FLAG_MIRROR = False  # Set to True if mirroring is needed
+    FLAG_DATASET_MIRROR = False  # Set to True if mirroring is needed
 
     # Fine-tuning parameters
     num_epochs_ft = 50
@@ -169,7 +169,7 @@ def main():
     with open(Y_R_PATH, "rb") as f:
         Y_R = np.array(pickle.load(f), dtype=object)
 
-    if FLAG_MIRROR:
+    if FLAG_DATASET_MIRROR:
         X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
     # Merge left and right data
@@ -222,7 +222,7 @@ def main():
         "num_epochs_ft": num_epochs_ft,
         "learning_rate_ft": learning_rate_ft,
         "downsample_factor": DOWNSAMPLE_FACTOR,
-        "mirroring": FLAG_MIRROR,
+        "mirroring": FLAG_DATASET_MIRROR,
         "freeze_encoder": freeze_encoder,
         "pretrained_dir": pretrained_dir,
     }
