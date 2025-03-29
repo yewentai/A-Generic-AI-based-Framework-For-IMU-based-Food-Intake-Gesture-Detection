@@ -26,7 +26,11 @@ from datetime import datetime
 from tqdm import tqdm
 
 # Import custom modules from components package
-from components.augmentation import augment_orientation, augment_mirroring
+from components.augmentation import (
+    augment_orientation,
+    augment_mirroring,
+    augment_rotation,
+)
 from components.datasets import (
     IMUDataset,
     create_balanced_subject_folds,
@@ -91,7 +95,9 @@ else:
 LEARNING_RATE = 5e-4
 NUM_FOLDS = 7
 NUM_EPOCHS = 100
-FLAG_AUGMENT = True
+FLAG_AUGMENT_ORIENTATION = False
+FLAG_AUGMENT_MIRRORING = True
+FLAG_AUGMENT_ROTATION = False
 FLAG_MIRROR = False
 FLAG_SKIP = False
 
@@ -248,12 +254,12 @@ for fold, validate_subjects in enumerate(
 
         for batch_x, batch_y in train_loader:
             # Optionally apply data augmentation
-            if FLAG_AUGMENT:
-                # Either use random orientation augmentation:
-                # batch_x = augment_orientation(batch_x)
-
-                # Or use the new mirroring augmentation:
+            if FLAG_AUGMENT_ORIENTATION:
+                batch_x, batch_y = augment_orientation(batch_x, batch_y)
+            if FLAG_AUGMENT_MIRRORING:
                 batch_x, batch_y = augment_mirroring(batch_x, batch_y)
+            if FLAG_AUGMENT_ROTATION:
+                batch_x, batch_y = augment_rotation(batch_x, batch_y)
             # Rearrange dimensions and move data to the configured device
             batch_x = batch_x.permute(0, 2, 1).to(device)
             batch_y = batch_y.to(device)
@@ -314,7 +320,9 @@ config_info = {
     "num_folds": NUM_FOLDS,
     "num_epochs": NUM_EPOCHS,
     "batch_size": BATCH_SIZE,
-    "augmentation": FLAG_AUGMENT,
+    "augmentation_orientation": FLAG_AUGMENT_ORIENTATION,
+    "augmentation_mirroring": FLAG_AUGMENT_MIRRORING,
+    "augmentation_rotation": FLAG_AUGMENT_ROTATION,
     "mirroring": FLAG_MIRROR,
     "validate_folds": validate_folds,
 }

@@ -45,11 +45,11 @@ from components.pre_processing import hand_mirroring
 RESULT_DIR = "result"
 
 # Automatically select the lastest version based on timestamp
-all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
-RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
+# all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
+# RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
 
 # Or manually set the version
-# RESULT_VERSION = "202503251515"
+RESULT_VERSION = "202503281533"
 
 result_dir = os.path.join(RESULT_DIR, RESULT_VERSION)
 CONFIG_FILE = os.path.join(result_dir, "config.json")
@@ -69,7 +69,7 @@ BATCH_SIZE = config_info["batch_size"]
 NUM_WORKERS = 4
 THRESHOLD = 0.5
 DEBUG_PLOT = False
-FLAG_MIRROR = True
+FLAG_MIRROR = False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")

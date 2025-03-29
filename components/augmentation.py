@@ -119,3 +119,28 @@ def augment_mirroring(batch_x, batch_y):
     augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
 
     return augmented_batch_x, augmented_batch_y
+
+
+def augment_rotation(batch_x, batch_y):
+    """
+    Augments the input batch by applying random rotations to the samples.
+    It generates a new batch of rotated samples and keeps the labels unchanged.
+
+    Args:
+        batch_x: Input tensor of shape (batch_size, sequence_length, features)
+        batch_y: Input labels of shape (batch_size, ...)
+
+    Returns:
+        augmented_batch_x: Tensor of shape (2 * batch_size, sequence_length, features)
+        augmented_batch_y: Tensor of shape (2 * batch_size, ...)
+    """
+    # Apply rotation augmentation to the original batch
+    rotated_batch_x = augment_orientation(batch_x)
+
+    # Concatenate the original and rotated samples along the batch dimension
+    augmented_batch_x = torch.cat([batch_x, rotated_batch_x], dim=0)
+
+    # Duplicate the labels for the rotated samples
+    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+
+    return augmented_batch_x, augmented_batch_y
