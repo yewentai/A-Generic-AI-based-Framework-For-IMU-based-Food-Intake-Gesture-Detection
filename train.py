@@ -26,7 +26,7 @@ from datetime import datetime
 from tqdm import tqdm
 
 # Import custom modules from components package
-from components.augmentation import augment_orientation
+from components.augmentation import augment_orientation, augment_mirroring
 from components.datasets import (
     IMUDataset,
     create_balanced_subject_folds,
@@ -71,7 +71,7 @@ BATCH_SIZE = 64
 NUM_WORKERS = 16
 
 # Model
-MODEL = "CNN_LSTM"  # Options: CNN_LSTM, TCN, MSTCN
+MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
 INPUT_DIM = 6
 LAMBDA_COEF = 0.15
 if MODEL in ["TCN", "MSTCN"]:
@@ -91,7 +91,7 @@ else:
 LEARNING_RATE = 5e-4
 NUM_FOLDS = 7
 NUM_EPOCHS = 100
-FLAG_AUGMENT = False
+FLAG_AUGMENT = True
 FLAG_MIRROR = False
 FLAG_SKIP = False
 
@@ -249,7 +249,11 @@ for fold, validate_subjects in enumerate(
         for batch_x, batch_y in train_loader:
             # Optionally apply data augmentation
             if FLAG_AUGMENT:
-                batch_x = augment_orientation(batch_x)
+                # Either use random orientation augmentation:
+                # batch_x = augment_orientation(batch_x)
+
+                # Or use the new mirroring augmentation:
+                batch_x, batch_y = augment_mirroring(batch_x, batch_y)
             # Rearrange dimensions and move data to the configured device
             batch_x = batch_x.permute(0, 2, 1).to(device)
             batch_y = batch_y.to(device)

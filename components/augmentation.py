@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from components.pre_processing import hand_mirroring
 
 
 def rotation_matrix_x(theta):
@@ -91,3 +92,30 @@ def augment_orientation(batch_x, probability=0.5):
             )
 
     return augmented_batch
+
+
+def augment_mirroring(batch_x, batch_y):
+    """
+    Augments the input batch by adding mirrored versions of each sample.
+    It applies the hand_mirroring transformation (which performs the mirroring operation)
+    to generate the mirrored samples. The returned data contains both the original
+    and the mirrored samples, with labels remaining the same.
+
+    Args:
+        batch_x: Input tensor of shape (batch_size, sequence_length, features)
+        batch_y: Input labels of shape (batch_size, ...)
+
+    Returns:
+        augmented_batch_x: Tensor of shape (2 * batch_size, sequence_length, features)
+        augmented_batch_y: Tensor of shape (2 * batch_size, ...)
+    """
+    # Generate mirrored data using the hand_mirroring function
+    mirrored_batch_x = hand_mirroring(batch_x)
+
+    # Concatenate the original and mirrored samples along the batch dimension
+    augmented_batch_x = torch.cat([batch_x, mirrored_batch_x], dim=0)
+
+    # Duplicate the labels for the mirrored samples
+    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+
+    return augmented_batch_x, augmented_batch_y
