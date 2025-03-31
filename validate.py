@@ -18,6 +18,7 @@ Usage       : Execute the script in your terminal:
 
 import os
 import json
+import glob
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
@@ -44,11 +45,11 @@ from components.pre_processing import hand_mirroring
 RESULT_DIR = "result"
 
 # Automatically select the lastest version based on timestamp
-# all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
-# RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
+all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
+RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
 
 # Or manually set the version
-RESULT_VERSION = "202503281533"
+# RESULT_VERSION = "202503281533"
 
 result_dir = os.path.join(RESULT_DIR, RESULT_VERSION)
 CONFIG_FILE = os.path.join(result_dir, "config.json")

@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from pre_processing import hand_mirroring
+from components.pre_processing import hand_mirroring
 
 
 def rotation_matrix_x(angle_rad):

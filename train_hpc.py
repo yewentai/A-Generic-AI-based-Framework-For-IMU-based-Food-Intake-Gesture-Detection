@@ -187,6 +187,10 @@ def main(local_rank=None, world_size=None):
 
     # -------------------- Cross-Validation Loop --------------------
     for fold, validate_subjects in enumerate(validate_folds):
+        # Skip the first 5 folds
+        if fold < 5:
+            continue
+
         # Split training and validation indices based on subject IDs
         train_indices = [
             i
