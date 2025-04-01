@@ -3,6 +3,11 @@
     "num_classes": 3,
     "model": "MSTCN",
     "input_dim": 6,
+    "num_layers": 9,
+    "num_filters": 128,
+    "kernel_size": 3,
+    "dropout": 0.3,
+    "num_stages": 2,
     "learning_rate": 0.0005,
     "sampling_freq": 16,
     "window_size": 960,
@@ -60,10 +65,5 @@
             11,
             10
         ]
-    ],
-    "num_layers": 9,
-    "num_filters": 128,
-    "kernel_size": 3,
-    "dropout": 0.3,
-    "num_stages": 2
+    ]
 }
