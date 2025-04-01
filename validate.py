@@ -69,7 +69,7 @@ BATCH_SIZE = config_info["batch_size"]
 NUM_WORKERS = 4
 THRESHOLD = 0.5
 DEBUG_PLOT = False
-FLAG_DATASET_MIRROR = False
+FLAG_DATASET_MIRROR = True
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
