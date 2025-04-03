@@ -6,8 +6,7 @@ MSTCN IMU Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 3.0
-Created     : 2025-03-29
+Edited      : 2025-03-29
 Description : This script trains an MSTCN model on IMU (Inertial Measurement Unit) data
               using cross-validation. It supports multiple datasets (DXI/DXII or FDI/FDII/FDIII)
               and dynamically generates result and checkpoint directories based on the

@@ -6,8 +6,7 @@ MSTCN IMU Validating Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 3.0
-Created     : 2025-03-29
+Edited      : 2025-03-29
 Description : This script validates a trained MSTCN model on the full IMU dataset.
               It loads the dataset and saved checkpoints for each fold,
               runs inference, and computes comprehensive evaluation metrics.

@@ -6,8 +6,7 @@ MSTCN IMU Training Script (Distributed Version)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Version     : 3.0
-Created     : 2025-03-29
+Edited      : 2025-03-29
 Description : This script trains an MSTCN model on IMU data using cross-validation.
               It has been adapted to run on an HPC with multiple GPUs using PyTorch’s
               DistributedDataParallel. The code initializes a distributed process group,

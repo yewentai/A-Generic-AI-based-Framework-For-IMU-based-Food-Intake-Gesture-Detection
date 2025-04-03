@@ -1,0 +1,4326 @@
+----- Start of test_eval_bi.py -----
+import numpy as np
+import matplotlib.pyplot as plt
+from components.evaluation import segment_evaluation
+
+# Ground Truth sequence
+# fmt: off
+gt = np.array([
+    0, 0, 1, 1, 1, 0, 0,  # Normal gesture
+    0, 0, 0, 0, 0, 0, 0,  # No gesture (for insertion test)
+    1, 1, 1, 1, 0, 0, 0,  # Gesture for underfill and overfill tests
+    0, 1, 1, 0, 1, 1, 0,  # Two gestures for merge test
+    1, 1, 1, 1, 1, 1, 1,  # Long gesture for fragmentation test
+    0, 0, 1, 1, 1, 0, 0,  # Gesture for deletion test
+    1, 1, 0, 1, 1, 1, 0
+])
+
+# Prediction sequence
+pred = np.array([
+    0, 1, 1, 1, 1, 1, 0,  # Overfill
+    0, 1, 1, 0, 0, 0, 0,  # Insertion
+    1, 1, 0, 0, 0, 0, 0,  # Underfill
+    0, 1, 1, 1, 1, 1, 0,  # Merge
+    1, 0, 1, 0, 1, 0, 1,  # Fragmentation
+    0, 0, 0, 0, 0, 0, 0,  # Deletion
+    0, 1, 1, 1, 0, 1, 1   # Mismatch
+])
+# fmt: on
+
+# Plot the sequences
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
+
+# Plot ground truth
+ax1.step(range(len(gt)), gt, where="post", label="Ground Truth", color="blue")
+ax1.set_ylabel("State")
+ax1.set_ylim(-0.1, 1.1)
+ax1.legend()
+ax1.set_title("Ground Truth")
+
+# Plot prediction
+ax2.step(range(len(pred)), pred, where="post", label="Prediction", color="red")
+ax2.set_xlabel("Time")
+ax2.set_ylabel("State")
+ax2.set_ylim(-0.1, 1.1)
+ax2.legend()
+ax2.set_title("Prediction")
+
+# Add labels for different situations
+situations = [
+    "Overfill",
+    "Insertion",
+    "Underfill",
+    "Merge",
+    "Fragmentation",
+    "Deletion",
+    "Mismatch",
+]
+for i, situation in enumerate(situations):
+    ax1.text(i * 7 + 3, 1.15, situation, ha="center", va="center", rotation=45)
+    ax2.text(i * 7 + 3, -0.15, situation, ha="center", va="center", rotation=45)
+
+plt.suptitle(f"Ground Truth vs Prediction")
+plt.tight_layout()
+plt.show()
+
+# Calculate F1 score sample-wise
+tp = np.sum(np.logical_and(pred == 1, gt == 1))
+fp = np.sum(np.logical_and(pred == 1, gt == 0))
+fn = np.sum(np.logical_and(pred == 0, gt == 1))
+precision = tp / (tp + fp)
+recall = tp / (tp + fn)
+f1_score = 2 * precision * recall / (precision + recall)
+print(f"Sample-wise - TP: {tp}, FP: {fp}, FN: {fn}")
+print(f"F1 Score (sample): {f1_score:.4f}")
+
+# Calculate F1 score segment-wise
+fn_seg, fp_seg, tp_seg = segment_evaluation(pred, gt, 1, 0.5, debug_plot=True)
+precision = tp_seg / (tp_seg + fp_seg)
+recall = tp_seg / (tp_seg + fn_seg)
+f1_score_seg = 2 * precision * recall / (precision + recall)
+print(f"Segment-wise - TP: {tp_seg}, FP: {fp_seg}, FN: {fn_seg}")
+print(f"F1 Score (seg): {f1_score_seg:.4f}")
+
+----- End of test_eval_bi.py -----
+
+----- Start of analyze_result.py -----
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import glob
+
+# -------------------------
+# Configuration
+RESULT_DIR = "result"  # Root folder for all results
+
+# Automatically select the latest version based on timestamp
+all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
+RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
+
+# Or manually set the version
+# RESULT_VERSION = "202503281533"
+
+RESULT_PATH = os.path.join(RESULT_DIR, RESULT_VERSION)  # Path to this version
+
+# -------------------------
+# Load Training and Validation Stats
+train_stats_file = os.path.join(RESULT_PATH, f"train_stats.npy")
+train_stats = np.load(train_stats_file, allow_pickle=True).tolist()
+
+# -------------------------
+# Training Curve: Plot Loss Per Fold
+
+# Identify all unique folds
+folds = sorted(set(entry["fold"] for entry in train_stats))
+
+for fold in folds:
+    # Filter entries belonging to the current fold
+    stats_fold = [entry for entry in train_stats if entry["fold"] == fold]
+
+    # Extract all unique epochs in this fold
+    epochs = sorted(set(entry["epoch"] for entry in stats_fold))
+
+    # Initialize per-epoch loss containers
+    loss_per_epoch = {epoch: [] for epoch in epochs}
+    loss_ce_per_epoch = {epoch: [] for epoch in epochs}
+    loss_mse_per_epoch = {epoch: [] for epoch in epochs}
+
+    # Group loss values by epoch
+    for entry in stats_fold:
+        loss_per_epoch[entry["epoch"]].append(entry["train_loss"])
+        loss_ce_per_epoch[entry["epoch"]].append(entry["train_loss_ce"])
+        loss_mse_per_epoch[entry["epoch"]].append(entry["train_loss_mse"])
+
+    # Compute mean loss per epoch
+    mean_loss = [np.mean(loss_per_epoch[epoch]) for epoch in epochs]
+    mean_ce = [np.mean(loss_ce_per_epoch[epoch]) for epoch in epochs]
+    mean_mse = [np.mean(loss_mse_per_epoch[epoch]) for epoch in epochs]
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs, mean_loss, linestyle="-", color="blue", label="Total Loss")
+    plt.plot(epochs, mean_ce, linestyle="--", color="red", label="CE Loss")
+    plt.plot(epochs, mean_mse, linestyle=":", color="green", label="MSE Loss")
+    plt.yscale("log")
+
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss (Log Scale)")
+    plt.title(f"Training Losses Over Epochs (Fold {fold})")
+    plt.grid(True, which="both", linestyle="--", alpha=0.6)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(RESULT_PATH, f"train_loss_fold{fold}.png"), dpi=300)
+    plt.close()
+
+----- End of analyze_result.py -----
+
+----- Start of analyze_raw_data.py -----
+import os
+import sys
+import pickle
+import random
+
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.signal as signal
+
+# Add project root to Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(project_root)
+
+# Configuration
+DATA_PATH = "./dataset/FD/FD-I/"
+SAVE_DIR = "./analysis/FD-I/"
+os.makedirs(SAVE_DIR, exist_ok=True)
+
+
+def load_data(side="L"):
+    """Load data for specified body side"""
+    with open(os.path.join(DATA_PATH, f"X_{side}.pkl"), "rb") as f:
+        X = pickle.load(f)
+    with open(os.path.join(DATA_PATH, f"Y_{side}.pkl"), "rb") as f:
+        Y = pickle.load(f)
+    return X, Y
+
+
+def basic_statistics(X, Y, side):
+    """Print detailed dataset statistics and write to a txt file"""
+    stats_file = os.path.join(SAVE_DIR, "basic_statistics.txt")
+
+    # Compute label distribution per subject
+    label_counts_per_subject = []
+
+    for subj_idx, y in enumerate(Y):
+        label_counts = {0: 0, 1: 0, 2: 0}
+        unique, counts = np.unique(y, return_counts=True)
+        for label, count in zip(unique, counts):
+            label_counts[label] = count
+
+        label_counts_per_subject.append(
+            (subj_idx + 1, label_counts[0], label_counts[1], label_counts[2])
+        )
+
+    # Compute overall label counts
+    total_counts = np.sum(
+        [[count[1], count[2], count[3]] for count in label_counts_per_subject], axis=0
+    )
+
+    # Write to file
+    with open(stats_file, "a") as f:  # Append to existing file
+        f.write(f"\nBasic Statistics ({side} side):\n")
+        f.write(f"Number of subjects: {len(X)}\n")
+        f.write(f"Input features: {X[0].shape[1]}\n")  # Assuming [time, features]
+
+        total_samples = sum(len(subj) for subj in Y)
+        f.write(f"Total samples: {total_samples:,}\n")
+
+        unique_labels = np.unique(np.concatenate(Y))
+        f.write(f"Unique labels: {unique_labels}\n")
+
+        # Write overall label-specific counts
+        f.write(f"Samples with label 0: {total_counts[0]:,}\n")
+        f.write(f"Samples with label 1: {total_counts[1]:,}\n")
+        f.write(f"Samples with label 2: {total_counts[2]:,}\n")
+
+        # Write per-subject statistics
+        f.write("\nSubject-wise Sample Distribution:\n")
+        f.write("Subject_ID | Label_0 | Label_1 | Label_2\n")
+        f.write("------------------------------------\n")
+        for subj_idx, count_0, count_1, count_2 in label_counts_per_subject:
+            f.write(f"{subj_idx:<10} | {count_0:<7} | {count_1:<7} | {count_2:<7}\n")
+
+    print(f"Basic Statistics ({side} side) are saved to:", stats_file)
+
+
+def plot_sample_distribution(Y, side):
+    """Plot distribution of samples per subject with label breakdown"""
+    label_colors = {0: "blue", 1: "green", 2: "red"}
+    label_names = {0: "Label 0", 1: "Label 1", 2: "Label 2"}
+
+    num_subjects = len(Y)
+    label_counts = {0: [], 1: [], 2: []}
+
+    # Count samples for each label per subject
+    for y in Y:
+        counts = {label: np.sum(np.array(y) == label) for label in [0, 1, 2]}
+        for label in [0, 1, 2]:
+            label_counts[label].append(counts[label])
+
+    # Stack plot
+    fig, ax = plt.subplots(figsize=(12, 6))
+    bottom = np.zeros(num_subjects)  # Track the bottom for stacking
+
+    for label in [0, 1, 2]:
+        ax.bar(
+            range(num_subjects),
+            label_counts[label],
+            label=label_names[label],
+            color=label_colors[label],
+            bottom=bottom,
+        )
+        bottom += np.array(label_counts[label])  # Update bottom for next stack
+
+    ax.set_title(f"Sample Distribution by Label ({side} side)")
+    ax.set_xlabel("Subject ID")
+    ax.set_ylabel("Number of Samples")
+    ax.legend()
+    ax.grid(axis="y", linestyle="--", alpha=0.6)
+
+    plt.savefig(os.path.join(SAVE_DIR, f"sample_distribution_{side}.png"), dpi=150)
+    plt.close()
+
+
+def segment_by_label(Y):
+    """
+    Identify continuous segments of label 0, 1, and 2.
+
+    Returns:
+        segments_dict: {label_value: [(start_idx, end_idx), ...]}
+    """
+    segments_dict = {0: [], 1: [], 2: []}
+
+    current_label = Y[0]
+    start_idx = 0
+
+    for i in range(1, len(Y)):
+        if Y[i] != current_label:  # Label changed
+            segments_dict[current_label].append((start_idx, i))  # Store segment
+            start_idx = i
+            current_label = Y[i]
+
+    # Add last segment
+    segments_dict[current_label].append((start_idx, len(Y)))
+
+    return segments_dict
+
+
+def analyze_segments(X, Y, side="L"):
+    """
+    1. Segment continuous 1, 2 segments based on `Y`.
+    2. For each subject (subjects 5,6,7), randomly select one segment for each label (1, 2) for visualization.
+    3. For each selected segment, also plot the before and after period of the same length as the segment, and highlight the during period.
+    """
+    save_dir = os.path.join(SAVE_DIR, "segments")
+    os.makedirs(save_dir, exist_ok=True)
+
+    fs = 16  # Sampling frequency (Hz)
+    subject_indices = [4, 5, 6]
+
+    for subj_idx in subject_indices:
+        imu_data = X[subj_idx]  # (T, F)
+        labels = Y[subj_idx]  # (T,)
+
+        # Get segments for labels 1, 2 based on Y
+        segments_dict = segment_by_label(labels)
+
+        # Randomly select one segment for each label (1, 2)
+        selected_segments = {}
+        for label in [1, 2]:
+            if len(segments_dict[label]) > 0:
+                selected_segments[label] = random.choice(segments_dict[label])
+
+        # For each selected segment, plot the before, during, and after periods.
+        for label, (start, end) in selected_segments.items():
+            seg_length = end - start
+
+            # Define the before and after segments with the same length.
+            before_start = max(0, start - seg_length)
+            after_end = min(len(imu_data), end + seg_length)
+
+            # Extract the combined data: before, during, and after.
+            combined_data = imu_data[before_start:after_end, :]
+            time_combined = np.arange(before_start, after_end) / fs
+
+            plt.figure(figsize=(12, 6))
+            num_features = combined_data.shape[1]
+            for feature_idx in range(num_features):
+                plt.plot(
+                    time_combined,
+                    combined_data[:, feature_idx],
+                    label=f"Feature {feature_idx+1}",
+                    alpha=0.7,
+                )
+
+            # Highlight the "during" period.
+            plt.axvspan(
+                start / fs, end / fs, color="red", alpha=0.2, label="During period"
+            )
+
+            plt.title(f"Subject {subj_idx+1} - Label {label} - Time Domain ({side})")
+            plt.xlabel("Time (s)")
+            plt.ylabel("Amplitude")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.savefig(
+                os.path.join(
+                    save_dir, f"subj{subj_idx+1}_label{label}_time_{side}.png"
+                ),
+                dpi=150,
+            )
+            plt.close()
+
+
+def main():
+    # Load and analyze both sides
+    for side in ["L", "R"]:
+        print(f"\nAnalyzing {side} side data...")
+        X, Y = load_data(side)
+
+        # Basic statistics
+        basic_statistics(X, Y, side)
+        plot_sample_distribution(Y, side)
+        analyze_segments(X, Y, side=side)
+
+
+if __name__ == "__main__":
+    main()
+    print(f"Analysis saved to: {os.path.abspath(SAVE_DIR)}")
+
+----- End of analyze_raw_data.py -----
+
+----- Start of train_hpc.py -----
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+MSTCN IMU Training Script (Distributed Version)
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-03-29
+Description : This script trains an MSTCN model on IMU data using cross-validation.
+              It has been adapted to run on an HPC with multiple GPUs using PyTorch’s
+              DistributedDataParallel. The code initializes a distributed process group,
+              wraps the model with DDP, and uses DistributedSampler to partition data
+              among GPUs. Only the process with rank 0 handles checkpoint saving and logging.
+===============================================================================
+"""
+
+import os
+import json
+import pickle
+import numpy as np
+import torch
+import torch.distributed as dist
+from torch.utils.data import DataLoader, Subset, ConcatDataset, DistributedSampler
+from datetime import datetime
+
+# Import your custom modules
+from components.augmentation import (
+    augment_hand_mirroring,
+    augment_axis_permutation,
+    augment_planar_rotation,
+    augment_spatial_orientation,
+)
+from components.datasets import (
+    IMUDataset,
+    create_balanced_subject_folds,
+    load_predefined_validate_folds,
+)
+from components.pre_processing import hand_mirroring
+from components.checkpoint import save_best_model
+from components.model_cnnlstm import CNNLSTM, CNNLSTM_Loss
+from components.model_tcn import TCN, TCN_Loss
+from components.model_mstcn import MSTCN, MSTCN_Loss
+
+# =============================================================================
+#                         Configuration Parameters
+# =============================================================================
+
+# Dataset
+DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
+SAMPLING_FREQ_ORIGINAL = 64
+DOWNSAMPLE_FACTOR = 4
+SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+if DATASET.startswith("DX"):
+    NUM_CLASSES = 2
+    dataset_type = "DX"
+    sub_version = (
+        DATASET.replace("DX", "").upper() or "I"
+    )  # Handles formats like DX/DXII
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
+elif DATASET.startswith("FD"):
+    NUM_CLASSES = 3
+    dataset_type = "FD"
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
+
+# Dataloader
+WINDOW_LENGTH = 60
+WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+BATCH_SIZE = 64
+NUM_WORKERS = 16
+
+# Model
+MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
+INPUT_DIM = 6
+LAMBDA_COEF = 0.15
+if MODEL in ["TCN", "MSTCN"]:
+    NUM_LAYERS = 9
+    NUM_FILTERS = 128
+    KERNEL_SIZE = 3
+    DROPOUT = 0.3
+    if MODEL == "MSTCN":
+        NUM_STAGES = 2
+elif MODEL == "CNN_LSTM":
+    CONV_FILTERS = (32, 64, 128)
+    LSTM_HIDDEN = 128
+else:
+    raise ValueError(f"Invalid model: {MODEL}")
+
+# Training
+LEARNING_RATE = 5e-4
+NUM_FOLDS = 7
+NUM_EPOCHS = 100
+FLAG_AUGMENT_HAND_MIRRORING = True
+FLAG_AUGMENT_AXIS_PERMUTATION = True
+FLAG_AUGMENT_PLANAR_ROTATION = True
+FLAG_AUGMENT_SPATIAL_ORIENTATION = True
+FLAG_DATASET_MIRROR = False
+
+# =============================================================================
+#                             Main Training Function
+# =============================================================================
+
+
+def main(local_rank=None, world_size=None):
+    if local_rank is None or world_size is None:
+        local_rank = int(os.environ["LOCAL_RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+    dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
+    torch.cuda.set_device(local_rank)
+    device = torch.device("cuda", local_rank)
+
+    if local_rank == 0:
+        print(f"[Rank {local_rank}] Using device: {device}")
+        overall_start = datetime.now()
+        print("Training started at:", overall_start)
+
+        # Generate version prefix from current datetime (first 12 characters)
+        version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+
+        # Create result directories using version_prefix
+        result_dir = os.path.join("result", version_prefix)
+        os.makedirs(result_dir, exist_ok=True)
+
+        # Define file paths for saving statistics and configuration
+        training_stas_file = os.path.join(result_dir, f"train_stats.npy")
+        config_file = os.path.join(result_dir, "config.json")
+
+    # -------------------- Dataset Loading --------------------
+    # Define file paths for the dataset
+    X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+    Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+    X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+    Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+
+    # Load left-hand and right-hand data from pickle files
+    with open(X_L_PATH, "rb") as f:
+        X_L = np.array(pickle.load(f), dtype=object)
+    with open(Y_L_PATH, "rb") as f:
+        Y_L = np.array(pickle.load(f), dtype=object)
+    with open(X_R_PATH, "rb") as f:
+        X_R = np.array(pickle.load(f), dtype=object)
+    with open(Y_R_PATH, "rb") as f:
+        Y_R = np.array(pickle.load(f), dtype=object)
+
+    # Apply hand mirroring if flag is set
+    if FLAG_DATASET_MIRROR:
+        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+    # Merge left-hand and right-hand data
+    X = np.concatenate([X_L, X_R], axis=0)
+    Y = np.concatenate([Y_L, Y_R], axis=0)
+
+    # Create the full dataset using the defined window size
+    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
+
+    # Augment Dataset with FDIII (if using FDII/FDI)
+    fdiii_dataset = None
+    if DATASET in ["FDII", "FDI"]:
+        fdiii_dir = "./dataset/FD/FD-III"
+        with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
+            X_L_fdiii = np.array(pickle.load(f), dtype=object)
+        with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
+            Y_L_fdiii = np.array(pickle.load(f), dtype=object)
+        with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
+            X_R_fdiii = np.array(pickle.load(f), dtype=object)
+        with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
+            Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+        X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
+        Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
+        fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
+
+    # Create validation folds based on the dataset type
+    if DATASET == "FDI":
+        validate_folds = load_predefined_validate_folds()
+    else:
+        validate_folds = create_balanced_subject_folds(
+            full_dataset, num_folds=NUM_FOLDS
+        )
+
+    training_statistics = []
+
+    # -------------------- Cross-Validation Loop --------------------
+    for fold, validate_subjects in enumerate(validate_folds):
+        # Skip the first 5 folds
+        if fold < 5:
+            continue
+
+        # Split training and validation indices based on subject IDs
+        train_indices = [
+            i
+            for i, subject in enumerate(full_dataset.subject_indices)
+            if subject not in validate_subjects
+        ]
+
+        # Augment training data with FDIII if applicable
+        if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
+            base_train_dataset = Subset(full_dataset, train_indices)
+            train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset])
+        else:
+            train_dataset = Subset(full_dataset, train_indices)
+
+        # Create DistributedSampler for training data to partition it across GPUs
+        train_sampler = DistributedSampler(
+            train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True
+        )
+        train_loader = DataLoader(
+            dataset=train_dataset,
+            batch_size=BATCH_SIZE,
+            sampler=train_sampler,
+            num_workers=NUM_WORKERS,
+            pin_memory=True,
+        )
+
+        # -------------------- Model Setup --------------------
+        model = MSTCN(
+            num_stages=NUM_STAGES,
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+        # Wrap the model with DistributedDataParallel
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[local_rank]
+        )
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        best_loss = float("inf")
+
+        # -------------------- Training Loop --------------------
+        for epoch in range(NUM_EPOCHS):
+            model.train()
+            train_sampler.set_epoch(epoch)  # Update sampler for shuffling
+            training_loss = 0.0
+            training_loss_ce = 0.0
+            training_loss_mse = 0.0
+
+            for batch_x, batch_y in train_loader:
+                # Optionally apply data augmentation
+                if FLAG_AUGMENT_HAND_MIRRORING:
+                    batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y)
+                if FLAG_AUGMENT_AXIS_PERMUTATION:
+                    batch_x, batch_y = augment_axis_permutation(batch_x, batch_y)
+                if FLAG_AUGMENT_PLANAR_ROTATION:
+                    batch_x, batch_y = augment_planar_rotation(batch_x, batch_y)
+                if FLAG_AUGMENT_SPATIAL_ORIENTATION:
+                    batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y)
+                # Rearrange dimensions and move data to the configured device
+                batch_x = batch_x.permute(0, 2, 1).to(device)
+                batch_y = batch_y.to(device)
+
+                optimizer.zero_grad()
+                outputs = model(batch_x)
+                ce_loss, mse_loss = MSTCN_Loss(outputs, batch_y)
+                loss = ce_loss + LAMBDA_COEF * mse_loss
+                loss.backward()
+                optimizer.step()
+
+                training_loss += loss.item()
+                training_loss_ce += ce_loss.item()
+                training_loss_mse += mse_loss.item()
+
+            # -------------------- Logging and Checkpointing (Rank 0 Only) --------------------
+            if local_rank == 0:
+                avg_loss = training_loss / len(train_loader)
+                best_loss = save_best_model(
+                    model,
+                    fold=fold + 1,
+                    current_metric=loss.item(),
+                    best_metric=best_loss,
+                    checkpoint_dir=result_dir,
+                    mode="min",
+                )
+                stats = {
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "fold": fold + 1,
+                    "epoch": epoch + 1,
+                    "train_loss": avg_loss,
+                    "train_loss_ce": training_loss_ce / len(train_loader),
+                    "train_loss_mse": training_loss_mse / len(train_loader),
+                }
+                training_statistics.append(stats)
+
+    # -------------------- Save Results and Configuration (Rank 0) --------------------
+    if local_rank == 0:
+        np.save(training_stas_file, training_statistics)
+        print(f"Training statistics saved to {training_stas_file}")
+
+        # Build the initial part of the config with keys up to "model"
+        config_info = {
+            "dataset": DATASET,
+            "num_classes": NUM_CLASSES,
+            "sampling_freq": SAMPLING_FREQ,
+            "window_size": WINDOW_SIZE,
+            "model": MODEL,
+            "input_dim": INPUT_DIM,
+        }
+
+        # Insert model-specific parameters right after the "model" key
+        if MODEL == "CNN_LSTM":
+            config_info["conv_filters"] = CONV_FILTERS
+            config_info["lstm_hidden"] = LSTM_HIDDEN
+        elif MODEL in ["TCN", "MSTCN"]:
+            config_info["num_layers"] = NUM_LAYERS
+            config_info["num_filters"] = NUM_FILTERS
+            config_info["kernel_size"] = KERNEL_SIZE
+            config_info["dropout"] = DROPOUT
+            if MODEL == "MSTCN":
+                config_info["num_stages"] = NUM_STAGES
+        else:
+            raise ValueError(f"Invalid model: {MODEL}")
+
+        # Add the remaining configuration parameters after the model-specific ones
+        config_info.update(
+            {
+                "learning_rate": LEARNING_RATE,
+                "batch_size": BATCH_SIZE,
+                "num_folds": NUM_FOLDS,
+                "num_epochs": NUM_EPOCHS,
+                "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
+                "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
+                "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
+                "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
+                "validate_folds": validate_folds,
+            }
+        )
+
+        # Save the configuration as JSON
+        with open(config_file, "w") as f:
+            json.dump(config_info, f, indent=4)
+        print(f"Configuration saved to {config_file}")
+
+        overall_end = datetime.now()
+        print("Training ended at:", overall_end)
+        print("Total training time:", overall_end - overall_start)
+
+    dist.destroy_process_group()
+
+
+if __name__ == "__main__":
+    main()
+
+----- End of train_hpc.py -----
+
+----- Start of tl_pre_train_simclr.py -----
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU SimCLR Pre-Training Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : TODO
+===============================================================================
+"""
+
+----- End of tl_pre_train_simclr.py -----
+
+----- Start of train_ref.py -----
+# -*- coding: utf-8 -*-
+"""
+Edited on Thu Feb 23 14:04:01 2023
+
+@author: u0117961
+"""
+# change the number of stages
+import pickle as pkl
+import numpy as np
+import os
+import torch
+import tensorflow as tf
+from tensorflow import keras
+from torch.utils.data import Dataset, DataLoader, TensorDataset
+import torch.nn.functional as F
+from sklearn.metrics import confusion_matrix
+import torch.nn as nn
+from torch import optim
+import copy
+from datetime import datetime
+from torchmetrics.functional import f1_score as F1S
+from torchmetrics import CohenKappa
+from torchmetrics import MatthewsCorrCoef
+from sklearn.metrics import classification_report
+import time
+import math
+
+# %%
+print("there is gpu or nor", torch.cuda.is_available())
+print(
+    "there are ",
+    torch.cuda.device_count(),
+    " pieces of ",
+    torch.cuda.get_device_name(0),
+)
+
+
+# %%
+class DilatedResidualLayer(nn.Module):
+    def __init__(self, dilation, in_channels, out_channels):
+        super(DilatedResidualLayer, self).__init__()
+        self.conv_dilated = nn.Conv1d(
+            in_channels, out_channels, 3, padding=dilation, dilation=dilation
+        )
+        self.conv_1x1 = nn.Conv1d(
+            out_channels, out_channels, 1
+        )  # 这一层的作用在于整合不同channel(filters)之间的信息
+        self.dropout = nn.Dropout()
+
+    def forward(self, x):
+        # print("DilatedResidualLayer")
+        out = F.relu(self.conv_dilated(x))
+        out = self.conv_1x1(out)
+        out = self.dropout(out)
+        return x + out
+
+
+class SingleStageModel(nn.Module):
+    def __init__(self, num_layers, num_f_maps, dim, num_classes):
+        super(SingleStageModel, self).__init__()
+        self.conv_1x1 = nn.Conv1d(
+            dim, num_f_maps, 1
+        )  # dim=channel数目 num_f_maps=filter数目
+        self.layers = nn.ModuleList(
+            [
+                copy.deepcopy(DilatedResidualLayer(2**i, num_f_maps, num_f_maps))
+                for i in range(num_layers)
+            ]
+        )
+        self.conv_out = nn.Conv1d(num_f_maps, num_classes, 1)
+
+    def forward(self, x):
+        out = self.conv_1x1(x)
+        for layer in self.layers:
+            out = layer(out)
+        out = self.conv_out(out)
+        return out
+
+
+class MultiStageModel(nn.Module):
+    def __init__(self, num_stages, num_layers, num_f_maps, dim, num_classes):
+        super(MultiStageModel, self).__init__()
+        self.stage1 = SingleStageModel(num_layers, num_f_maps, dim, num_classes)
+        self.stages = nn.ModuleList(
+            [
+                copy.deepcopy(
+                    SingleStageModel(num_layers, num_f_maps, num_classes, num_classes)
+                )
+                for s in range(num_stages - 1)
+            ]
+        )
+
+    def forward(self, x):
+        out = self.stage1(x)
+        outputs = out.unsqueeze(0)
+        for s in self.stages:
+            out = s(F.softmax(out, dim=1))
+            outputs = torch.cat((outputs, out.unsqueeze(0)), dim=0)
+        outputs = outputs.permute(1, 0, 2, 3)
+        return outputs
+
+
+def evaluation_idx(con):
+    acc = (con[0, 0] + con[1, 1]) / (con[0, 0] + con[1, 1] + con[0, 1] + con[1, 0])
+    pre = (con[1, 1]) / (con[1, 1] + con[0, 1])
+    rec = (con[1, 1]) / (con[1, 1] + con[1, 0])
+    fsc = (2 * con[1, 1]) / (2 * con[1, 1] + con[0, 1] + con[1, 0])
+    return acc, pre, rec, fsc
+
+
+# %%
+Batch_size = 64
+val_batch = 8
+num_stages = 2
+num_layer = 9
+num_filter = 64
+num_feature = 6
+num_class = 3
+Epoch = 100
+learning_rate = 5e-4
+DOWNSAMPLING = 4
+sample_freq = 64
+duration = 60
+strde = 60
+data_freq = sample_freq // DOWNSAMPLING
+seg_length = data_freq * duration
+strde_length = sample_freq * strde
+cohenkappa = CohenKappa(num_classes=num_class)
+matthews_corrcoef = MatthewsCorrCoef(num_classes=num_class)
+# %%
+print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
+with open("/scratch/leuven/341/vsc34197/pkl_data/meal_X_no_overlap.pkl", "rb") as f:
+    dataset = pkl.load(f)
+with open("/scratch/leuven/341/vsc34197/pkl_data/meal_Y_no_overlap.pkl", "rb") as f:
+    annoLabel = pkl.load(f)
+with open("/scratch/leuven/341/vsc34197/pkl_data/dl_34_X_rest.pkl", "rb") as f:
+    DL_data = pkl.load(f)
+with open("/scratch/leuven/341/vsc34197/pkl_data/dl_34_Y_rest.pkl", "rb") as f:
+    DL_anno = pkl.load(f)
+with open("/scratch/leuven/341/vsc34197/pkl_data/oreba_100_X.pkl", "rb") as f:
+    OR_data = pkl.load(f)
+with open("/scratch/leuven/341/vsc34197/pkl_data/oreba_100_Y.pkl", "rb") as f:
+    OR_anno = pkl.load(f)
+
+# %%
+str_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+# %%
+for times in range(0, 4):
+    print(
+        "-------------------------------Round {} start-------------------------------".format(
+            times + 1
+        )
+    )
+    str_org = (
+        "/data/leuven/341/vsc34197/day_long/data_split/k_fold/"
+        + "20230815_170535"
+        + "/"
+        + str(times)
+    )
+    pa_train = str_org + "/train.npy"
+    pa_valid = str_org + "/valid.npy"
+    pa_test = str_org + "/test.npy"
+    train_list = np.load(pa_train)
+    valid_list = np.load(pa_valid)
+    test_list = np.load(pa_test)
+    print(train_list)
+    print(valid_list)
+    print(test_list)
+    model_dir = (
+        "/data/leuven/341/vsc34197/day_long/model/mst/fd_34_rest/tts/"
+        + str_time
+        + "/"
+        + str(times)
+        + "/"
+    )
+    results_dir = (
+        "/data/leuven/341/vsc34197/day_long/results/mst/fd_34_rest/tts/"
+        + str_time
+        + "/"
+        + str(times)
+        + "/"
+    )
+    model_dir_temp = (
+        "/data/leuven/341/vsc34197/day_long/mst/fd_34_rest/tts/" + str_time + "/"
+    )
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+    if not os.path.exists(model_dir_temp):
+        os.makedirs(model_dir_temp)
+    for i in range(len(annoLabel)):
+        if i == 0:
+            x_train = dataset[i]
+            y_train = annoLabel[i]
+        else:
+            x_train = np.concatenate((x_train, dataset[i]), axis=0)
+            y_train = np.concatenate((y_train, annoLabel[i]), axis=0)
+
+    for i in range(len(OR_anno)):
+        x_train = np.concatenate((x_train, OR_data[i]), axis=0)
+        y_train = np.concatenate((y_train, OR_anno[i]), axis=0)
+    # print(x_train.shape)
+    # print(y_train.shape)
+    # train set
+    for i in range(len(train_list)):
+        idx = train_list[i]
+        x_train = np.concatenate((x_train, DL_data[idx]), axis=0)
+        y_train = np.concatenate((y_train, DL_anno[idx]), axis=0)
+    x_train = x_train.astype(np.float32)
+    # print(x_train.shape)
+    # print(y_train.shape)
+    # print(x_train.shape)
+    # print(y_train.shape)
+
+    added_seg = seg_length - len(y_train) % seg_length
+    if added_seg != seg_length:
+        # print("let us add some zero data to meet the seg_length")
+        # print("initial length of data", len(y_train))
+        added_shape2 = x_train[0:added_seg, :]
+        added_zero_data2 = np.zeros(added_shape2.shape)
+        added_zero_data2 = added_zero_data2.astype(np.float32)
+        x_train = np.concatenate((x_train, added_zero_data2), axis=0)
+        added_shape2 = y_train[0:added_seg]
+        added_zero_data2 = np.zeros(added_shape2.shape)
+        added_zero_data2 = added_zero_data2.astype(np.int64)
+        y_train = np.concatenate((y_train, added_zero_data2), axis=0)
+        # print("after added, length of data", len(y_train))
+    else:
+        added_seg = 0
+        # print("the inigital seg length meets the seg_length")
+
+    (x_train) = tf.keras.preprocessing.timeseries_dataset_from_array(
+        x_train,
+        targets=None,
+        sequence_length=seg_length,
+        sequence_stride=strde_length,
+        batch_size=None,
+        sampling_rate=DOWNSAMPLING,
+    )
+    (y_train) = tf.keras.preprocessing.timeseries_dataset_from_array(
+        y_train,
+        targets=None,
+        sequence_length=seg_length,
+        sequence_stride=strde_length,
+        batch_size=None,
+        sampling_rate=DOWNSAMPLING,
+    )
+    Sequence_data = list()
+    Sequence_label = list()
+    Sequence_label_class = list()
+    counter = 0
+    for oneSequence in x_train:
+        Sequence_data.append(oneSequence)
+    for oneSequence in y_train:
+        x = tf.dtypes.cast(oneSequence, tf.int64)
+        Sequence_label.append(x)
+
+    Sequence_data = tf.convert_to_tensor(Sequence_data)
+    Sequence_label = tf.convert_to_tensor(Sequence_label)
+    Sequence_data = Sequence_data.numpy()
+    Sequence_label = Sequence_label.numpy()
+
+    added_len = Batch_size - len(Sequence_data) % Batch_size
+    if added_len != Batch_size:
+        # print("let us add some zero data to meet the batchsize")
+        # print("initial length of data", len(Sequence_data))
+        added_shape = Sequence_data[0:added_len, :, :]
+        added_zero_data = np.zeros(added_shape.shape)
+        added_zero_data = added_zero_data.astype(np.float32)
+        Sequence_data = np.concatenate((Sequence_data, added_zero_data), axis=0)
+        added_shape = Sequence_label[0:added_len, :]
+        added_zero_data = np.zeros(added_shape.shape)
+        added_zero_data = added_zero_data.astype(np.int64)
+        Sequence_label = np.concatenate((Sequence_label, added_zero_data), axis=0)
+        # print("after added, length of data", len(Sequence_data))
+    else:
+        added_len = 0
+        # print("the inigital length meets the batchsize")
+
+    Sequence_data = torch.from_numpy(Sequence_data)
+    Sequence_label = torch.from_numpy(Sequence_label)
+
+    Sequence_data = torch.transpose(Sequence_data, 1, 2)
+    dataset_total = TensorDataset(Sequence_data, Sequence_label)
+    dataLoader_train = DataLoader(
+        dataset_total, batch_size=Batch_size, drop_last=False, shuffle=False
+    )
+
+    # valid set
+    for i in range(len(valid_list)):
+        idx = valid_list[i]
+        if i == 0:
+            x_val = DL_data[idx]
+            y_val = DL_anno[idx]
+        else:
+            x_val = np.concatenate((x_val, DL_data[idx]), axis=0)
+            y_val = np.concatenate((y_val, DL_anno[idx]), axis=0)
+    x_val = x_val.astype(np.float32)
+
+    added_seg = seg_length - len(y_val) % seg_length
+    if added_seg != seg_length:
+        # print("let us add some zero data to meet the seg_length")
+        # print("initial length of data", len(y_val))
+        added_shape2 = x_val[0:added_seg, :]
+        added_zero_data2 = np.zeros(added_shape2.shape)
+        added_zero_data2 = added_zero_data2.astype(np.float32)
+        x_val = np.concatenate((x_val, added_zero_data2), axis=0)
+        added_shape2 = y_val[0:added_seg]
+        added_zero_data2 = np.zeros(added_shape2.shape)
+        added_zero_data2 = added_zero_data2.astype(np.int64)
+        y_val = np.concatenate((y_val, added_zero_data2), axis=0)
+        # print("after added, length of data", len(y_val))
+    else:
+        added_seg = 0
+        # print("the inigital seg length meets the seg_length")
+
+    (x_val) = tf.keras.preprocessing.timeseries_dataset_from_array(
+        x_val,
+        targets=None,
+        sequence_length=seg_length,
+        sequence_stride=strde_length,
+        batch_size=None,
+        sampling_rate=DOWNSAMPLING,
+    )
+    (y_val) = tf.keras.preprocessing.timeseries_dataset_from_array(
+        y_val,
+        targets=None,
+        sequence_length=seg_length,
+        sequence_stride=strde_length,
+        batch_size=None,
+        sampling_rate=DOWNSAMPLING,
+    )
+    Sequence_data = list()
+    Sequence_label = list()
+    Sequence_label_class = list()
+    counter = 0
+    for oneSequence in x_val:
+        Sequence_data.append(oneSequence)
+    for oneSequence in y_val:
+        x = tf.dtypes.cast(oneSequence, tf.int64)
+        Sequence_label.append(x)
+    Sequence_data = tf.convert_to_tensor(Sequence_data)
+    Sequence_label = tf.convert_to_tensor(Sequence_label)
+    # print("person id label is",Sequence_label.shape)
+    # dataset_total= tf.data.Dataset.from_tensor_slices((Sequence_data,Sequence_label))
+    Sequence_data = Sequence_data.numpy()
+    Sequence_label = Sequence_label.numpy()
+    added_len = Batch_size - len(Sequence_data) % Batch_size
+    if added_len != Batch_size:
+        # print("let us add some zero data to meet the batchsize")
+        # print("initial length of data", len(Sequence_data))
+        added_shape = Sequence_data[0:added_len, :, :]
+        added_zero_data = np.zeros(added_shape.shape)
+        added_zero_data = added_zero_data.astype(np.float32)
+        Sequence_data = np.concatenate((Sequence_data, added_zero_data), axis=0)
+        added_shape = Sequence_label[0:added_len, :]
+        added_zero_data = np.zeros(added_shape.shape)
+        added_zero_data = added_zero_data.astype(np.int64)
+        Sequence_label = np.concatenate((Sequence_label, added_zero_data), axis=0)
+        # print("after added, length of data", len(Sequence_data))
+    else:
+        added_len = 0
+        # print("the inigital length meets the batchsize")
+
+    Sequence_data = torch.from_numpy(Sequence_data)
+    Sequence_label = torch.from_numpy(Sequence_label)
+    Sequence_data = torch.transpose(Sequence_data, 1, 2)
+    datasetVal = TensorDataset(Sequence_data, Sequence_label)
+    dataLoader_val = DataLoader(
+        datasetVal, batch_size=Batch_size, drop_last=False, shuffle=False
+    )
+    if len(dataLoader_val) == 0:
+        dataLoader_val = DataLoader(
+            datasetVal, batch_size=Batch_size, drop_last=False, shuffle=False
+        )
+        # import torchvision
+    device = torch.device("cuda")
+    loss_ce = nn.CrossEntropyLoss(ignore_index=-100)
+    # loss_ce=loss_ce.to(torch.device("cuda"))
+    loss_mse = nn.MSELoss(reduction="none")
+    # loss_mse=loss_mse.to(device)
+
+    # 创建模型
+    mstcn1 = MultiStageModel(
+        num_stages, num_layer, num_filter, num_feature, num_class
+    )  # 第一个是stage个数 第二个是每个stage的层数 第三个是每层filter个数 第四个是input的channel数 第五个是类别数
+    # if torch.cuda.device_count() > 1:
+    #     print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #     if torch.cuda.device_count()>2:
+    #         #print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #         mstcn1 = nn.DataParallel(mstcn1, device_ids=[0, 1])
+    #     else:
+    #         #print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #         mstcn1 = nn.DataParallel(mstcn1)
+
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        mstcn1 = nn.DataParallel(mstcn1)
+
+    mstcn1 = mstcn1.to(device)
+    optimizer = optim.Adam(mstcn1.parameters(), lr=learning_rate)
+    # 设置训练参数
+    epoch = Epoch
+    best_kappa_val = 0
+    # PATH = "/data/leuven/341/vsc34197/radar/d3/39/split/bestModel"+str(times)+".pth"
+    PATH = model_dir_temp + "bestModel" + str(times) + ".pth"
+
+    for i in range(epoch):
+        print("--------------------epoch{} start----------------------".format(i + 1))
+        # 遍历该epoch中的每个batch
+        if i <= 3:
+            t0 = time.time()
+        epoch_loss = 0
+        correct = 0
+        total = 0
+        kap_epoch = 0
+        mcc_epoch = 0
+        f1_score_train = 0
+        f1_score_counter = 0
+        tp, target_true, pred_true = 0, 0, 0
+        # y_pred = []
+        # y_true = []
+        mstcn1 = mstcn1.train()
+        for batch_ndx, sample in enumerate(dataLoader_train):
+            # print("batch index is ",batch_ndx)
+            oneBatchData = sample[0]
+            oneBatchLabel = sample[1]
+            oneBatchData = oneBatchData.to(device)
+            oneBatchLabel = oneBatchLabel.to(device)
+            oneBatchLabel2 = F.one_hot(oneBatchLabel, num_classes=3)
+            oneBatchLabel2 = oneBatchLabel2.type(torch.FloatTensor).to(device)
+            # print("input oneBatchdata size: ", oneBatchData.size())
+            # print("input oneBatchlabel2 size: ", oneBatchLabel2.size())
+            optimizer.zero_grad()
+            predictions = mstcn1(oneBatchData)
+            # print("output predictions size: ", predictions.size())
+            predictions = predictions.permute(1, 0, 2, 3)
+            # print("output predictions size2: ", predictions.size())
+            # print("Label size: ", oneBatchLabel2.size())
+            # predictions= predictions.transpose(0,1)
+            # predictions=torch.flatten(predictions,0,1)
+            # predictions = torch.unsqueeze(predictions, 0)
+            # print("output size: ", predictions.size())
+            loss = 0
+            # 遍历所有stage的预测算出总loss
+            for p in predictions:
+                # print("output p size: ",p.size())
+                loss += loss_ce(
+                    p.transpose(2, 1).contiguous().view(-1, 3),
+                    oneBatchLabel2.view(-1, 3),
+                )
+                loss += 0.15 * torch.mean(
+                    torch.clamp(
+                        loss_mse(
+                            F.log_softmax(p[:, :, 1:], dim=1),
+                            F.log_softmax(p.detach()[:, :, :-1], dim=1),
+                        ),
+                        min=0,
+                        max=16,
+                    )
+                )
+            epoch_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            # print("output predictions[-1].data size: ", predictions[-1].data.size())
+            # print("output oneBatchLabel size: ", oneBatchLabel.size())
+            _, predicted = torch.max(
+                predictions[-1].data, 1
+            )  # [30,2,2000] =>max => [30,2000] 这里-1代表最后一层stage的预测输出
+            # print("raw predicted p for all classes is", (predictions[-1].data)[0,:,1996],(predictions[-1].data).shape)
+            correct += (
+                ((predicted == oneBatchLabel).float().squeeze(1)).sum().item()
+            )  # prediectd的大小是[30,2000] 放的是类的index 和oneBatchLabel大小完全一样因此可以直接比较
+            if i % 3 == 0:
+                if batch_ndx == 0:
+                    y_true = oneBatchLabel.cpu().flatten()
+                    y_pred = predicted.cpu().flatten()
+                else:
+                    # gt_batch=oneBatchLabel.cpu().flatten()
+                    # pred_batch=predicted.cpu().flatten()
+                    y_pred = torch.cat((y_pred, predicted.cpu().flatten()))
+                    y_true = torch.cat((y_true, oneBatchLabel.cpu().flatten()))
+            # f1_score_train += F1S(gt_batch, pred_batch,average='macro', num_classes=3)
+            # kap_epoch+=cohenkappa(oneBatchLabel.cpu().flatten(), predicted.cpu().flatten())
+            # mcc_epoch+=matthews_corrcoef(oneBatchLabel.cpu().flatten(), predicted.cpu().flatten())
+            f1_score_counter += 1
+            total += len(
+                torch.flatten(oneBatchLabel)
+            )  # [30,2000] [batchsize,seqlength]
+
+        print("EPOCH loss is ", epoch_loss)
+        print("acc = %f" % (float(correct) / total))
+        # print("avg_f1_score = %f" % ( float(f1_score_train)/f1_score_counter))
+        if i % 3 == 0:
+            kap_epoch = cohenkappa(y_true, y_pred)
+            # mcc_epoch=matthews_corrcoef(y_true, y_pred)
+            print("kappa = %f" % (kap_epoch))
+            # print("mcc = %f" % (mcc_epoch))
+        ################################evaluate in validate data#######################################
+        total_val_loss = 0
+        correct_val = 0
+        mstcn1 = mstcn1.eval()
+        total_val = 0
+        kap_val = 0
+        mcc_val = 0
+        f1_score_val = 0
+        f1_score_counter_val = 0
+        tp, target_true, pred_true = 0, 0, 0
+        # y_pred = []
+        # y_true = []
+        with torch.no_grad():
+            for batch_ndx, sample in enumerate(dataLoader_val):
+                # print(sample[0].shape[0])
+                # print("55555")
+                oneBatchData = sample[0]
+                oneBatchLabel = sample[1]
+                oneBatchData = oneBatchData.to(device)
+                oneBatchLabel = oneBatchLabel.to(device)
+                oneBatchLabel2 = F.one_hot(oneBatchLabel, num_classes=3)
+                oneBatchLabel2 = oneBatchLabel2.type(torch.FloatTensor).to(device)
+                predictions_val = mstcn1(oneBatchData)
+                predictions_val = predictions_val.permute(1, 0, 2, 3)
+                # predictions_val= predictions_val.transpose(0,1)
+                # predictions_val=torch.flatten(predictions_val,0,1)
+                # predictions_val = torch.unsqueeze(predictions_val, 0)
+                loss_val = 0
+                for p in predictions_val:
+                    # print(type(oneBatchLabel))
+                    loss_val += loss_ce(
+                        p.transpose(2, 1).contiguous().view(-1, 3),
+                        oneBatchLabel2.view(-1, 3),
+                    )
+                    loss_val += 0.15 * torch.mean(
+                        torch.clamp(
+                            loss_mse(
+                                F.log_softmax(p[:, :, 1:], dim=1),
+                                F.log_softmax(p.detach()[:, :, :-1], dim=1),
+                            ),
+                            min=0,
+                            max=16,
+                        )
+                    )
+                total_val_loss = total_val_loss + loss_val
+                _, predicted_val = torch.max(
+                    predictions_val[-1].data, 1
+                )  # [30,2,2000] =>max => [30,2000]
+                correct_val += (
+                    ((predicted_val == oneBatchLabel).float().squeeze(1)).sum().item()
+                )
+                # f1_score_val += (F1S(oneBatchLabel.cpu(), predicted_val.cpu(),pos_label=1, average='binary'))
+
+                # gt_batch=oneBatchLabel.cpu().flatten()
+                # pred_batch=predicted_val.cpu().flatten()
+                # y_pred=np.concatenate((y_pred, pred_batch.numpy()), axis=None)
+                # y_true=np.concatenate((y_true, gt_batch.numpy()), axis=None)
+                if i % 3 == 0:
+                    if batch_ndx == 0:
+                        y_true = oneBatchLabel.cpu().flatten()
+                        y_pred = predicted_val.cpu().flatten()
+                    else:
+                        # gt_batch=oneBatchLabel.cpu().flatten()
+                        # pred_batch=predicted.cpu().flatten()
+                        y_pred = torch.cat((y_pred, predicted_val.cpu().flatten()))
+                        y_true = torch.cat((y_true, oneBatchLabel.cpu().flatten()))
+
+                # f1_score_val += F1S(oneBatchLabel.cpu().flatten(), predicted_val.cpu().flatten(),average='macro', num_classes=3)
+                # kap_val+=cohenkappa(oneBatchLabel.cpu().flatten(), predicted_val.cpu().flatten())
+                # mcc_val+=matthews_corrcoef(oneBatchLabel.cpu().flatten(), predicted_val.cpu().flatten())
+                f1_score_counter_val += 1
+                total_val += len(
+                    torch.flatten(oneBatchLabel)
+                )  # [30,2000] [batchsize,seqlength]
+            print("acc_val = %f" % (float(correct_val) / total_val))
+            # print("avg_f1_score_val = %f" % ( float(f1_score_val)/f1_score_counter_val))
+            if i % 3 == 0:
+                kap_val = cohenkappa(y_true, y_pred)
+                mcc_val = matthews_corrcoef(y_true, y_pred)
+                print("kappa_val = %f" % (kap_val))
+                # print("mcc_val = %f" % (mcc_val))
+                # print(conf_matrx)
+                # f1_scoreValue=(float(f1_score_val)/f1_score_counter_val)
+                # kap_val_avg=float(kap_val)/f1_score_counter_val
+                # if i==epoch-1:
+                #   torch.save(mstcn1.state_dict(),PATH)     # save the first one as intital one
+                if kap_val > best_kappa_val and i > epoch // 2:
+                    print("better f1 goted", str(i))
+                    best_kappa_val = kap_val
+                    torch.save(mstcn1.state_dict(), PATH)
+            # model_dict=torch.load(PATH)
+        if i <= 3:
+            t1 = time.time()
+            print("epoch time: ", t1 - t0)
+
+    # test set
+    print("*************start to test data************", times)
+    mstcn1.load_state_dict(torch.load(PATH))
+    i = 0
+    for i in range(len(test_list)):
+        idx = test_list[i]
+        x_test = DL_data[idx]
+        y_test = DL_anno[idx]
+        x_test = x_test.astype(np.float32)
+
+        added_seg = seg_length - len(y_test) % seg_length
+        if added_seg != seg_length:
+            # print("let us add some zero data to meet the seg_length")
+            # print("initial length of data", len(y_test))
+            added_shape2 = x_test[0:added_seg, :]
+            added_zero_data2 = np.zeros(added_shape2.shape)
+            added_zero_data2 = added_zero_data2.astype(np.float32)
+            x_test = np.concatenate((x_test, added_zero_data2), axis=0)
+            added_shape2 = y_test[0:added_seg]
+            added_zero_data2 = np.zeros(added_shape2.shape)
+            added_zero_data2 = added_zero_data2.astype(np.int64)
+            y_test = np.concatenate((y_test, added_zero_data2), axis=0)
+            # print("after added, length of data", len(x_test))
+        else:
+            added_seg = 0
+            # print("the inigital seg length meets the seg_length")
+
+        (dataset_test) = tf.keras.preprocessing.timeseries_dataset_from_array(
+            x_test,
+            targets=None,
+            sequence_length=seg_length,
+            sequence_stride=strde_length,
+            batch_size=None,
+            sampling_rate=DOWNSAMPLING,
+        )
+        (target_test) = tf.keras.preprocessing.timeseries_dataset_from_array(
+            y_test,
+            targets=None,
+            sequence_length=seg_length,
+            sequence_stride=strde_length,
+            batch_size=None,
+            sampling_rate=DOWNSAMPLING,
+        )
+        Sequence_data = list()
+        Sequence_label = list()
+        for oneSequence in dataset_test:
+            Sequence_data.append(oneSequence)
+            # Sequence_label.append(oneSequence[:,7])
+        for oneSequence in target_test:
+            x = tf.dtypes.cast(oneSequence, tf.int64)
+            Sequence_label.append(x)
+        Sequence_data = tf.convert_to_tensor(Sequence_data)
+        Sequence_label = tf.convert_to_tensor(Sequence_label)
+        Sequence_data = Sequence_data.numpy()
+        Sequence_label = Sequence_label.numpy()
+
+        added_len = Batch_size - len(Sequence_data) % Batch_size
+        if added_len != Batch_size:
+            # print("let us add some zero data to meet the batchsize")
+            # print("initial length of data", len(Sequence_data))
+            added_shape = Sequence_data[0:added_len, :, :]
+            added_zero_data = np.zeros(added_shape.shape)
+            added_zero_data = added_zero_data.astype(np.float32)
+            Sequence_data = np.concatenate((Sequence_data, added_zero_data), axis=0)
+            added_shape = Sequence_label[0:added_len, :]
+            added_zero_data = np.zeros(added_shape.shape)
+            added_zero_data = added_zero_data.astype(np.int64)
+            Sequence_label = np.concatenate((Sequence_label, added_zero_data), axis=0)
+            # print("after added, length of data", len(Sequence_data))
+        else:
+            added_len = 0
+            # print("the inigital length meets the batchsize")
+        Sequence_data = torch.from_numpy(Sequence_data)
+        Sequence_label = torch.from_numpy(Sequence_label)
+        Sequence_data = torch.transpose(Sequence_data, 1, 2)
+        dataset_test = TensorDataset(Sequence_data, Sequence_label)
+        dataLoader_test = DataLoader(
+            dataset_test, batch_size=Batch_size, drop_last=False, shuffle=False
+        )
+        total_val_loss = 0
+        correct_val = 0
+        mstcn1 = mstcn1.eval()
+        total_val = 0
+        kap_val = 0
+        mcc_val = 0
+        f1_score_val = 0
+        f1_score_counter_val = 0
+        tp, target_true, pred_true = 0, 0, 0
+
+        # pred_per=[]
+        pred_per = np.empty((0, seg_length))
+        true_per = np.empty((0, seg_length))
+        with torch.no_grad():
+            for batch_ndx, sample in enumerate(dataLoader_test):
+                # print(sample[0].shape[0])
+                # print("55555")
+                oneBatchData = sample[0]
+                oneBatchLabel = sample[1]
+                oneBatchData = oneBatchData.to(device)
+                oneBatchLabel = oneBatchLabel.to(device)
+                predictions_val = mstcn1(oneBatchData)
+                predictions_val = predictions_val.permute(1, 0, 2, 3)
+                # predictions_val= predictions_val.transpose(0,1)
+                # predictions_val=torch.flatten(predictions_val,0,1)
+                # predictions_val = torch.unsqueeze(predictions_val, 0)
+                # print("test output size: ", predictions_val.size())
+                # print("test Label size: ", oneBatchLabel.size())
+                loss_val = 0
+                _, predicted_val = torch.max(
+                    predictions_val[-1].data, 1
+                )  # [30,2,2000] =>max => [30,2000]
+                pred_per = np.concatenate(
+                    (pred_per, predicted_val.cpu().numpy()), axis=0
+                )
+                true_per = np.concatenate(
+                    (true_per, oneBatchLabel.cpu().numpy()), axis=0
+                )
+                correct_val += (
+                    ((predicted_val == oneBatchLabel).float().squeeze(1)).sum().item()
+                )
+
+                # f1_score_val += F1S(oneBatchLabel.cpu().flatten(), predicted_val.cpu().flatten(),average='macro', num_classes=3)
+                # kap_val+=cohenkappa(oneBatchLabel.cpu().flatten(), predicted_val.cpu().flatten())
+                # mcc_val+=matthews_corrcoef(oneBatchLabel.cpu().flatten(), predicted_val.cpu().flatten())
+                f1_score_counter_val += 1
+                total_val += len(
+                    torch.flatten(oneBatchLabel)
+                )  # [30,2000] [batchsize,seqlength]
+
+                if batch_ndx == 0:
+                    y_true = oneBatchLabel.cpu().flatten()
+                    y_pred = predicted_val.cpu().flatten()
+                else:
+                    # gt_batch=oneBatchLabel.cpu().flatten()
+                    # pred_batch=predicted.cpu().flatten()
+                    y_pred = torch.cat((y_pred, predicted_val.cpu().flatten()))
+                    y_true = torch.cat((y_true, oneBatchLabel.cpu().flatten()))
+
+            print("acc_val = %f" % (float(correct_val) / total_val))
+            # print("avg_f1_score_val = %f" % ( float(f1_score_val)/f1_score_counter_val))
+            # print("kappa_val = %f" % (float(kap_val)/f1_score_counter_val))
+            # print("mcc_val = %f" % (float(mcc_val)/f1_score_counter_val))
+            kap_val = cohenkappa(y_true, y_pred)
+            mcc_val = matthews_corrcoef(y_true, y_pred)
+            print("kappa_val = %f" % (kap_val))
+            print("mcc_val = %f" % (mcc_val))
+
+            # print("initial prediciton length", len(pred_per))
+            pred_per2 = pred_per[0 : (len(pred_per) - added_len), :]
+            true_per2 = true_per[0 : (len(pred_per) - added_len), :]
+            y_true_2 = true_per2.flatten()
+            y_pred_2 = pred_per2.flatten()
+            conf_matrx_2 = confusion_matrix(y_true_2, y_pred_2)
+            print("Confusion Matrix after cutted\n")
+            print(conf_matrx_2)
+            if len(conf_matrx_2) == 2 and len(conf_matrx_2[0]) == 2:
+                print(
+                    classification_report(y_true_2, y_pred_2, target_names=["0", "1"])
+                )
+            else:
+                print(
+                    classification_report(
+                        y_true_2, y_pred_2, target_names=["0", "1", "2"]
+                    )
+                )
+            print("after remove added zero padding prediciton length", len(pred_per2))
+            f_name = ".npy"
+            f_ptr = results_dir + str(i) + f_name
+            np.save(f_ptr, pred_per2)
+
+----- End of train_ref.py -----
+
+----- Start of clean.py -----
+#!/usr/bin/env python3
+import os
+
+
+def remove_empty_subdirs(root):
+    """
+    Recursively traverse the directory tree under `root` (bottom-up)
+    and remove any directories that are empty, except for the root folder.
+    """
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+        # Skip the root folder itself
+        if os.path.abspath(dirpath) == os.path.abspath(root):
+            continue
+        # If no subdirectories and no files, delete the folder
+        if not dirnames and not filenames:
+            try:
+                os.rmdir(dirpath)
+                print(f"Deleted empty directory: {dirpath}")
+            except Exception as e:
+                print(f"Failed to delete {dirpath}: {e}")
+
+
+def main():
+    # List the top-level directories to scan
+    parent_dirs = ["checkpoints", "result"]
+    for parent in parent_dirs:
+        if os.path.exists(parent):
+            print(f"Scanning directory: {parent}")
+            remove_empty_subdirs(parent)
+        else:
+            print(f"Directory '{parent}' does not exist.")
+
+
+if __name__ == "__main__":
+    main()
+
+----- End of clean.py -----
+
+----- Start of tl_pre_train_vae.py -----
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU VAE Pre-Training Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-03-26
+Description : This script pre-trains a Variational Autoencoder (VAE) on IMU (Inertial
+              Measurement Unit) data in an unsupervised manner to extract latent features.
+              The trained model weights and configuration are saved in a timestamped directory
+              for subsequent downstream tasks.
+===============================================================================
+"""
+
+import os
+import json
+import pickle
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+from datetime import datetime
+from tqdm import tqdm
+import torch.optim as optim
+
+from components.datasets import IMUDataset
+from components.pre_processing import hand_mirroring
+from components.model_vae import VAE, VAE_Loss
+
+
+# =============================================================================
+#                         Configuration Parameters
+# =============================================================================
+
+# Dataset
+DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
+SAMPLING_FREQ_ORIGINAL = 64
+DOWNSAMPLE_FACTOR = 4
+SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+if DATASET.startswith("FD"):
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+elif DATASET.startswith("DX"):
+    sub_version = DATASET.replace("DX", "").upper() or "I"
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
+
+# Dataloader
+WINDOW_LENGTH = 60
+WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+BATCH_SIZE = 64
+NUM_WORKERS = 16
+FLAG_DATASET_MIRROR = False
+
+# VAE model hyperparameters
+INPUT_DIM = 6
+HIDDEN_DIM = 128
+LATENT_DIM = 64
+
+# Training parameters
+NUM_EPOCHS = 100
+LEARNING_RATE = 5e-4
+
+# =============================================================================
+#                       Data Loading
+# =============================================================================
+# Define file paths for the dataset
+X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+
+# Load left-hand and right-hand data from pickle files
+with open(X_L_PATH, "rb") as f:
+    X_L = np.array(pickle.load(f), dtype=object)
+with open(Y_L_PATH, "rb") as f:
+    Y_L = np.array(pickle.load(f), dtype=object)
+with open(X_R_PATH, "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(Y_R_PATH, "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
+
+if FLAG_DATASET_MIRROR:
+    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+# Merge left and right hand data
+X = np.concatenate([X_L, X_R], axis=0)
+Y = np.concatenate([Y_L, Y_R], axis=0)
+
+# Create the IMUDataset
+full_dataset = IMUDataset(
+    X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR
+)
+dataloader = DataLoader(
+    full_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    num_workers=NUM_WORKERS,
+    pin_memory=True,
+)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# -------------------- VAE Pre-Training --------------------
+vae_model = VAE(
+    input_channels=INPUT_DIM,
+    sequence_length=WINDOW_SIZE,
+    HIDDEN_DIM=HIDDEN_DIM,
+    LATENT_DIM=LATENT_DIM,
+).to(device)
+optimizer = optim.Adam(vae_model.parameters(), lr=1e-3)
+vae_model.train()
+for epoch in range(NUM_EPOCHS):
+    epoch_loss = 0
+    for batch_x, _ in tqdm(
+        dataloader, desc=f"VAE Training Epoch {epoch+1}/{NUM_EPOCHS}"
+    ):
+        batch_x = batch_x.to(device)
+        batch_x = batch_x.permute(
+            0, 2, 1
+        )  # Reshape to (batch, channels, sequence_length)
+        optimizer.zero_grad()
+        recon, mu, logvar = vae_model(batch_x)
+        loss = VAE_Loss(recon, batch_x, mu, logvar)
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item()
+    avg_loss = epoch_loss / len(dataloader.dataset)
+
+# -------------------- Save Model and Configuration --------------------
+version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+result_dir = os.path.join("result", version_prefix)
+os.makedirs(result_dir, exist_ok=True)
+checkpoint_path = os.path.join(result_dir, "pretrained_vae.pth")
+torch.save(vae_model.state_dict(), checkpoint_path)
+
+config = {
+    "dataset": DATASET,
+    "input_dim": INPUT_DIM,
+    "HIDDEN_DIM": HIDDEN_DIM,
+    "LATENT_DIM": LATENT_DIM,
+    "sampling_freq": SAMPLING_FREQ,
+    "window_size": WINDOW_SIZE,
+    "batch_size": BATCH_SIZE,
+    "NUM_EPOCHS": NUM_EPOCHS,
+    "learning_rate": LEARNING_RATE,
+    "downsample_factor": DOWNSAMPLE_FACTOR,
+    "mirroring": FLAG_DATASET_MIRROR,
+}
+config_path = os.path.join(result_dir, "config.json")
+with open(config_path, "w") as f:
+    json.dump(config, f, indent=4)
+
+----- End of tl_pre_train_vae.py -----
+
+----- Start of train.py -----
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+MSTCN IMU Training Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-03-29
+Description : This script trains an MSTCN model on IMU (Inertial Measurement Unit) data
+              using cross-validation. It supports multiple datasets (DXI/DXII or FDI/FDII/FDIII)
+              and dynamically generates result and checkpoint directories based on the
+              current datetime. The script includes configurable parameters for model
+              architecture, training hyperparameters, and data augmentation options.
+===============================================================================
+"""
+
+import os
+import json
+import pickle
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, Subset, ConcatDataset
+from datetime import datetime
+from tqdm import tqdm
+
+# Import custom modules from components package
+from components.augmentation import (
+    augment_hand_mirroring,
+    augment_axis_permutation,
+    augment_planar_rotation,
+    augment_spatial_orientation,
+)
+from components.datasets import (
+    IMUDataset,
+    create_balanced_subject_folds,
+    load_predefined_validate_folds,
+)
+from components.pre_processing import hand_mirroring
+from components.checkpoint import save_best_model
+from components.model_cnnlstm import CNNLSTM, CNNLSTM_Loss
+from components.model_tcn import TCN, TCN_Loss
+from components.model_mstcn import MSTCN, MSTCN_Loss
+
+# =============================================================================
+#                         Configuration Parameters
+# =============================================================================
+
+# Dataset
+DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
+SAMPLING_FREQ_ORIGINAL = 64
+DOWNSAMPLE_FACTOR = 4
+SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+if DATASET.startswith("DX"):
+    NUM_CLASSES = 2
+    dataset_type = "DX"
+    sub_version = (
+        DATASET.replace("DX", "").upper() or "I"
+    )  # Handles formats like DX/DXII
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
+elif DATASET.startswith("FD"):
+    NUM_CLASSES = 3
+    dataset_type = "FD"
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
+
+# Dataloader
+WINDOW_LENGTH = 60
+WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+BATCH_SIZE = 64
+NUM_WORKERS = 16
+
+# Model
+MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
+INPUT_DIM = 6
+LAMBDA_COEF = 0.15
+if MODEL in ["TCN", "MSTCN"]:
+    NUM_LAYERS = 9
+    NUM_FILTERS = 128
+    KERNEL_SIZE = 3
+    DROPOUT = 0.3
+    if MODEL == "MSTCN":
+        NUM_STAGES = 2
+elif MODEL == "CNN_LSTM":
+    CONV_FILTERS = (32, 64, 128)
+    LSTM_HIDDEN = 128
+else:
+    raise ValueError(f"Invalid model: {MODEL}")
+
+# Training
+LEARNING_RATE = 5e-4
+NUM_FOLDS = 7
+NUM_EPOCHS = 100
+FLAG_AUGMENT_HAND_MIRRORING = False
+FLAG_AUGMENT_AXIS_PERMUTATION = False
+FLAG_AUGMENT_PLANAR_ROTATION = False
+FLAG_AUGMENT_SPATIAL_ORIENTATION = False
+FLAG_DATASET_MIRROR = False
+FLAG_SKIP = False
+
+# Check if CUDA is available and set the device accordingly
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# =============================================================================
+#                       Directory and File Management
+# =============================================================================
+
+# Generate version prefix from current datetime (first 12 characters)
+version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+
+# Create result directories using version_prefix
+result_dir = os.path.join("result", version_prefix)
+os.makedirs(result_dir, exist_ok=True)
+
+# Define file paths for saving statistics and configuration
+training_stas_file = os.path.join(result_dir, f"train_stats.npy")
+config_file = os.path.join(result_dir, "config.json")
+
+# =============================================================================
+#                       Data Loading and Pre-processing
+# =============================================================================
+# Define file paths for the dataset
+X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+
+# Load left-hand and right-hand data from pickle files
+with open(X_L_PATH, "rb") as f:
+    X_L = np.array(pickle.load(f), dtype=object)
+with open(Y_L_PATH, "rb") as f:
+    Y_L = np.array(pickle.load(f), dtype=object)
+with open(X_R_PATH, "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(Y_R_PATH, "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
+
+# Apply hand mirroring if flag is set
+if FLAG_DATASET_MIRROR:
+    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+# Merge left-hand and right-hand data
+X = np.concatenate([X_L, X_R], axis=0)
+Y = np.concatenate([Y_L, Y_R], axis=0)
+
+# Create the full dataset using the defined window size
+full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
+
+# Augment Dataset with FDIII (if using FDII/FDI)
+fdiii_dataset = None
+if DATASET in ["FDII", "FDI"]:
+    fdiii_dir = "./dataset/FD/FD-III"
+    with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
+        X_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
+        Y_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
+        X_R_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
+        Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+    X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
+    Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
+    fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
+
+# =============================================================================
+#                     Main Cross-Validation Loop
+# =============================================================================
+
+# Create validation folds based on the dataset type
+if DATASET == "FDI":
+    validate_folds = load_predefined_validate_folds()
+else:
+    validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
+
+training_statistics = []
+
+for fold, validate_subjects in enumerate(
+    tqdm(validate_folds, desc="K-Fold", leave=True)
+):
+    # Process only the first fold for demonstration; remove the condition to run all folds.
+    if FLAG_SKIP:
+        FLAG_SKIP = False
+        continue
+
+    # Split training indices based on subject IDs
+    train_indices = [
+        i
+        for i, subject in enumerate(full_dataset.subject_indices)
+        if subject not in validate_subjects
+    ]
+
+    # Augment training data with FDIII if applicable
+    if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
+        train_dataset = ConcatDataset(
+            [Subset(full_dataset, train_indices), fdiii_dataset]
+        )
+    else:
+        train_dataset = Subset(full_dataset, train_indices)
+
+    # Create DataLoaders for training
+    train_loader = DataLoader(
+        dataset=train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
+
+    # Create Model and Optimizer
+    if MODEL == "TCN":
+        model = TCN(
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+    elif MODEL == "MSTCN":
+        model = MSTCN(
+            num_stages=NUM_STAGES,
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+    elif MODEL == "CNN_LSTM":
+        model = CNNLSTM(
+            input_channels=INPUT_DIM,
+            conv_filters=CONV_FILTERS,
+            lstm_hidden=LSTM_HIDDEN,
+            num_classes=NUM_CLASSES,
+        ).to(device)
+    else:
+        raise ValueError(f"Invalid model: {MODEL}")
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # Initialize best loss for saving the best model (lower loss is better)
+    best_loss = float("inf")
+
+    # Training Loop
+    for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
+        model.train()
+        training_loss = 0.0
+        training_loss_ce = 0.0
+        training_loss_mse = 0.0
+
+        for batch_x, batch_y in train_loader:
+            # Optionally apply data augmentation
+            if FLAG_AUGMENT_HAND_MIRRORING:
+                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y)
+            if FLAG_AUGMENT_AXIS_PERMUTATION:
+                batch_x, batch_y = augment_axis_permutation(batch_x, batch_y)
+            if FLAG_AUGMENT_PLANAR_ROTATION:
+                batch_x, batch_y = augment_planar_rotation(batch_x, batch_y)
+            if FLAG_AUGMENT_SPATIAL_ORIENTATION:
+                batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y)
+            # Rearrange dimensions and move data to the configured device
+            batch_x = batch_x.permute(0, 2, 1).to(device)
+            batch_y = batch_y.to(device)
+            optimizer.zero_grad()
+            outputs = model(batch_x)
+            loss_fn = {
+                "MSTCN": MSTCN_Loss,
+                "TCN": TCN_Loss,
+                "CNN_LSTM": CNNLSTM_Loss,
+            }[MODEL]
+            ce_loss, mse_loss = loss_fn(outputs, batch_y)
+            loss = ce_loss + LAMBDA_COEF * mse_loss
+            loss.backward()
+            optimizer.step()
+
+            training_loss += loss.item()
+            training_loss_ce += ce_loss.item()
+            training_loss_mse += mse_loss.item()
+
+        # Save the Best Model Based on Loss
+        best_loss = save_best_model(
+            model,
+            fold=fold + 1,
+            current_metric=loss.item(),
+            best_metric=best_loss,
+            checkpoint_dir=result_dir,
+            mode="min",
+        )
+
+        # Record training statistics for the current epoch
+        stats = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "fold": fold + 1,
+            "epoch": epoch + 1,
+            "train_loss": training_loss / len(train_loader),
+            "train_loss_ce": training_loss_ce / len(train_loader),
+            "train_loss_mse": training_loss_mse / len(train_loader),
+        }
+        training_statistics.append(stats)
+
+# =============================================================================
+#                         Save Results and Configuration
+# =============================================================================
+
+np.save(training_stas_file, training_statistics)
+print(f"Training statistics saved to {training_stas_file}")
+
+# Build the initial part of the config with keys up to "model"
+config_info = {
+    "dataset": DATASET,
+    "num_classes": NUM_CLASSES,
+    "sampling_freq": SAMPLING_FREQ,
+    "window_size": WINDOW_SIZE,
+    "model": MODEL,
+    "input_dim": INPUT_DIM,
+}
+
+# Insert model-specific parameters right after the "model" key
+if MODEL == "CNN_LSTM":
+    config_info["conv_filters"] = CONV_FILTERS
+    config_info["lstm_hidden"] = LSTM_HIDDEN
+elif MODEL in ["TCN", "MSTCN"]:
+    config_info["num_layers"] = NUM_LAYERS
+    config_info["num_filters"] = NUM_FILTERS
+    config_info["kernel_size"] = KERNEL_SIZE
+    config_info["dropout"] = DROPOUT
+    if MODEL == "MSTCN":
+        config_info["num_stages"] = NUM_STAGES
+else:
+    raise ValueError(f"Invalid model: {MODEL}")
+
+# Add the remaining configuration parameters after the model-specific ones
+config_info.update(
+    {
+        "learning_rate": LEARNING_RATE,
+        "batch_size": BATCH_SIZE,
+        "num_folds": NUM_FOLDS,
+        "num_epochs": NUM_EPOCHS,
+        "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
+        "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
+        "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
+        "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
+        "validate_folds": validate_folds,
+    }
+)
+
+
+# Save the configuration as JSON
+with open(config_file, "w") as f:
+    json.dump(config_info, f, indent=4)
+print(f"Configuration saved to {config_file}")
+
+----- End of train.py -----
+
+----- Start of validate.py -----
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+MSTCN IMU Validating Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-03-29
+Description : This script validates a trained MSTCN model on the full IMU dataset.
+              It loads the dataset and saved checkpoints for each fold,
+              runs inference, and computes comprehensive evaluation metrics.
+Usage       : Execute the script in your terminal:
+              $ python validate.py
+===============================================================================
+"""
+
+import os
+import json
+import glob
+import pickle
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+import torch.nn.functional as F
+from datetime import datetime
+from tqdm import tqdm
+from torchmetrics import CohenKappa, MatthewsCorrCoef
+from torch.utils.data import DataLoader, Subset
+
+# Import model and utility modules from components package
+from components.model_mstcn import MSTCN
+from components.model_tcn import TCN
+from components.model_cnnlstm import CNNLSTM
+from components.post_processing import post_process_predictions
+from components.evaluation import segment_evaluation
+from components.datasets import IMUDataset
+from components.pre_processing import hand_mirroring
+
+# -----------------------------------------------------------------------------
+#                   Configuration and Parameters
+# -----------------------------------------------------------------------------
+
+RESULT_DIR = "result"
+
+# Automatically select the lastest version based on timestamp
+all_versions = glob.glob(os.path.join(RESULT_DIR, "*"))
+RESULT_VERSION = max(all_versions, key=os.path.getmtime).split(os.sep)[-1]
+
+# Or manually set the version
+# RESULT_VERSION = "202503281533"
+
+result_dir = os.path.join(RESULT_DIR, RESULT_VERSION)
+CONFIG_FILE = os.path.join(result_dir, "config.json")
+
+# Load the configuration parameters from the JSON file
+with open(CONFIG_FILE, "r") as f:
+    config_info = json.load(f)
+
+# Set configuration parameters from the loaded JSON
+DATASET = config_info["dataset"]
+NUM_CLASSES = config_info["num_classes"]
+MODEL = config_info["model"]
+INPUT_DIM = config_info["input_dim"]
+SAMPLING_FREQ = config_info["sampling_freq"]
+WINDOW_SIZE = config_info["window_size"]
+BATCH_SIZE = config_info["batch_size"]
+NUM_WORKERS = 4
+THRESHOLD = 0.5
+DEBUG_PLOT = False
+FLAG_DATASET_MIRROR = True
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# -----------------------------------------------------------------------------
+#                        Data Loading and Pre-processing
+# -----------------------------------------------------------------------------
+
+if DATASET.startswith("DX"):
+    sub_version = DATASET.replace("DX", "").upper() or "I"
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
+elif DATASET.startswith("FD"):
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
+
+# Define file paths for the dataset (left and right data)
+X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+
+# Load data from pickle files
+with open(X_L_PATH, "rb") as f:
+    X_L = np.array(pickle.load(f), dtype=object)
+with open(Y_L_PATH, "rb") as f:
+    Y_L = np.array(pickle.load(f), dtype=object)
+with open(X_R_PATH, "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(Y_R_PATH, "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
+
+# Optionally apply hand mirroring if the flag is set
+if FLAG_DATASET_MIRROR:
+    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+# Merge left and right data
+X = np.concatenate([X_L, X_R], axis=0)
+Y = np.concatenate([Y_L, Y_R], axis=0)
+
+# Create the full dataset with the defined window size
+full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
+
+# Load cross-validation folds from the JSON configuration
+validate_folds = config_info.get("validate_folds")
+if validate_folds is None:
+    raise ValueError("No 'validate_folds' found in the configuration file.")
+
+# -----------------------------------------------------------------------------
+#                              Validating Loop
+# -----------------------------------------------------------------------------
+
+# Create a results storage for cross-validation evaluations
+validating_statistics = []
+
+
+for fold, validate_subjects in enumerate(
+    tqdm(validate_folds, desc="K-Fold", leave=True)
+):
+    # Construct the checkpoint path for the current fold
+    CHECKPOINT_PATH = os.path.join(
+        RESULT_DIR, RESULT_VERSION, f"best_model_fold{fold+1}.pth"
+    )
+
+    # Check if the checkpoint for this fold exists
+    if not os.path.exists(CHECKPOINT_PATH):
+        continue
+
+    # Instantiate the model based on the saved configuration
+    if MODEL == "TCN":
+        NUM_LAYERS = config_info["num_layers"]
+        NUM_FILTERS = config_info["num_filters"]
+        KERNEL_SIZE = config_info["kernel_size"]
+        DROPOUT = config_info["dropout"]
+        model = TCN(
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+    elif MODEL == "MSTCN":
+        NUM_STAGES = config_info["num_stages"]
+        NUM_LAYERS = config_info["num_layers"]
+        NUM_FILTERS = config_info["num_filters"]
+        KERNEL_SIZE = config_info["kernel_size"]
+        DROPOUT = config_info["dropout"]
+        model = MSTCN(
+            num_stages=NUM_STAGES,
+            num_layers=NUM_LAYERS,
+            num_classes=NUM_CLASSES,
+            input_dim=INPUT_DIM,
+            num_filters=NUM_FILTERS,
+            kernel_size=KERNEL_SIZE,
+            dropout=DROPOUT,
+        ).to(device)
+    elif MODEL == "CNN_LSTM":
+        conv_filters = config_info["conv_filters"]
+        lstm_hidden = config_info["lstm_hidden"]
+        model = CNNLSTM(
+            input_channels=INPUT_DIM,
+            conv_filters=conv_filters,
+            lstm_hidden=lstm_hidden,
+            num_classes=NUM_CLASSES,
+        ).to(device)
+    else:
+        raise ValueError(f"Invalid model: {MODEL}")
+
+    # Load the checkpoint for the current fold
+    state_dict = torch.load(CHECKPOINT_PATH, map_location=device, weights_only=True)
+    # Remove 'module.' prefix if it exists.
+    new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+    model.load_state_dict(new_state_dict)
+
+    # Split validation indices based on subject IDs
+    validate_indices = [
+        i
+        for i, subject in enumerate(full_dataset.subject_indices)
+        if subject in validate_subjects
+    ]
+
+    # Create DataLoader for the validation subset of the current fold
+    validate_loader = DataLoader(
+        Subset(full_dataset, validate_indices),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
+
+    # Explicitly set the model to evaluation mode
+    model.eval()
+
+    # Inference and Prediction Collection
+    all_predictions = []
+    all_labels = []
+
+    with torch.no_grad():
+        for batch_x, batch_y in tqdm(
+            validate_loader, desc=f"Validating Fold {fold+1}", leave=False
+        ):
+            batch_x = batch_x.permute(0, 2, 1).to(device)
+            outputs = model(batch_x)
+            # If the model produces outputs with multiple stages (4D tensor), select the last stage.
+            if outputs.ndim == 4:
+                logits = outputs[:, -1, :, :]
+            else:
+                logits = outputs
+            probabilities = F.softmax(logits, dim=1)
+            predictions = torch.argmax(probabilities, dim=1)
+            all_predictions.extend(predictions.view(-1).cpu().numpy())
+            all_labels.extend(batch_y.view(-1).cpu().numpy())
+
+    # -----------------------------------------------------------------------------
+    #                        Evaluation Metrics Calculation
+    # -----------------------------------------------------------------------------
+
+    # Compute label distribution
+    unique_labels, counts = np.unique(all_labels, return_counts=True)
+    label_distribution = {
+        float(label): int(count) for label, count in zip(unique_labels, counts)
+    }
+
+    preds_tensor = torch.tensor(all_predictions)
+    labels_tensor = torch.tensor(all_labels)
+
+    # Sample-wise metrics for each class
+    metrics_sample = {}
+    for label in range(1, NUM_CLASSES):
+        tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
+        fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
+        fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
+        denominator = 2 * tp + fp + fn
+        f1 = 2 * tp / denominator if denominator != 0 else 0.0
+        metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
+
+    # Additional sample-wise metrics
+    cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
+    matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
+        preds_tensor, labels_tensor
+    ).item()
+
+    # Post-process predictions
+    all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
+    all_labels = np.array(all_labels)
+
+    # Segment-wise evaluation metrics
+    metrics_segment = {}
+    for label in range(1, NUM_CLASSES):
+        fn, fp, tp = segment_evaluation(
+            all_predictions,
+            all_labels,
+            class_label=label,
+            threshold=THRESHOLD,
+            debug_plot=DEBUG_PLOT,
+        )
+        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+        metrics_segment[f"{label}"] = {
+            "fn": int(fn),
+            "fp": int(fp),
+            "tp": int(tp),
+            "f1": float(f1),
+        }
+
+    # Record validating statistics for the current fold
+    fold_statistics = {
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "fold": fold + 1,
+        "metrics_segment": metrics_segment,
+        "metrics_sample": metrics_sample,
+        "cohen_kappa": cohen_kappa_val,
+        "matthews_corrcoef": matthews_corrcoef_val,
+        "label_distribution": label_distribution,
+    }
+    validating_statistics.append(fold_statistics)
+
+# -----------------------------------------------------------------------------
+#                         Save Evaluation Results
+# -----------------------------------------------------------------------------
+
+# Save validating statistics
+VALIDATING_STATS_FILE = os.path.join(
+    result_dir,
+    "validate_stats_mirrored.npy" if FLAG_DATASET_MIRROR else "validate_stats.npy",
+)
+np.save(VALIDATING_STATS_FILE, validating_statistics)
+print(f"\nValidating statistics saved to {VALIDATING_STATS_FILE}")
+
+
+# =============================================================================
+#                               PLOTTING SECTION
+# =============================================================================
+
+# Define the specific directory for this version
+validate_stats = np.load(VALIDATING_STATS_FILE, allow_pickle=True).tolist()
+
+# Initialize lists to store validation metrics for each fold
+label_distribution = []  # Label distribution
+f1_scores_sample = []  # Sample-wise F1 scores
+f1_scores_segment = []  # Segment-wise F1 scores
+cohen_kappa_scores = []  # Cohen's kappa scores
+matthews_corrcoef_scores = []  # Matthews correlation coefficient scores
+
+for entry in validate_stats:
+    label_dist = entry["label_distribution"]  # dictionary: {label: count}
+
+    # Compute weighted average F1 for sample-wise metrics
+    total_weight_sample = 0.0
+    weighted_f1_sample = 0.0
+    for label_str, stats in entry["metrics_sample"].items():
+        label_int = int(label_str)
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_sample += stats["f1"] * weight
+        total_weight_sample += weight
+    f1_sample_weighted = (
+        weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
+    )
+
+    # Compute weighted average F1 for segment-wise metrics
+    total_weight_segment = 0.0
+    weighted_f1_segment = 0.0
+    for label_str, stats in entry["metrics_segment"].items():
+        label_int = int(label_str)
+        weight = label_dist.get(label_int, 0)
+        weighted_f1_segment += stats["f1"] * weight
+        total_weight_segment += weight
+    f1_segment_weighted = (
+        weighted_f1_segment / total_weight_segment if total_weight_segment > 0 else 0.0
+    )
+
+    label_distribution.append(label_dist)
+    f1_scores_sample.append(f1_sample_weighted)
+    f1_scores_segment.append(f1_segment_weighted)
+    cohen_kappa_scores.append(entry["cohen_kappa"])
+    matthews_corrcoef_scores.append(entry["matthews_corrcoef"])
+
+# Create a bar plot for validation metrics across folds
+plt.figure(figsize=(12, 6))
+width = 0.2  # Width of each bar
+fold_indices = np.arange(1, len(cohen_kappa_scores) + 1)
+
+plt.bar(
+    fold_indices - width * 1.5,
+    cohen_kappa_scores,
+    width=width,
+    label="Cohen Kappa Coefficient",
+    color="orange",
+)
+plt.bar(
+    fold_indices - width / 2,
+    matthews_corrcoef_scores,
+    width=width,
+    label="Matthews Correlation Coefficient",
+    color="purple",
+)
+plt.bar(
+    fold_indices + width / 2,
+    f1_scores_sample,
+    width=width,
+    label="Weighted Sample-wise F1 Score",
+    color="blue",
+)
+plt.bar(
+    fold_indices + width * 1.5,
+    f1_scores_segment,
+    width=width,
+    label=f"Weighted Segment-wise F1 Score (Threshold={THRESHOLD})",
+    color="green",
+)
+
+plt.xticks(fold_indices)
+plt.xlabel("Fold")
+plt.ylabel("Score")
+title_suffix = " (Mirrored)" if FLAG_DATASET_MIRROR else ""
+filename_suffix = "_mirrored" if FLAG_DATASET_MIRROR else ""
+plt.title(f"Fold-wise Performance Metrics{title_suffix}")
+plt.legend(loc="lower right")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.savefig(
+    os.path.join(RESULT_DIR, RESULT_VERSION, f"validate_metrics{filename_suffix}.png"),
+    dpi=300,
+)
+plt.close()
+
+----- End of validate.py -----
+
+----- Start of getcodetext.py -----
+import os
+
+
+def find_and_combine_files(root_dir, output_file):
+    extensions = ".py"
+    with open(output_file, "w", encoding="utf-8") as outfile:
+        for subdir, dirs, files in os.walk(root_dir):
+            for file in files:
+                if file.endswith(extensions):
+                    file_path = os.path.join(subdir, file)
+                    with open(file_path, "r", encoding="utf-8") as infile:
+                        outfile.write(f"----- Start of {file} -----\n")
+                        outfile.write(infile.read())
+                        outfile.write(f"\n----- End of {file} -----\n\n")
+
+
+# Replace 'your_project_directory' with the path to your project directory.
+# Replace 'combined_output.txt' with your desired output file name.
+find_and_combine_files("./", "combined_output.txt")
+
+----- End of getcodetext.py -----
+
+----- Start of tl_fine_tune.py -----
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Fine-Tuning Script Using Pretrained VAE Encoder
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-03-26
+Description : This script loads the pretrained VAE model weights, extracts its encoder,
+              and builds a downstream classifier for the IMU data fine-tuning task.
+              You can choose to freeze the encoder parameters (only training the classifier)
+              or fine-tune the entire model jointly.
+===============================================================================
+"""
+
+import os
+import json
+import pickle
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from datetime import datetime
+from tqdm import tqdm
+
+# Import dataset and preprocessing functions (assumed to be available in your project)
+from components.datasets import IMUDataset
+from components.pre_processing import hand_mirroring
+from components.model_vae import VAE
+
+
+#############################################
+#         Classifier Model Definition     #
+#############################################
+class Classifier(nn.Module):
+    def __init__(self, encoder, latent_dim, num_classes, freeze_encoder=True):
+        """
+        Parameters:
+            encoder: Pretrained VAE model (must have an encode() method)
+            latent_dim (int): Dimension of the latent space.
+            num_classes (int): Number of classes.
+            freeze_encoder (bool): Whether to freeze the encoder parameters.
+        """
+        super(Classifier, self).__init__()
+        self.encoder = encoder
+        if freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, 64), nn.ReLU(), nn.Linear(64, num_classes)
+        )
+
+    def forward(self, x):
+        # x shape: (batch, channels, sequence_length)
+        # Use the encode() method to get mu and logvar
+        mu, _ = self.encoder.encode(x)
+        logits = self.fc(mu)
+        return logits
+
+
+#############################################
+#         Fine-Tuning Training Function   #
+#############################################
+def train_classifier(model, dataloader, device, num_epochs=50, lr=1e-3):
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    best_loss = float("inf")
+    best_model_state = None
+    model.train()
+    for epoch in range(num_epochs):
+        epoch_loss = 0
+        correct = 0
+        total = 0
+        for batch_x, batch_y in tqdm(
+            dataloader, desc=f"Fine-Tuning Epoch {epoch+1}/{num_epochs}"
+        ):
+            # Reshape input to (batch, channels, sequence_length)
+            batch_x = batch_x.to(device).permute(0, 2, 1)
+            # Use the first label of each sequence as the sample label.
+            batch_y = batch_y[:, 0].long().to(device)
+            optimizer.zero_grad()
+            logits = model(batch_x)
+            loss = criterion(logits, batch_y)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+            preds = logits.argmax(dim=1)
+            correct += (preds == batch_y).sum().item()
+            total += batch_y.size(0)
+        avg_loss = epoch_loss / len(dataloader)
+        accuracy = correct / total
+        print(
+            f"Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}"
+        )
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            best_model_state = model.state_dict()
+    return best_model_state
+
+
+def main():
+    # -------------------- Configuration --------------------
+    DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 4
+    SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+    if DATASET.startswith("FD"):
+        sub_version = DATASET.replace("FD", "").upper() or "I"
+        DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+        num_classes = 3
+    elif DATASET.startswith("DX"):
+        sub_version = DATASET.replace("DX", "").upper() or "I"
+        DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+        num_classes = 2
+    else:
+        raise ValueError(f"Invalid dataset: {DATASET}")
+
+    WINDOW_LENGTH = 60
+    WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+    BATCH_SIZE = 64
+    NUM_WORKERS = 16
+    FLAG_DATASET_MIRROR = False  # Set to True if mirroring is needed
+
+    # Fine-tuning parameters
+    num_epochs_ft = 50
+    learning_rate_ft = 5e-4
+    freeze_encoder = True  # Set to False if joint fine-tuning is desired
+
+    # -------------------- Load Pretrained Model and Configuration --------------------
+    # Modify the directory below to your pretrained model directory (timestamped folder)
+    pretrained_dir = "result/202503271341"  # Change as needed
+    pretrained_checkpoint = os.path.join(pretrained_dir, "pretrained_vae.pth")
+    config_path = os.path.join(pretrained_dir, "config.json")
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    INPUT_DIM = config["input_dim"]
+    latent_dim = config["latent_dim"]
+    hidden_dim = config["hidden_dim"]
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # Build the VAE model and load pretrained weights.
+    vae_model = VAE(
+        input_channels=INPUT_DIM,
+        sequence_length=WINDOW_SIZE,
+        hidden_dim=hidden_dim,
+        latent_dim=latent_dim,
+    ).to(device)
+    vae_model.load_state_dict(
+        torch.load(pretrained_checkpoint, map_location=device, weights_only=True)
+    )
+    vae_model.eval()
+
+    # -------------------- Data Loading --------------------
+    X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+    Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+    X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+    Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+    with open(X_L_PATH, "rb") as f:
+        X_L = np.array(pickle.load(f), dtype=object)
+    with open(Y_L_PATH, "rb") as f:
+        Y_L = np.array(pickle.load(f), dtype=object)
+    with open(X_R_PATH, "rb") as f:
+        X_R = np.array(pickle.load(f), dtype=object)
+    with open(Y_R_PATH, "rb") as f:
+        Y_R = np.array(pickle.load(f), dtype=object)
+
+    if FLAG_DATASET_MIRROR:
+        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+    # Merge left and right data
+    X = np.concatenate([X_L, X_R], axis=0)
+    Y = np.concatenate([Y_L, Y_R], axis=0)
+
+    full_dataset = IMUDataset(
+        X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR
+    )
+    dataloader = DataLoader(
+        full_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
+
+    # -------------------- Build Classifier Model --------------------
+    # Note: pass the entire VAE model (not just its encoder) so that we can call encode() in the classifier.
+    classifier = Classifier(
+        encoder=vae_model,
+        latent_dim=latent_dim,
+        num_classes=num_classes,
+        freeze_encoder=freeze_encoder,
+    ).to(device)
+
+    # -------------------- Fine-Tuning Training --------------------
+    print("Starting fine-tuning ...")
+    best_state = train_classifier(
+        classifier, dataloader, device, num_epochs=num_epochs_ft, lr=learning_rate_ft
+    )
+    classifier.load_state_dict(best_state)
+
+    # -------------------- Save Fine-Tuned Model and Configuration --------------------
+    ft_dir = os.path.join("result", datetime.now().strftime("%Y%m%d%H%M"))
+    os.makedirs(ft_dir, exist_ok=True)
+    classifier_ckpt = os.path.join(ft_dir, "fine_tuned_classifier.pth")
+    torch.save(classifier.state_dict(), classifier_ckpt)
+    print(f"Fine-tuned classifier saved to {classifier_ckpt}")
+
+    ft_config = {
+        "dataset": DATASET,
+        "input_dim": INPUT_DIM,
+        "hidden_dim": hidden_dim,
+        "latent_dim": latent_dim,
+        "num_classes": num_classes,
+        "sampling_freq": SAMPLING_FREQ,
+        "window_size": WINDOW_SIZE,
+        "batch_size": BATCH_SIZE,
+        "num_epochs_ft": num_epochs_ft,
+        "learning_rate_ft": learning_rate_ft,
+        "downsample_factor": DOWNSAMPLE_FACTOR,
+        "mirroring": FLAG_DATASET_MIRROR,
+        "freeze_encoder": freeze_encoder,
+        "pretrained_dir": pretrained_dir,
+    }
+    ft_config_path = os.path.join(ft_dir, "ft_config.json")
+    with open(ft_config_path, "w") as f:
+        json.dump(ft_config, f, indent=4)
+    print(f"Configuration saved to {ft_config_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+----- End of tl_fine_tune.py -----
+
+----- Start of test_eval_tri.py -----
+import numpy as np
+import matplotlib.pyplot as plt
+from components.evaluation import segment_evaluation
+
+# Ground Truth sequence (3 classes: 0=background, 1=class1, 2=class2, 3=class3)
+# fmt: off
+gt = np.array([
+    0, 0, 1, 1, 1, 0, 0,  # Normal class 1 gesture
+    0, 0, 2, 2, 2, 0, 0,  # Normal class 2 gesture
+    3, 3, 3, 3, 0, 0, 0,  # Class 3 gesture for testing
+    0, 1, 1, 0, 2, 2, 0,  # Mixed classes
+    3, 3, 3, 3, 3, 3, 3,  # Long class 3 gesture
+    0, 0, 1, 2, 3, 0, 0,  # Sequential classes
+    1, 2, 0, 3, 2, 1, 0   # Mixed pattern
+])
+
+# Prediction sequence
+pred = np.array([
+    0, 1, 1, 1, 1, 1, 0,  # Overfill class 1
+    0, 2, 2, 1, 2, 0, 0,  # Class mismatch
+    3, 3, 2, 2, 0, 0, 0,  # Wrong class prediction
+    0, 1, 1, 1, 2, 2, 0,  # Correct mixed classes
+    3, 0, 3, 0, 3, 0, 3,  # Fragmented class 3
+    0, 0, 0, 0, 0, 0, 0,  # Missing detections
+    1, 1, 1, 3, 3, 3, 0   # Class confusion
+])
+# fmt: on
+
+
+# Calculate F1 score sample-wise
+tp = np.sum(np.logical_and(pred == 1, gt == 1))
+fp = np.sum(np.logical_and(pred == 1, gt != 1))
+fn = np.sum(np.logical_and(pred != 1, gt == 1))
+precision = tp / (tp + fp)
+recall = tp / (tp + fn)
+f1_score = 2 * precision * recall / (precision + recall)
+print(f"F1 Score (sample): {f1_score:.4f}")
+
+# Calculate F1 score segment-wise
+fn_seg, fp_seg, tp_seg = segment_evaluation(pred, gt, 1, 0.5, debug_plot=True)
+precision = tp_seg / (tp_seg + fp_seg)
+recall = tp_seg / (tp_seg + fn_seg)
+f1_score_seg = 2 * precision * recall / (precision + recall)
+print(f"F1 Score (seg): {f1_score_seg:.4f}")
+
+# Calculate F1 score segment-wise
+fn_seg, fp_seg, tp_seg = segment_evaluation(pred, gt, 2, 0.5, debug_plot=True)
+precision = tp_seg / (tp_seg + fp_seg)
+recall = tp_seg / (tp_seg + fn_seg)
+f1_score_seg = 2 * precision * recall / (precision + recall)
+print(f"F1 Score (seg): {f1_score_seg:.4f}")
+
+# Calculate F1 score segment-wise
+fn_seg, fp_seg, tp_seg = segment_evaluation(pred, gt, 3, 0.5, debug_plot=True)
+precision = tp_seg / (tp_seg + fp_seg)
+recall = tp_seg / (tp_seg + fn_seg)
+f1_score_seg = 2 * precision * recall / (precision + recall)
+print(f"F1 Score (seg): {f1_score_seg:.4f}")
+
+----- End of test_eval_tri.py -----
+
+----- Start of tl_validate_finetune.py -----
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Fine-Tuned Classifier Validation Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-03-26
+Description : This script loads the fine-tuned classifier model and evaluates it on test data.
+              It computes overall accuracy, and if scikit-learn is installed, prints out a
+              detailed classification report and confusion matrix.
+===============================================================================
+"""
+
+import os
+import json
+import pickle
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from components.datasets import IMUDataset
+from components.model_vae import VAE
+
+# Optionally import scikit-learn for detailed metrics.
+try:
+    from sklearn.metrics import classification_report, confusion_matrix
+except ImportError:
+    classification_report, confusion_matrix = None, None
+
+
+#############################################
+#         Classifier Model Definition     #
+#############################################
+class Classifier(nn.Module):
+    def __init__(self, encoder, latent_dim, num_classes):
+        """
+        Parameters:
+            encoder: Pretrained VAE model (must have an encode() method)
+            latent_dim (int): Dimension of the latent space.
+            num_classes (int): Number of classes.
+        """
+        super(Classifier, self).__init__()
+        self.encoder = encoder
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, 64), nn.ReLU(), nn.Linear(64, num_classes)
+        )
+
+    def forward(self, x):
+        mu, _ = self.encoder.encode(x)
+        logits = self.fc(mu)
+        return logits
+
+
+def main():
+    # ------------------- Configuration -------------------
+    DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 4
+    SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+    if DATASET.startswith("FD"):
+        sub_version = DATASET.replace("FD", "").upper() or "I"
+        DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+        num_classes = 3
+    elif DATASET.startswith("DX"):
+        sub_version = DATASET.replace("DX", "").upper() or "I"
+        DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+        num_classes = 2
+    else:
+        raise ValueError("Invalid dataset")
+    WINDOW_LENGTH = 60
+    WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+    BATCH_SIZE = 64
+    NUM_WORKERS = 16
+    FLAG_DATASET_MIRROR = False  # Set to True if mirroring is needed
+
+    # ------------------- Load Fine-Tuned Model and Configuration -------------------
+    # Modify this directory to your fine-tuned model folder (should contain fine_tuned_classifier.pth and ft_config.json)
+    ft_dir = "result/202503271347"
+    classifier_ckpt = os.path.join(ft_dir, "fine_tuned_classifier.pth")
+    ft_config_path = os.path.join(ft_dir, "ft_config.json")
+    with open(ft_config_path, "r") as f:
+        config = json.load(f)
+    INPUT_DIM = config["input_dim"]
+    latent_dim = config["latent_dim"]
+    hidden_dim = config["hidden_dim"]
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # ------------------- Load Pretrained VAE Encoder -------------------
+    pretrained_dir = config["pretrained_dir"]
+    pretrained_checkpoint = os.path.join(pretrained_dir, "pretrained_vae.pth")
+    vae_model = VAE(
+        input_channels=INPUT_DIM,
+        sequence_length=WINDOW_SIZE,
+        hidden_dim=hidden_dim,
+        latent_dim=latent_dim,
+    ).to(device)
+    vae_model.load_state_dict(
+        torch.load(pretrained_checkpoint, map_location=device, weights_only=True),
+        strict=False,
+    )
+    vae_model.eval()
+
+    # ------------------- Build Classifier and Load Fine-Tuned Weights -------------------
+    classifier = Classifier(
+        encoder=vae_model, latent_dim=latent_dim, num_classes=num_classes
+    ).to(device)
+    # Adjust the state dict keys to remove the extra "encoder." prefix if needed.
+    state_dict = torch.load(classifier_ckpt, map_location=device)
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        if key.startswith("encoder.encoder."):
+            new_key = key.replace("encoder.encoder.", "encoder.")
+            new_state_dict[new_key] = value
+        else:
+            new_state_dict[key] = value
+    classifier.load_state_dict(new_state_dict)
+    classifier.eval()
+
+    # ------------------- Load Test Data -------------------
+    X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
+    Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
+    X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
+    Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
+    with open(X_L_PATH, "rb") as f:
+        X_L = np.array(pickle.load(f), dtype=object)
+    with open(Y_L_PATH, "rb") as f:
+        Y_L = np.array(pickle.load(f), dtype=object)
+    with open(X_R_PATH, "rb") as f:
+        X_R = np.array(pickle.load(f), dtype=object)
+    with open(Y_R_PATH, "rb") as f:
+        Y_R = np.array(pickle.load(f), dtype=object)
+
+    if FLAG_DATASET_MIRROR:
+        from components.pre_processing import hand_mirroring
+
+        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+    X = np.concatenate([X_L, X_R], axis=0)
+    Y = np.concatenate([Y_L, Y_R], axis=0)
+
+    test_dataset = IMUDataset(
+        X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
+
+    # ------------------- Evaluation -------------------
+    all_preds = []
+    all_labels = []
+    with torch.no_grad():
+        for batch_x, batch_y in tqdm(test_loader, desc="Validating"):
+            batch_x = batch_x.to(device).permute(0, 2, 1)
+            # Use the first label of each sequence as the sample label.
+            labels = batch_y[:, 0].long().to(device)
+            logits = classifier(batch_x)
+            preds = logits.argmax(dim=1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    accuracy = np.mean(np.array(all_preds) == np.array(all_labels))
+    print(f"Test Accuracy: {accuracy:.4f}")
+
+    if classification_report is not None:
+        print("Classification Report:")
+        print(classification_report(all_labels, all_preds, digits=4))
+    else:
+        print("scikit-learn not installed, skipping classification report.")
+
+    if confusion_matrix is not None:
+        print("Confusion Matrix:")
+        print(confusion_matrix(all_labels, all_preds))
+    else:
+        print("scikit-learn not installed, skipping confusion matrix.")
+
+
+if __name__ == "__main__":
+    main()
+
+----- End of tl_validate_finetune.py -----
+
+----- Start of model_cnnlstm.py -----
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+"""
+Reference: A Data Driven End-to-End Approach for In-the-Wild Monitoring of Eating Behavior Using Smartwatches
+Adjustment: Use dilated convolutions instead of max pooling (which downsamples the time dimension) to expand the receptive field while preserving the temporal resolution.
+"""
+
+
+class CNNLSTM(nn.Module):
+    """
+    CNN-LSTM architecture using dilated convolutions to preserve the original
+    temporal resolution (i.e. input (B,6,M) leads to output (B,N,M)), where N is
+    the number of classes.
+
+    The dilated convolutions increase the effective receptive field while
+    keeping the output length the same as the input.
+
+    Layer Details:
+      - Conv1: kernel_size=5, dilation=1, padding=2  => effective kernel size = 5.
+      - Conv2: kernel_size=3, dilation=2, padding=2  => effective kernel size = 5.
+      - Conv3: kernel_size=3, dilation=4, padding=4  => effective kernel size = 9.
+    """
+
+    def __init__(
+        self,
+        input_channels=6,
+        conv_filters=(32, 64, 128),
+        lstm_hidden=128,
+        num_classes=3,
+    ):
+        super(CNNLSTM, self).__init__()
+        f1, f2, f3 = conv_filters
+
+        # Convolutional layers with dilated convolutions
+        # Use proper padding so that the output length remains M.
+        self.conv1 = nn.Conv1d(
+            in_channels=input_channels,
+            out_channels=f1,
+            kernel_size=5,
+            dilation=1,
+            padding=2,
+        )
+        self.conv2 = nn.Conv1d(
+            in_channels=f1, out_channels=f2, kernel_size=3, dilation=2, padding=2
+        )
+        self.conv3 = nn.Conv1d(
+            in_channels=f2, out_channels=f3, kernel_size=3, dilation=4, padding=4
+        )
+        self.relu = nn.ReLU()
+
+        # LSTM that processes the sequence with length M
+        self.lstm = nn.LSTM(input_size=f3, hidden_size=lstm_hidden, batch_first=True)
+
+        # Fully connected layer to produce logits per time step for each class
+        self.fc = nn.Linear(lstm_hidden, num_classes)
+        # No sigmoid: CrossEntropyLoss expects raw logits.
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor of shape (B, 6, M)
+
+        Returns:
+            out: Tensor of shape (B, N, M) where N is the number of classes.
+        """
+        # Apply dilated convolutions; output shape remains (B, *, M)
+        x = self.relu(self.conv1(x))  # (B, 32, M)
+        x = self.relu(self.conv2(x))  # (B, 64, M)
+        x = self.relu(self.conv3(x))  # (B, 128, M)
+
+        # Transpose to shape (B, M, 128) for the LSTM
+        x = x.transpose(1, 2)
+
+        # LSTM processing produces output of shape (B, M, lstm_hidden)
+        lstm_out, (h_n, c_n) = self.lstm(x)
+
+        # Apply the fully connected layer (on every time step)
+        out = self.fc(lstm_out)  # (B, M, num_classes)
+        # No activation applied because we'll use CrossEntropyLoss which
+        # expects raw logits.
+
+        # Transpose to get final output shape (B, num_classes, M)
+        out = out.transpose(1, 2)
+        return out
+
+
+def CNNLSTM_Loss(outputs, targets):
+    """
+    Loss function for CNN_LSTM for multi-class classification.
+
+    Assumes:
+      - outputs: Tensor of shape [batch_size, num_classes, seq_len] (logits)
+      - targets: Tensor of shape [batch_size, seq_len] with integer class labels
+                 in the range [0, num_classes - 1].
+
+    The loss is computed as a combination of:
+      - Cross-Entropy loss (applied on each time step).
+      - Temporal smoothing loss: MSE loss between the log-softmax predictions
+        for consecutive time steps.
+
+    Returns:
+        ce_loss (torch.Tensor): Cross-entropy loss.
+        mse_loss_mean (torch.Tensor): Temporal smoothing loss.
+    """
+    targets = targets.long()
+    loss_ce_fn = nn.CrossEntropyLoss(ignore_index=-100)
+    loss_mse_fn = nn.MSELoss(reduction="none")
+
+    batch_size, num_classes, seq_len = outputs.size()
+
+    # Compute cross-entropy loss.
+    # Transpose outputs to [batch_size, seq_len, num_classes] and reshape.
+    ce_loss = loss_ce_fn(
+        outputs.transpose(2, 1).contiguous().view(-1, num_classes), targets.view(-1)
+    )
+
+    # Compute temporal smoothing loss if there is more than one time step.
+    if seq_len > 1:
+        mse_loss_value = loss_mse_fn(
+            F.log_softmax(outputs[:, :, 1:], dim=1),
+            F.log_softmax(outputs.detach()[:, :, :-1], dim=1),
+        )
+        mse_loss_value = torch.clamp(mse_loss_value, min=0, max=16)
+        mse_loss_mean = torch.mean(mse_loss_value)
+    else:
+        mse_loss_mean = torch.tensor(0.0, device=outputs.device)
+
+    return ce_loss, mse_loss_mean
+
+----- End of model_cnnlstm.py -----
+
+----- Start of checkpoint.py -----
+import os
+import torch
+
+
+def save_best_model(
+    model, fold, current_metric, best_metric, checkpoint_dir, mode="max"
+):
+    """
+    Save the best model for a given fold based on a performance metric.
+
+    Parameters:
+        model (torch.nn.Module): The model to save.
+        fold (int): Current fold number (e.g., 1, 2, ...).
+        current_metric (float): The evaluation metric value from the current epoch.
+        best_metric (float): The best metric value recorded so far.
+        checkpoint_dir (str): Directory where the best model will be saved.
+        mode (str): 'max' if higher metric values are better (e.g., accuracy),
+                    'min' if lower metric values are better (e.g., loss).
+
+    Returns:
+        float: The updated best metric value.
+    """
+    # Determine if the current metric is better than the best metric so far
+    is_better = (
+        (current_metric > best_metric)
+        if mode == "max"
+        else (current_metric < best_metric)
+    )
+
+    if is_better:
+        best_metric = current_metric
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        checkpoint_path = os.path.join(checkpoint_dir, f"best_model_fold{fold}.pth")
+        torch.save(model.state_dict(), checkpoint_path)
+
+    return best_metric
+
+
+# Function to load checkpoint
+def load_checkpoint(model, optimizer, checkpoint_path):
+    """
+    Load model from checkpoint
+
+    Args:
+        model: The PyTorch model to load weights into
+        optimizer: The optimizer to load state into
+        checkpoint_path: Path to the checkpoint file
+
+    Returns:
+        model: The model with loaded weights
+        optimizer: The optimizer with loaded state
+        epoch: The epoch number when checkpoint was saved
+        f1_score: The F1 score when checkpoint was saved
+    """
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    epoch = checkpoint["epoch"]
+    f1_score = checkpoint["f1_score"]
+    fold = checkpoint["fold"]
+
+    print(
+        f"Loaded checkpoint from fold {fold}, epoch {epoch} with F1 score: {f1_score:.4f}"
+    )
+    return model, optimizer, epoch, f1_score
+
+----- End of checkpoint.py -----
+
+----- Start of evaluation.py -----
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import linear_sum_assignment
+
+
+def get_target_intervals(x, class_label):
+    """
+    Extract start and end indices of intervals where x[i] equals class_label.
+
+    Parameters:
+        x (np.ndarray): Input 1D array.
+        class_label (int): Target class label.
+
+    Returns:
+        np.ndarray: Array of [start, end) interval indices.
+    """
+    results = []
+    in_segment = False
+    start_idx = 0
+
+    for i in range(len(x)):
+        if x[i] == class_label and not in_segment:
+            in_segment = True
+            start_idx = i
+        elif x[i] != class_label and in_segment:
+            in_segment = False
+            results.append([start_idx, i])
+
+    if in_segment:
+        results.append([start_idx, len(x)])
+
+    return np.array(results, dtype=int)
+
+
+def get_union_intervals(pred_intervals, gt_intervals):
+    """
+    Merge prediction and ground truth intervals into union intervals,
+    tracking which original intervals from each contribute to the merged intervals.
+
+    Parameters:
+        pred_intervals (np.ndarray): Array of [start, end) intervals for predictions.
+        gt_intervals (np.ndarray): Array of [start, end) intervals for ground truth.
+
+    Returns:
+        list of dict: Each dict contains the merged 'range', 'pred_ranges', and 'gt_ranges'.
+    """
+    if len(pred_intervals) == 0 and len(gt_intervals) == 0:
+        return []
+
+    # Combine intervals with labels indicating their source
+    labeled_intervals = []
+    for p in pred_intervals:
+        labeled_intervals.append((p[0], p[1], "pred"))
+    for g in gt_intervals:
+        labeled_intervals.append((g[0], g[1], "gt"))
+
+    # Sort intervals by their start time
+    labeled_intervals.sort(key=lambda x: x[0])
+
+    merged = []
+    if not labeled_intervals:
+        return merged
+
+    current_start, current_end, current_type = labeled_intervals[0]
+    pred_ranges = []
+    gt_ranges = []
+
+    # Initialize the first interval
+    if current_type == "pred":
+        pred_ranges.append([current_start, current_end])
+    else:
+        gt_ranges.append([current_start, current_end])
+
+    for interval in labeled_intervals[1:]:
+        start, end, type_ = interval
+        if start <= current_end:
+            # Overlapping or adjacent, merge them
+            current_end = max(current_end, end)
+            if type_ == "pred":
+                pred_ranges.append([start, end])
+            else:
+                gt_ranges.append([start, end])
+        else:
+            # Non-overlapping, finalize the current merged interval
+            merged.append(
+                {
+                    "pred_ranges": pred_ranges.copy(),
+                    "gt_ranges": gt_ranges.copy(),
+                }
+            )
+            # Start new interval
+            current_start, current_end, current_type = start, end, type_
+            pred_ranges = [[start, end]] if type_ == "pred" else []
+            gt_ranges = [[start, end]] if type_ == "gt" else []
+
+    # Add the last merged interval
+    merged.append(
+        {
+            "pred_ranges": pred_ranges.copy(),
+            "gt_ranges": gt_ranges.copy(),
+        }
+    )
+
+    return merged
+
+
+def _plot_span(ax, interval, text, color):
+    """
+    Helper function for debug visualization.
+    Plots a span on the given axis with the specified text and color.
+    """
+    ax.axvspan(interval[0], interval[1], alpha=0.3, color=color)
+    ax.text(
+        (interval[0] + interval[1]) / 2,
+        0.5,
+        text,
+        ha="center",
+        va="center",
+        color=color,
+    )
+
+
+def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
+    """
+    Calculate segmentation metrics using interval matching.
+
+    Parameters:
+        pred (np.ndarray): Predicted segmentation.
+        gt (np.ndarray): Ground truth.
+        class_label (int): Class to evaluate.
+        threshold (float): IoU threshold for TP.
+        debug_plot (bool): Enable visualization.
+
+    Returns:
+        tuple: (false_negatives, false_positives, true_positives).
+    """
+    if debug_plot:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
+        ax1.step(range(len(gt)), gt, where="post", label="GT", color="blue")
+        ax2.step(range(len(pred)), pred, where="post", label="Pred", color="red")
+
+    fn, fp, tp = 0, 0, 0
+
+    # Extract intervals for target class
+    gt_intervals = get_target_intervals(gt, class_label)
+    pred_intervals = get_target_intervals(pred, class_label)
+    union = get_union_intervals(pred_intervals, gt_intervals)
+
+    for interval in union:
+        gt_subset = interval["gt_ranges"]
+        pred_subset = interval["pred_ranges"]
+
+        if len(gt_subset) == 0:
+            fp += 1
+            if debug_plot:
+                for s, e in pred_subset:
+                    _plot_span(ax2, (s, e), "FP", "red")
+            continue
+
+        if len(pred_subset) == 0:
+            fn += 1
+            if debug_plot:
+                for s, e in gt_subset:
+                    _plot_span(ax1, (s, e), "FN", "blue")
+            continue
+
+        # Build IoU matrix
+        cost_matrix = np.zeros((len(gt_subset), len(pred_subset)))
+        for i, (gs, ge) in enumerate(gt_subset):
+            for j, (ps, pe) in enumerate(pred_subset):
+                inter_start = max(gs, ps)
+                inter_end = min(ge, pe)
+                inter = max(0, inter_end - inter_start)
+                union = (ge - gs) + (pe - ps) - inter
+                cost_matrix[i, j] = inter / union if union else 0
+
+        # Optimal matching
+        gt_idx, pred_idx = linear_sum_assignment(-cost_matrix)
+        matched = set()
+        for r, c in zip(gt_idx, pred_idx):
+            if cost_matrix[r, c] >= threshold:
+                tp += 1
+                matched.add((r, c))
+                if debug_plot:
+                    gs, ge = gt_subset[r][0], gt_subset[r][1]
+                    ps, pe = pred_subset[c][0], pred_subset[c][1]
+                    _plot_span(ax1, (gs, ge), "TP", "blue")
+                    _plot_span(ax2, (ps, pe), "TP", "red")
+
+        # Identify leftovers
+        remaining_gt = [
+            (i, (s, e))
+            for i, (s, e) in enumerate(gt_subset)
+            if i not in {r for r, _ in matched}
+        ]
+        remaining_pred = [
+            (j, (s, e))
+            for j, (s, e) in enumerate(pred_subset)
+            if j not in {c for _, c in matched}
+        ]
+
+        # Greedy overlap matching for leftovers
+        used_gt = set()
+        used_pred = set()
+
+        # Match remaining GT to Pred
+        for gt_id, (gs, ge) in remaining_gt:
+            max_overlap = 0
+            best_pred = None
+
+            for pred_id, (ps, pe) in remaining_pred:
+                if pred_id in used_pred:
+                    continue
+
+                overlap = max(0, min(ge, pe) - max(gs, ps))
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    best_pred = pred_id
+
+            if best_pred is not None and max_overlap > 0:
+                used_gt.add(gt_id)
+                used_pred.add(best_pred)
+                remaining_pred_dict = {j: (s, e) for j, (s, e) in remaining_pred}
+                ps, pe = remaining_pred_dict.get(best_pred, (None, None))
+
+                # Compare lengths
+                if (ge - gs) > (pe - ps):
+                    fn += 1
+                    if debug_plot:
+                        _plot_span(ax1, (gs, ge), "FN", "blue")
+                        _plot_span(ax2, (ps, pe), "FN", "red")
+                else:
+                    fp += 1
+                    if debug_plot:
+                        _plot_span(ax1, (gs, ge), "FP", "blue")
+                        _plot_span(ax2, (ps, pe), "FP", "red")
+
+        # Count completely unpaired intervals
+        for gt_id, (gs, ge) in remaining_gt:
+            if gt_id not in used_gt:
+                fn += 1
+                if debug_plot:
+                    _plot_span(ax1, (gs, ge), "FN", "blue")
+
+        for pred_id, (ps, pe) in remaining_pred:
+            if pred_id not in used_pred:
+                fp += 1
+                if debug_plot:
+                    _plot_span(ax2, (ps, pe), "FP", "red")
+
+    if debug_plot:
+        plt.tight_layout()
+        plt.show()
+
+    return fn, fp, tp
+
+----- End of evaluation.py -----
+
+----- Start of datasets.py -----
+import numpy as np
+import torch
+import scipy.signal as signal
+from torch.utils.data import Dataset
+import os
+
+
+class IMUDataset(Dataset):
+    def __init__(
+        self, X, Y, sequence_length=128, downsample_factor=4, apply_antialias=True
+    ):
+        """
+        Initialize the IMUDataset.
+
+        Parameters:
+            X (list of np.ndarray): IMU data for each subject, each array has shape (N, 6)
+            Y (list of np.ndarray): Label arrays for each subject, each array has shape (N,)
+            sequence_length (int): Length of each sequence segment.
+            downsample_factor (int): Downsampling factor.
+            apply_antialias (bool): Whether to apply anti-aliasing filter before downsampling.
+        """
+        self.data = []
+        self.labels = []
+        self.sequence_length = sequence_length
+        self.subject_indices = []
+        self.downsample_factor = downsample_factor
+
+        if downsample_factor < 1:
+            raise ValueError("downsample_factor must be >= 1.")
+
+        for subject_idx, (imu_data, labels) in enumerate(zip(X, Y)):
+            if downsample_factor > 1:
+                imu_data = self.downsample(imu_data, downsample_factor, apply_antialias)
+                labels = labels[::downsample_factor]
+
+            imu_data = self.normalize(imu_data)
+            num_samples = len(labels)
+
+            # Process complete sequence segments
+            for i in range(0, num_samples - sequence_length + 1, sequence_length):
+                imu_segment = imu_data[i : i + sequence_length]
+                label_segment = labels[i : i + sequence_length]
+                self.data.append(imu_segment)
+                self.labels.append(label_segment)
+                self.subject_indices.append(subject_idx)
+
+            # Process remaining segments that are less than sequence_length, zero-padding
+            remainder = num_samples % sequence_length
+            if remainder > 0:
+                start = num_samples - remainder
+                imu_segment = imu_data[start:]
+                label_segment = labels[start:]
+                pad_length = sequence_length - remainder
+
+                # Zero-pad imu_segment in 2D (pad rows, keep 6 features unchanged)
+                imu_segment_padded = np.pad(
+                    imu_segment,
+                    pad_width=((0, pad_length), (0, 0)),
+                    mode="constant",
+                    constant_values=0,
+                )
+                # Zero-pad label_segment in 1D
+                label_segment_padded = np.pad(
+                    label_segment,
+                    pad_width=(0, pad_length),
+                    mode="constant",
+                    constant_values=0,
+                )
+
+                self.data.append(imu_segment_padded)
+                self.labels.append(label_segment_padded)
+                self.subject_indices.append(subject_idx)
+
+    def downsample(self, data, factor, apply_antialias=True):
+        """
+        Apply anti-aliasing filter and downsample the IMU data.
+
+        Parameters:
+            data (np.ndarray): IMU data.
+            factor (int): Downsampling factor.
+            apply_antialias (bool): Whether to apply a low-pass filter before downsampling.
+
+        Returns:
+            np.ndarray: Downsampled IMU data.
+        """
+        if apply_antialias:
+            nyquist = 0.5 * data.shape[0]  # Original Nyquist frequency
+            cutoff = (
+                0.5 / factor
+            ) * nyquist  # Limit to 80% of the new Nyquist frequency
+            b, a = signal.butter(4, cutoff / nyquist, btype="low", analog=False)
+            data = signal.filtfilt(b, a, data, axis=0)
+
+        return data[::factor, :]
+
+    def normalize(self, data):
+        """
+        Z-score normalization.
+
+        Parameters:
+            data (np.ndarray): IMU data.
+
+        Returns:
+            np.ndarray: Normalized IMU data.
+        """
+        mean = np.mean(data, axis=0, keepdims=True)
+        std = np.std(data, axis=0, keepdims=True)
+        return (data - mean) / (std + 1e-5)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        x = torch.tensor(self.data[idx], dtype=torch.float32)
+        y = torch.tensor(self.labels[idx], dtype=torch.float32)
+        return x, y
+
+
+def create_balanced_subject_folds(dataset, num_folds=7):
+    """
+    Create balanced folds where each fold has approximately the same number of samples.
+
+    Args:
+        dataset: IMUDataset object with subject_indices attribute
+        num_folds: Number of folds to create
+
+    Returns:
+        List of lists, where each inner list contains subject IDs for that fold
+    """
+    # Count samples per subject
+    subject_counts = {}
+    unique_subjects = sorted(set(dataset.subject_indices))
+
+    for subject in unique_subjects:
+        subject_count = sum(1 for idx in dataset.subject_indices if idx == subject)
+        subject_counts[subject] = subject_count
+
+    # Sort subjects by sample count (descending)
+    sorted_subjects = sorted(subject_counts.items(), key=lambda x: x[1], reverse=True)
+
+    # Initialize folds with empty lists and zero counts
+    folds = [[] for _ in range(num_folds)]
+    fold_sample_counts = [0] * num_folds
+
+    # Distribute subjects to folds using greedy approach
+    for subject, count in sorted_subjects:
+        # Find the fold with the fewest samples
+        min_fold_idx = fold_sample_counts.index(min(fold_sample_counts))
+
+        # Add the subject to this fold
+        folds[min_fold_idx].append(subject)
+        fold_sample_counts[min_fold_idx] += count
+
+    return folds
+
+
+def load_predefined_validate_folds(
+    num_folds=7, base_dir="dataset/FD/FD1_7_fold_id_list"
+):
+    """
+    Load predefined test folds from .npy files.
+
+    Each fold is stored in a subdirectory (named "0", "1", ..., etc.) under base_dir.
+    The test split is stored in a file named "test.npy" in each fold directory.
+
+    Args:
+        num_folds (int): Total number of folds.
+        base_dir (str): Directory containing the fold subdirectories.
+
+    Returns:
+        List[List[int]]: A list of test folds, where each inner list contains subject IDs for that fold.
+    """
+    test_folds = []
+    for i in range(num_folds):
+        fold_dir = os.path.join(base_dir, str(i))
+        test_path = os.path.join(fold_dir, "test.npy")
+        test_subjects = np.load(test_path)
+        # Convert to a regular Python list if needed
+        test_folds.append(test_subjects.tolist())
+    return test_folds
+
+----- End of datasets.py -----
+
+----- Start of pre_processing.py -----
+import numpy as np
+import torch
+
+
+def hand_mirroring(data):
+    """
+    Apply hand mirroring transformation to the input data.
+
+    Args:
+        data (np.ndarray or torch.Tensor): Input data of shape (M, 6), where M is the sequence length
+                                           and 6 corresponds to the 3 accelerometer and 3 gyroscope axes.
+
+    Returns:
+        np.ndarray or torch.Tensor: Transformed data with the same shape as input.
+    """
+    # Define the mirroring transformation matrix
+
+    mirroring_matrix = np.array(
+        [
+            [-1, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, -1, 0],
+            [0, 0, 0, 0, 0, -1],
+        ]
+    )
+
+    if isinstance(data, torch.Tensor):
+        # Convert the mirroring matrix to a tensor and move it to the same device as the data
+        mirroring_matrix = torch.tensor(
+            mirroring_matrix, dtype=torch.float32, device=data.device
+        )
+        # Apply the transformation
+        data = torch.matmul(data, mirroring_matrix.T)
+    else:
+        # Apply the transformation for numpy arrays
+        data = np.dot(data, mirroring_matrix.T)
+
+    return data
+
+----- End of pre_processing.py -----
+
+----- Start of post_processing.py -----
+import numpy as np
+
+
+def nonzero_intervals(x):
+    """
+    Extract start and end indices of nonzero intervals in a binary array.
+
+    Parameters:
+        x (np.ndarray): Input binary array (1D).
+
+    Returns:
+        np.ndarray: An array of shape (N, 2), where each row represents the
+                    [start, end) indices of a contiguous nonzero interval.
+    """
+    results = []
+    in_segment = False
+    start_idx = 0
+
+    for i in range(len(x)):
+        if x[i] != 0 and not in_segment:
+            in_segment = True
+            start_idx = i
+        elif x[i] == 0 and in_segment:
+            in_segment = False
+            results.append([start_idx, i])
+    if in_segment:
+        results.append([start_idx, len(x)])
+    return np.array(results, dtype=int)
+
+
+def post_process_binary_mask(
+    binary_mask, sampling_freq, min_length_sec, merge_distance_sec
+):
+    """
+    Post-process a binary mask by removing short segments and merging close segments.
+
+    Parameters:
+        binary_mask (np.ndarray): Binary array (0/1) for a single class.
+        sampling_freq (float): Sampling frequency in Hz.
+        min_length_sec (float): Minimum duration (in seconds) of a segment to keep.
+        merge_distance_sec (float): Maximum gap (in seconds) between segments to merge.
+
+    Returns:
+        np.ndarray: The refined binary mask after post-processing.
+    """
+    min_length_samples = int(sampling_freq * min_length_sec)
+    merge_distance_samples = int(sampling_freq * merge_distance_sec)
+
+    # Get intervals where the mask is nonzero.
+    intervals = nonzero_intervals(binary_mask)
+
+    # Remove segments shorter than the minimum length.
+    intervals = [
+        interval
+        for interval in intervals
+        if (interval[1] - interval[0]) >= min_length_samples
+    ]
+
+    # Merge intervals that are close to each other.
+    merged_intervals = []
+    for interval in intervals:
+        if (
+            not merged_intervals
+            or (interval[0] - merged_intervals[-1][1]) > merge_distance_samples
+        ):
+            merged_intervals.append(interval)
+        else:
+            merged_intervals[-1][1] = interval[1]
+
+    # Create a new binary mask based on the merged intervals.
+    new_mask = np.zeros_like(binary_mask)
+    for start, end in merged_intervals:
+        new_mask[start:end] = 1
+
+    return new_mask
+
+
+def post_process_predictions(
+    predictions, sampling_freq, min_length_sec=1.0, merge_distance_sec=0.1
+):
+    """
+    Post-process predictions by removing short segments and merging close segments.
+    Supports both binary (0/1) and multi-class predictions.
+
+    For binary predictions, the function behaves as before. For multi-class predictions,
+    it processes each class separately and returns a new prediction array.
+
+    Parameters:
+        predictions (np.ndarray): Predictions array (1D) containing class labels.
+        sampling_freq (float): Sampling frequency in Hz (samples per second).
+        min_length_sec (float): Minimum duration (in seconds) of a segment to keep.
+        merge_distance_sec (float): Maximum gap (in seconds) between segments to merge.
+
+    Returns:
+        np.ndarray: Post-processed predictions array.
+    """
+    unique_labels = np.unique(predictions)
+
+    # If predictions are binary (0/1), process directly.
+    if len(unique_labels) <= 2 and set(unique_labels) == {0, 1}:
+        return post_process_binary_mask(
+            predictions, sampling_freq, min_length_sec, merge_distance_sec
+        )
+
+    # Multi-class case: process each class separately.
+    new_predictions = np.zeros_like(predictions)
+    for label in unique_labels:
+        # Create a binary mask for the current class.
+        binary_mask = (predictions == label).astype(np.int32)
+        # Post-process the binary mask.
+        processed_mask = post_process_binary_mask(
+            binary_mask, sampling_freq, min_length_sec, merge_distance_sec
+        )
+        # Assign the label to the refined intervals.
+        new_predictions[processed_mask == 1] = label
+
+    return new_predictions
+
+----- End of post_processing.py -----
+
+----- Start of model_tcn.py -----
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class DilatedResidualLayer(nn.Module):
+    def __init__(self, num_filters, dilation, kernel_size=3, dropout=0.3):
+        super(DilatedResidualLayer, self).__init__()
+        self.conv_dilated = nn.Conv1d(
+            num_filters, num_filters, kernel_size, padding=dilation, dilation=dilation
+        )
+        self.relu = nn.ReLU()
+        self.conv_1x1 = nn.Conv1d(num_filters, num_filters, kernel_size=1)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out = self.conv_dilated(x)
+        out = self.relu(out)
+        out = self.conv_1x1(out)
+        out = self.dropout(out)
+        return x + out
+
+
+class TCN(nn.Module):
+    def __init__(
+        self,
+        num_layers,
+        input_dim,
+        num_classes,
+        num_filters=128,
+        kernel_size=3,
+        dropout=0.3,
+    ):
+        super(TCN, self).__init__()
+        self.conv_in = nn.Conv1d(input_dim, num_filters, kernel_size=1)
+        self.layers = nn.ModuleList(
+            [
+                DilatedResidualLayer(
+                    num_filters, dilation=2**i, kernel_size=kernel_size, dropout=dropout
+                )
+                for i in range(num_layers)
+            ]
+        )
+        self.conv_out = nn.Conv1d(num_filters, num_classes, kernel_size=1)
+
+    def forward(self, x):
+        out = self.conv_in(x)
+        for layer in self.layers:
+            out = layer(out)
+        out = self.conv_out(out)
+        return out  # [batch_size, num_classes, seq_len]
+
+
+def TCN_Loss(outputs, targets):
+    """
+    outputs: [batch_size, num_classes, seq_len]
+    targets: [batch_size, seq_len]
+    """
+    targets = targets.long()
+    loss_ce_fn = nn.CrossEntropyLoss(ignore_index=-100)
+    loss_mse_fn = nn.MSELoss(reduction="none")
+    batch_size, num_classes, seq_len = outputs.size()
+
+    # Cross-entropy loss
+    ce_loss = loss_ce_fn(
+        outputs.transpose(2, 1).contiguous().view(-1, num_classes), targets.view(-1)
+    )
+
+    # Temporal smoothing loss
+    if seq_len > 1:
+        log_probs = F.log_softmax(outputs, dim=1)
+        log_probs_next = log_probs[:, :, 1:]
+        log_probs_prev = log_probs.detach()[:, :, :-1]  # stop gradient
+        mse_loss = loss_mse_fn(log_probs_next, log_probs_prev)
+        mse_loss = torch.clamp(mse_loss, min=0, max=16)
+        mse_loss_mean = torch.mean(mse_loss)
+    else:
+        mse_loss_mean = torch.tensor(0.0, device=outputs.device)
+
+    return ce_loss, mse_loss_mean
+
+----- End of model_tcn.py -----
+
+----- Start of augmentation.py -----
+import numpy as np
+import torch
+from components.pre_processing import hand_mirroring
+
+
+def rotation_matrix_x(angle_rad):
+    """
+    Creates a 3D rotation matrix for a rotation around the x-axis.
+
+    Args:
+        angle_rad (float): Rotation angle in radians.
+
+    Returns:
+        np.ndarray: 3x3 rotation matrix.
+    """
+    return np.array(
+        [
+            [1, 0, 0],
+            [0, np.cos(angle_rad), -np.sin(angle_rad)],
+            [0, np.sin(angle_rad), np.cos(angle_rad)],
+        ]
+    )
+
+
+def rotation_matrix_z(angle_rad):
+    """
+    Creates a 3D rotation matrix for a rotation around the z-axis.
+
+    Args:
+        angle_rad (float): Rotation angle in radians.
+
+    Returns:
+        np.ndarray: 3x3 rotation matrix.
+    """
+    return np.array(
+        [
+            [np.cos(angle_rad), -np.sin(angle_rad), 0],
+            [np.sin(angle_rad), np.cos(angle_rad), 0],
+            [0, 0, 1],
+        ]
+    )
+
+
+def augment_hand_mirroring(batch_x, batch_y):
+    """
+    Augments the input batch by adding mirrored versions of each sample.
+    It applies the hand_mirroring transformation (which performs the mirroring operation)
+    to generate the mirrored samples. The returned data contains both the original
+    and the mirrored samples, with labels remaining the same.
+
+    Args:
+        batch_x: Input tensor of shape (batch_size, sequence_length, features)
+        batch_y: Input labels of shape (batch_size, ...)
+
+    Returns:
+        augmented_batch_x: Tensor of shape (2 * batch_size, sequence_length, features)
+        augmented_batch_y: Tensor of shape (2 * batch_size, ...)
+    """
+    # Generate mirrored data using the hand_mirroring function
+    mirrored_batch_x = hand_mirroring(batch_x)
+
+    # Concatenate the original and mirrored samples along the batch dimension
+    augmented_batch_x = torch.cat([batch_x, mirrored_batch_x], dim=0)
+
+    # Duplicate the labels for the mirrored samples
+    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+
+    return augmented_batch_x, augmented_batch_y
+
+
+def augment_axis_permutation(batch_x, batch_y):
+    """
+    Augments IMU data by randomly swapping axes and flipping their signs.
+    This simulates differences in axis arrangement and sensor direction definitions
+    across devices. The transformation is applied to every sample.
+
+    Args:
+        batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 3).
+        batch_y (torch.Tensor): Input labels of shape (batch_size, ...).
+
+    Returns:
+        tuple: Augmented tensor of shape (2 * batch_size, sequence_length, 3)
+               and augmented labels of shape (2 * batch_size, ...), where the augmented
+               batch is the concatenation of the original and augmented samples.
+    """
+    batch_size, seq_len, num_axes = batch_x.shape
+    augmented = batch_x.clone()
+
+    for i in range(batch_size):
+        # Generate a random permutation of axes and random sign flips.
+        perm = np.random.permutation(num_axes)
+        signs = np.random.choice([-1, 1], size=num_axes)
+        # Build a transformation matrix where each row has one non-zero entry.
+        transform = np.zeros((num_axes, num_axes))
+        for j in range(num_axes):
+            transform[j, perm[j]] = signs[j]
+        sample_np = augmented[i].numpy()  # shape: (seq_len, 3)
+        sample_np = sample_np @ transform.T
+        augmented[i] = torch.tensor(sample_np, dtype=batch_x.dtype)
+
+    augmented_batch_x = torch.cat([batch_x, augmented], dim=0)
+    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+    return augmented_batch_x, augmented_batch_y
+
+
+def augment_planar_rotation(batch_x, batch_y):
+    """
+    Augments IMU data by applying a discrete random rotation (0°, 90°, 180°, or 270°)
+    to the x-y components of each sample while keeping the z component unchanged.
+    This simulates differences in sensor alignment across devices.
+    The transformation is applied to every sample.
+
+    Args:
+        batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 3).
+        batch_y (torch.Tensor): Input labels of shape (batch_size, ...).
+
+    Returns:
+        tuple: Augmented tensor of shape (2 * batch_size, sequence_length, 3)
+               and augmented labels of shape (2 * batch_size, ...), where the augmented
+               batch is the concatenation of the original and augmented samples.
+    """
+    batch_size, seq_len, _ = batch_x.shape
+    augmented = batch_x.clone()
+
+    for i in range(batch_size):
+        # Choose a random rotation angle from {0, 90, 180, 270} degrees.
+        angle_deg = np.random.choice([0, 90, 180, 270])
+        angle_rad = np.deg2rad(angle_deg)
+        # Construct a 2D rotation matrix for the x-y plane.
+        rotation_2d = np.array(
+            [
+                [np.cos(angle_rad), -np.sin(angle_rad)],
+                [np.sin(angle_rad), np.cos(angle_rad)],
+            ]
+        )
+        sample_np = augmented[i].numpy()  # shape: (seq_len, 3)
+        sample_np[:, :2] = sample_np[:, :2] @ rotation_2d.T
+        augmented[i] = torch.tensor(sample_np, dtype=batch_x.dtype)
+
+    augmented_batch_x = torch.cat([batch_x, augmented], dim=0)
+    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+    return augmented_batch_x, augmented_batch_y
+
+
+def augment_spatial_orientation(batch_x, batch_y):
+    """
+    Augments IMU data by applying a random 3D rotation to both accelerometer and gyroscope readings.
+    This simulates variations in device orientation due to different wearing positions.
+    The input is assumed to have 6 features per timestep (3 for accelerometer, 3 for gyroscope).
+    The transformation is applied to every sample.
+
+    Args:
+        batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 6).
+        batch_y (torch.Tensor): Input labels of shape (batch_size, ...).
+
+    Returns:
+        tuple: Augmented tensor of shape (2 * batch_size, sequence_length, 6)
+               and augmented labels of shape (2 * batch_size, ...), where the augmented
+               batch is the concatenation of the original and augmented samples.
+    """
+    batch_size, seq_len, features = batch_x.shape
+    augmented = batch_x.clone()
+
+    for i in range(batch_size):
+        # Generate random rotation angles (with standard deviation ~10° converted to radians).
+        theta_x = np.random.normal(0, 10 * np.pi / 180)
+        theta_z = np.random.normal(0, 10 * np.pi / 180)
+
+        # Create basic rotation matrices.
+        rot_x = rotation_matrix_x(theta_x)
+        rot_z = rotation_matrix_z(theta_z)
+
+        # Randomly select one of four transformation orders.
+        choice = np.random.choice([0, 1, 2, 3])
+        if choice == 0:
+            transformation = rot_x
+        elif choice == 1:
+            transformation = rot_z
+        elif choice == 2:
+            transformation = np.dot(rot_x, rot_z)
+        else:
+            transformation = np.dot(rot_z, rot_x)
+
+        # Build a 6x6 block-diagonal transformation matrix for both accelerometer and gyroscope.
+        full_transformation = np.block(
+            [[transformation, np.zeros((3, 3))], [np.zeros((3, 3)), transformation]]
+        )
+
+        sample_np = augmented[i].numpy()  # shape: (seq_len, 6)
+        transformed_sample = np.dot(full_transformation, sample_np.T).T
+        augmented[i] = torch.tensor(transformed_sample, dtype=batch_x.dtype)
+
+    augmented_batch_x = torch.cat([batch_x, augmented], dim=0)
+    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+    return augmented_batch_x, augmented_batch_y
+
+----- End of augmentation.py -----
+
+----- Start of model_vae.py -----
+import torch
+import torch.nn as nn
+
+
+class VAE(nn.Module):
+    def __init__(self, input_channels, sequence_length, latent_dim):
+        """
+        Parameters:
+            input_channels (int): Number of input channels (e.g., 6 for IMU data).
+            sequence_length (int): Length of the input sequence.
+            hidden_dim (int): Hidden dimension (for extension purposes).
+            latent_dim (int): Dimension of the latent space.
+        """
+        super(VAE, self).__init__()
+        # Encoder: 1D convolutional layers to extract temporal features.
+        self.encoder = nn.Sequential(
+            nn.Conv1d(input_channels, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv1d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv1d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+        )
+
+        # Calculate the output length after convolutions.
+        def conv_output_size(L, kernel_size=3, stride=2, padding=1):
+            return (L + 2 * padding - kernel_size) // stride + 1
+
+        l1 = conv_output_size(sequence_length, 3, 2, 1)
+        l2 = conv_output_size(l1, 3, 2, 1)
+        l3 = conv_output_size(l2, 3, 2, 1)
+        self.conv_output_length = l3  # Number of time steps after the last conv layer.
+        self.feature_dim = 128 * self.conv_output_length  # Flattened feature dimension.
+
+        # Fully connected layers to generate latent mean and log-variance.
+        self.fc_mu = nn.Linear(self.feature_dim, latent_dim)
+        self.fc_logvar = nn.Linear(self.feature_dim, latent_dim)
+
+        # Decoder: Map the latent vector back to convolutional features and use transposed convolutions to reconstruct.
+        self.decoder_input = nn.Linear(latent_dim, self.feature_dim)
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose1d(
+                128, 64, kernel_size=3, stride=2, padding=1, output_padding=1
+            ),
+            nn.ReLU(),
+            nn.ConvTranspose1d(
+                64, 32, kernel_size=3, stride=2, padding=1, output_padding=1
+            ),
+            nn.ReLU(),
+            nn.ConvTranspose1d(
+                32, input_channels, kernel_size=3, stride=2, padding=1, output_padding=1
+            ),
+            nn.Sigmoid(),  # Use Sigmoid if data is normalized to [0, 1].
+        )
+
+    def encode(self, x):
+        # x shape: (batch, channels, sequence_length)
+        enc = self.encoder(x)  # (batch, 128, conv_output_length)
+        enc_flat = enc.view(x.size(0), -1)  # Flatten to (batch, feature_dim)
+        mu = self.fc_mu(enc_flat)
+        logvar = self.fc_logvar(enc_flat)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        dec_input = self.decoder_input(z)
+        dec_input = dec_input.view(z.size(0), 128, self.conv_output_length)
+        recon = self.decoder(dec_input)
+        return recon
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        recon = self.decode(z)
+        return recon, mu, logvar
+
+
+def VAE_Loss(recon, x, mu, logvar):
+    """
+    The VAE loss consists of the reconstruction loss and KL divergence.
+    Here, Mean Squared Error (MSE) is used as the reconstruction loss.
+    """
+    recon_loss = nn.functional.mse_loss(recon, x, reduction="sum")
+    kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return recon_loss + kl_loss
+
+----- End of model_vae.py -----
+
+----- Start of model_mstcn.py -----
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+# Modified DilatedResidualLayer
+class DilatedResidualLayer(nn.Module):
+    def __init__(self, num_filters, dilation, kernel_size=3, dropout=0.3):
+        super(DilatedResidualLayer, self).__init__()
+        self.conv_dilated = nn.Conv1d(
+            num_filters, num_filters, kernel_size, padding=dilation, dilation=dilation
+        )
+        self.relu = nn.ReLU()
+        self.conv_1x1 = nn.Conv1d(num_filters, num_filters, kernel_size=1)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out = self.conv_dilated(x)
+        out = self.relu(out)
+        out = self.conv_1x1(out)
+        out = self.dropout(out)
+        return x + out
+
+
+# Single-stage TCN model (SSTCN)
+class SSTCN(nn.Module):
+    def __init__(
+        self,
+        num_layers,
+        in_channels,
+        num_classes,
+        num_filters=128,
+        kernel_size=3,
+        dropout=0.3,
+    ):
+        super(SSTCN, self).__init__()
+        self.conv_in = nn.Conv1d(in_channels, num_filters, kernel_size=1)
+        self.layers = nn.ModuleList(
+            [
+                DilatedResidualLayer(
+                    num_filters, dilation=2**i, kernel_size=kernel_size, dropout=dropout
+                )
+                for i in range(num_layers)
+            ]
+        )
+        self.conv_out = nn.Conv1d(num_filters, num_classes, kernel_size=1)
+
+    def forward(self, x):
+        out = self.conv_in(x)
+        for layer in self.layers:
+            out = layer(out)
+        out = self.conv_out(out)
+        return out
+
+
+# Multi-stage TCN model (MSTCN)
+class MSTCN(nn.Module):
+    def __init__(
+        self,
+        num_stages,
+        num_layers,
+        num_classes,
+        input_dim,
+        num_filters=128,
+        kernel_size=3,
+        dropout=0.3,
+    ):
+        super(MSTCN, self).__init__()
+        self.stages = nn.ModuleList()
+        # The first stage takes the original features as input
+        self.stages.append(
+            SSTCN(num_layers, input_dim, num_classes, num_filters, kernel_size, dropout)
+        )
+        # Subsequent stages take the predictions (number of classes) from the previous stage as input
+        for s in range(1, num_stages):
+            self.stages.append(
+                SSTCN(
+                    num_layers,
+                    num_classes,
+                    num_classes,
+                    num_filters,
+                    kernel_size,
+                    dropout,
+                )
+            )
+
+    def forward(self, x):
+        outputs = []
+        # Output of the first stage
+        out = self.stages[0](x)
+        outputs.append(out.unsqueeze(0))
+        # Subsequent stages: apply softmax normalization to the output of the previous stage before input
+        for stage in self.stages[1:]:
+            out = stage(F.softmax(out, dim=1))
+            outputs.append(out.unsqueeze(0))
+        outputs = torch.cat(
+            outputs, dim=0
+        )  # shape: [num_stages, batch, num_classes, seq_len]
+        outputs = outputs.permute(
+            1, 0, 2, 3
+        )  # shape: [batch, num_stages, num_classes, seq_len]
+        return outputs
+
+
+# Loss function for MSTCN
+def MSTCN_Loss(outputs, targets):
+    """
+    outputs shape: [batch_size, num_stages, num_classes, seq_len]
+    targets shape: [batch_size, seq_len]
+    """
+    targets = targets.long()
+    loss_ce_fn = nn.CrossEntropyLoss(ignore_index=-100)
+    loss_mse_fn = nn.MSELoss(reduction="none")
+    batch_size, num_stages, num_classes, seq_len = outputs.size()
+    ce_loss = 0
+    mse_loss_mean = 0
+
+    # Compute loss for each stage
+    for s in range(num_stages):
+        stage_predictions = outputs[:, s, :, :]  # [batch_size, num_classes, seq_len]
+        # Cross-entropy loss
+        ce_loss += loss_ce_fn(
+            stage_predictions.transpose(2, 1).contiguous().view(-1, num_classes),
+            targets.view(-1),
+        )
+        # Temporal smoothing loss (only computed when seq_len > 1)
+        if seq_len > 1:
+            mse_loss_value = loss_mse_fn(
+                F.log_softmax(stage_predictions[:, :, 1:], dim=1),
+                F.log_softmax(stage_predictions.detach()[:, :, :-1], dim=1),
+            )
+            mse_loss_value = torch.clamp(mse_loss_value, min=0, max=4)
+            mse_loss_mean += torch.mean(mse_loss_value)
+    # Average the loss across stages
+    ce_loss /= num_stages
+    mse_loss_mean /= num_stages
+
+    return ce_loss, mse_loss_mean
+
+----- End of model_mstcn.py -----
+
