@@ -1,12 +1,23 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU CNN-LSTM Model Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script defines the CNN-LSTM architecture for IMU data classification.
+              It employs dilated convolutions to preserve temporal resolution and processes
+              the extracted features with an LSTM layer.
+Reference   : A Data Driven End-to-End Approach for In-the-Wild Monitoring of Eating Behavior Using Smartwatches
+Adjustment  : Use dilated convolutions instead of max pooling (which downsamples the time dimension) to expand the receptive field while preserving the temporal resolution.
+===============================================================================
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-
-"""
-Reference: A Data Driven End-to-End Approach for In-the-Wild Monitoring of Eating Behavior Using Smartwatches
-Adjustment: Use dilated convolutions instead of max pooling (which downsamples the time dimension) to expand the receptive field while preserving the temporal resolution.
-"""
 
 
 class CNNLSTM(nn.Module):

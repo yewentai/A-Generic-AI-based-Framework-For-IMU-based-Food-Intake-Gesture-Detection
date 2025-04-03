@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Post-Processing Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script defines functions for post-processing IMU prediction masks,
+              such as removing short segments and merging close segments.
+===============================================================================
+"""
+
 import numpy as np
 
 

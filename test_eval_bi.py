@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Test Evaluation Script (Binary Case)
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script evaluates IMU segmentation predictions against ground truth
+              for binary gesture recognition, computes sample-wise and segment-wise F1 scores,
+              and visualizes the results.
+===============================================================================
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from components.evaluation import segment_evaluation

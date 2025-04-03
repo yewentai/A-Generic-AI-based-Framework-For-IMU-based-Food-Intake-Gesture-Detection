@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU VAE Model Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script defines the Variational Autoencoder (VAE) architecture for
+              IMU data, including its encoder, decoder, and the combined VAE loss function.
+===============================================================================
+"""
+
 import torch
 import torch.nn as nn
 

@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+Project Directory Cleanup Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script recursively traverses specified directories to find and
+              remove empty subdirectories, keeping the project workspace tidy.
+===============================================================================
+"""
+
 import os
 
 

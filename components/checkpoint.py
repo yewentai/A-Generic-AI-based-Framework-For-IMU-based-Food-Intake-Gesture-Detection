@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+Checkpoint Utility Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script provides utility functions for saving and loading model
+              checkpoints during training, including tracking the best model state.
+===============================================================================
+"""
+
 import os
 import torch
 

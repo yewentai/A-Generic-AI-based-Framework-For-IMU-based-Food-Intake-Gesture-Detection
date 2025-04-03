@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Training Result Analysis Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script loads training and validation statistics from saved result
+              directories and plots training loss curves for each fold.
+===============================================================================
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 import os

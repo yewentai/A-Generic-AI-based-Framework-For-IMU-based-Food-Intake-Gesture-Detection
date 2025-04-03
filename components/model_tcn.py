@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU TCN Model Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script defines a Temporal Convolutional Network (TCN) model for
+              IMU data processing, including dilated residual layers and a loss function.
+===============================================================================
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

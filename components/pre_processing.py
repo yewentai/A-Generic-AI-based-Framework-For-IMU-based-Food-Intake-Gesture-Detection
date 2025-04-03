@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Pre-Processing Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script contains functions for pre-processing IMU data,
+              including transformations such as hand mirroring.
+===============================================================================
+"""
+
 import numpy as np
 import torch
 

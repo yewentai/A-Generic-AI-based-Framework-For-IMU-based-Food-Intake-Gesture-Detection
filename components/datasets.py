@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Dataset Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script defines the IMUDataset class for loading and preprocessing
+              IMU data, as well as functions for creating balanced cross-validation folds.
+===============================================================================
+"""
+
 import numpy as np
 import torch
 import scipy.signal as signal

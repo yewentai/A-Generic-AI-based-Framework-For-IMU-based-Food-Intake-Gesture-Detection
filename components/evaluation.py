@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Segmentation Evaluation Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script defines functions for evaluating segmentation performance
+              by matching predicted intervals with ground truth intervals and computing
+              metrics such as precision, recall, and F1 score.
+===============================================================================
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment

@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Data Augmentation Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script provides functions for augmenting IMU data, including
+              hand mirroring, axis permutation, planar rotation, and spatial orientation
+              transformations.
+===============================================================================
+"""
+
 import numpy as np
 import torch
 from components.pre_processing import hand_mirroring

@@ -1,5 +1,19 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Test Evaluation Script (Ternary/Multiclass Case)
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script evaluates IMU segmentation predictions against ground truth
+              for a multiclass scenario, computing F1 scores for each class and visualizing
+              the segmentation performance.
+===============================================================================
+"""
+
 import numpy as np
-import matplotlib.pyplot as plt
 from components.evaluation import segment_evaluation
 
 # Ground Truth sequence (3 classes: 0=background, 1=class1, 2=class2, 3=class3)

@@ -1,3 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Raw Data Analysis Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-03
+Description : This script performs analysis on raw IMU data, computes basic statistics,
+              visualizes sample distributions, and segments gestures for further inspection.
+===============================================================================
+"""
+
 import os
 import sys
 import pickle
@@ -5,7 +19,6 @@ import random
 
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy.signal as signal
 
 # Add project root to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
