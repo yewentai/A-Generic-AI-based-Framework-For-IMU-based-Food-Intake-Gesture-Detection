@@ -1,0 +1,10 @@
+{
+    "average_cohen_kappa": 0.7348600370543343,
+    "average_matthews_corrcoef": 0.7381730675697327,
+    "average_f1_sample": 0.7285543677863265,
+    "average_f1_segment": 0.7871591968869261,
+    "variance_f1_sample": 0.0020894982050578804,
+    "variance_f1_segment": 0.0013126402778315404,
+    "variance_cohen_kappa": 0.0027648537863667827,
+    "variance_matthews_corrcoef": 0.002601037248219029
+}

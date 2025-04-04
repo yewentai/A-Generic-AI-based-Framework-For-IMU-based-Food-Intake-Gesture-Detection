@@ -28,6 +28,13 @@ from datetime import datetime
 from tqdm import tqdm
 
 from components.datasets import IMUDataset
+from components.model_tcn import TCN
+from components.augmentation import (
+    augment_hand_mirroring,
+    augment_axis_permutation,
+    augment_planar_rotation,
+    augment_spatial_orientation,
+)
 
 
 # Define the Projection Head for SimCLR

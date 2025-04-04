@@ -89,6 +89,8 @@ def augment_axis_permutation(batch_x, batch_y):
     This simulates differences in axis arrangement and sensor direction definitions
     across devices. The transformation is applied to every sample.
 
+    TODO: Keep Z axis unchanged.
+
     Args:
         batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 3).
         batch_y (torch.Tensor): Input labels of shape (batch_size, ...).

@@ -19,14 +19,12 @@ import json
 import pickle
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from datetime import datetime
 from tqdm import tqdm
 
 from components.datasets import IMUDataset
-from components.pre_processing import hand_mirroring
 from components.model_vae import VAE, VAE_Loss
 
 
