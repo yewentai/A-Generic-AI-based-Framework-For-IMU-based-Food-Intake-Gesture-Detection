@@ -95,11 +95,11 @@ else:
 LEARNING_RATE = 5e-4
 NUM_FOLDS = 7
 NUM_EPOCHS = 100
-FLAG_AUGMENT_HAND_MIRRORING = True
-FLAG_AUGMENT_AXIS_PERMUTATION = True
-FLAG_AUGMENT_PLANAR_ROTATION = True
-FLAG_AUGMENT_SPATIAL_ORIENTATION = True
-FLAG_DATASET_MIRROR = False
+FLAG_AUGMENT_HAND_MIRRORING = False
+FLAG_AUGMENT_AXIS_PERMUTATION = False
+FLAG_AUGMENT_PLANAR_ROTATION = False
+FLAG_AUGMENT_SPATIAL_ORIENTATION = False
+FLAG_DATASET_MIRROR = True
 
 # =============================================================================
 #                             Main Training Function
@@ -328,6 +328,7 @@ def main(local_rank=None, world_size=None):
                 "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
                 "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
                 "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
+                "dataset_mirror": FLAG_DATASET_MIRROR,
                 "validate_folds": validate_folds,
             }
         )

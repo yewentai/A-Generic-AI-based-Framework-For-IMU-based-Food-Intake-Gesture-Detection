@@ -85,11 +85,9 @@ def augment_hand_mirroring(batch_x, batch_y):
 
 def augment_axis_permutation(batch_x, batch_y):
     """
-    Augments IMU data by randomly swapping axes and flipping their signs.
-    This simulates differences in axis arrangement and sensor direction definitions
-    across devices. The transformation is applied to every sample.
-
-    TODO: Keep Z axis unchanged.
+    Augments IMU data by randomly swapping and flipping the X and Y axes,
+    while keeping the Z axis (index 2) unchanged. This simulates differences
+    in axis arrangement and sensor direction definitions across devices.
 
     Args:
         batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 3).
@@ -101,16 +99,22 @@ def augment_axis_permutation(batch_x, batch_y):
                batch is the concatenation of the original and augmented samples.
     """
     batch_size, seq_len, num_axes = batch_x.shape
+    assert num_axes == 3, "This function assumes 3-axis IMU data."
+
     augmented = batch_x.clone()
 
     for i in range(batch_size):
-        # Generate a random permutation of axes and random sign flips.
-        perm = np.random.permutation(num_axes)
-        signs = np.random.choice([-1, 1], size=num_axes)
-        # Build a transformation matrix where each row has one non-zero entry.
-        transform = np.zeros((num_axes, num_axes))
-        for j in range(num_axes):
-            transform[j, perm[j]] = signs[j]
+        # Permute only X and Y axes (indices 0 and 1)
+        perm_xy = np.random.permutation([0, 1])
+        full_perm = [perm_xy[0], perm_xy[1], 2]  # Z stays at index 2
+        signs = np.random.choice([-1, 1], size=2)
+        full_signs = [signs[0], signs[1], 1]  # Z sign stays positive
+
+        # Build the transformation matrix
+        transform = np.zeros((3, 3))
+        for j in range(3):
+            transform[j, full_perm[j]] = full_signs[j]
+
         sample_np = augmented[i].numpy()  # shape: (seq_len, 3)
         sample_np = sample_np @ transform.T
         augmented[i] = torch.tensor(sample_np, dtype=batch_x.dtype)

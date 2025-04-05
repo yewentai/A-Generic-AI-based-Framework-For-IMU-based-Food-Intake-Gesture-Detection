@@ -15,7 +15,7 @@
     "num_folds": 7,
     "num_epochs": 100,
     "batch_size": 64,
-    "augmentation": false,
+    "augmentation_hand_mirroring": false,
     "mirroring": false,
     "validate_folds": [
         [
