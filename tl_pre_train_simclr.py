@@ -37,6 +37,20 @@ from components.augmentation import (
 )
 
 
+# Build TCN encoder. We wrap it with a global average pooling to get [B, D] features.
+class TCN_EncoderWrapper(nn.Module):
+    def __init__(self, tcn):
+        super(TCN_EncoderWrapper, self).__init__()
+        self.tcn = tcn
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+    def forward(self, x):
+        out = self.tcn(x)  # Expected shape: [B, num_filters, seq_len]
+        out = self.pool(out)  # [B, num_filters, 1]
+        out = out.squeeze(-1)  # [B, num_filters]
+        return out
+
+
 # Define the Projection Head for SimCLR
 class ProjectionHead(nn.Module):
     def __init__(self, input_dim, proj_dim=64, hidden_dim=128):
@@ -104,21 +118,6 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ---------------------- Model Construction ----------------------
-    # Build TCN encoder. We wrap it with a global average pooling to get [B, D] features.
-    from components.model_tcn import TCN
-
-    class TCN_EncoderWrapper(nn.Module):
-        def __init__(self, tcn):
-            super(TCN_EncoderWrapper, self).__init__()
-            self.tcn = tcn
-            self.pool = nn.AdaptiveAvgPool1d(1)
-
-        def forward(self, x):
-            out = self.tcn(x)  # Expected shape: [B, num_filters, seq_len]
-            out = self.pool(out)  # [B, num_filters, 1]
-            out = out.squeeze(-1)  # [B, num_filters]
-            return out
-
     tcn_encoder = TCN(
         num_layers=6,
         input_dim=6,
@@ -133,7 +132,7 @@ def main():
     simclr_model = SimCLR(encoder, projector).to(device)
 
     optimizer = optim.Adam(simclr_model.parameters(), lr=1e-3)
-    num_epochs = 50
+    num_epochs = 100
 
     # ---------------------- Pre-Training Loop ----------------------
     simclr_model.train()
