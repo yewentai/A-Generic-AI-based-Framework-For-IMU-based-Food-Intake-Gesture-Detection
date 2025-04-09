@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-===============================================================================
+================================================================================================
 MSTCN IMU Training Script
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Edited      : 2025-04-09
@@ -12,7 +12,7 @@ Description : This script trains an MSTCN model on IMU (Inertial Measurement Uni
               and dynamically generates result and checkpoint directories based on the
               current datetime. The script includes configurable parameters for model
               architecture, training hyperparameters, and data augmentation options.
-===============================================================================
+================================================================================================
 """
 
 import os
@@ -42,9 +42,9 @@ from components.model_cnnlstm import CNNLSTM, CNNLSTM_Loss
 from components.model_tcn import TCN, TCN_Loss
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
-# =============================================================================
-#                         Configuration Parameters
-# =============================================================================
+# ===============================================================================================
+#                                   Configuration Parameters
+# ===============================================================================================
 
 # Dataset
 DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
@@ -104,9 +104,9 @@ FLAG_SKIP = False
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# =============================================================================
-#                       Directory and File Management
-# =============================================================================
+# ===============================================================================================
+#                                  Directory and File Management
+# ===============================================================================================
 
 # Generate version prefix from current datetime (first 12 characters)
 version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
@@ -119,9 +119,9 @@ os.makedirs(result_dir, exist_ok=True)
 training_stas_file = os.path.join(result_dir, f"train_stats.npy")
 config_file = os.path.join(result_dir, "config.json")
 
-# =============================================================================
-#                       Data Loading and Pre-processing
-# =============================================================================
+# ===============================================================================================
+#                                Data Loading and Pre-processing
+# ===============================================================================================
 # Define file paths for the dataset
 X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
 Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
@@ -172,9 +172,9 @@ if DATASET in ["FDII", "FDI"]:
         downsample_factor=DOWNSAMPLE_FACTOR,
     )
 
-# =============================================================================
-#                     Main Cross-Validation Loop
-# =============================================================================
+# ===============================================================================================
+#                                   Main Cross-Validation Loop
+# ===============================================================================================
 
 # Create validation folds based on the dataset type
 if DATASET == "FDI":
@@ -304,9 +304,9 @@ for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", lea
         }
         training_statistics.append(stats)
 
-# =============================================================================
-#                         Save Results and Configuration
-# =============================================================================
+# ===============================================================================================
+#                                  Save Results and Configuration
+# ===============================================================================================
 
 np.save(training_stas_file, training_statistics)
 print(f"Training statistics saved to {training_stas_file}")
