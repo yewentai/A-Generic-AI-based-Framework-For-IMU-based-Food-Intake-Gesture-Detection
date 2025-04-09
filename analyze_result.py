@@ -27,13 +27,10 @@ from dl_validate import THRESHOLD_LIST
 FLAG_DATASET_MIRROR = False  # Toggle for mirrored dataset variant
 PLOT_LOSS_CURVE = False  # Toggle for plotting training loss curves
 
-# Define the root directory where result folders are saved
-result_root = "result"
-
-# result_version = max(glob.glob(os.path.join(result_dir, "*")), key=os.path.getmtime).split(os.sep)[-1]
+# result_version = max(glob.glob(os.path.join("result", "*")), key=os.path.getmtime).split(os.sep)[-1]
 result_version = "202503281533"  # <- Manually set version
 
-result_dir = os.path.join(result_root, result_version)
+result_dir = os.path.join("result", result_version)
 
 # File paths for training and validation statistics
 train_stats_file = os.path.join(result_dir, "train_stats.npy")

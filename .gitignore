@@ -5,17 +5,9 @@ __pycache__/
 dataset/
 *.pkl
 
-# Model checkpoints and outputs
-checkpoints/
-*.pth
-*.h5
-*.ckpt
-
 # Miscellaneous system files
 .DS_Store
 
 # Ignore VSCode settings
 .vscode/
 
-# Ignore dataset analysis files
-analysis/

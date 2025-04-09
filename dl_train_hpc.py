@@ -18,7 +18,6 @@ Description : This script trains an MSTCN model on IMU data using cross-validati
 import os
 import json
 import pickle
-from tabnanny import check
 import numpy as np
 import torch
 import torch.distributed as dist
