@@ -217,7 +217,7 @@ def main():
         # Basic statistics
         basic_statistics(X, Y, side)
         plot_sample_distribution(Y, side)
-        analyze_segments(X, Y, side=side)
+        # analyze_segments(X, Y, side=side)
 
 
 if __name__ == "__main__":
