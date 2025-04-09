@@ -6,7 +6,7 @@ MSTCN IMU Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-03-29
+Edited      : 2025-04-09
 Description : This script trains an MSTCN model on IMU (Inertial Measurement Unit) data
               using cross-validation. It supports multiple datasets (DXI/DXII or FDI/FDII/FDIII)
               and dynamically generates result and checkpoint directories based on the
@@ -149,7 +149,9 @@ X = np.concatenate([X_L, X_R], axis=0)
 Y = np.concatenate([Y_L, Y_R], axis=0)
 
 # Create the full dataset using the defined window size
-full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
+full_dataset = IMUDataset(
+    X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR
+)
 
 # Augment Dataset with FDIII (if using FDII/FDI)
 fdiii_dataset = None
@@ -163,9 +165,18 @@ if DATASET in ["FDII", "FDI"]:
         X_R_fdiii = np.array(pickle.load(f), dtype=object)
     with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
         Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+    if FLAG_DATASET_MIRROR:
+        X_L_fdiii = np.array(
+            [hand_mirroring(sample) for sample in X_L_fdiii], dtype=object
+        )
     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-    fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
+    fdiii_dataset = IMUDataset(
+        X_fdiii,
+        Y_fdiii,
+        sequence_length=WINDOW_SIZE,
+        downsample_factor=DOWNSAMPLE_FACTOR,
+    )
 
 # =============================================================================
 #                     Main Cross-Validation Loop
@@ -254,16 +265,27 @@ for fold, validate_subjects in enumerate(
         training_loss_mse = 0.0
 
         for batch_x, batch_y in train_loader:
+            # Shape of batch_x: [batch_size, seq_len, channels]
+            # Shape of batch_y: [batch_size, seq_len]
             # Optionally apply data augmentation
             if FLAG_AUGMENT_HAND_MIRRORING:
-                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y)
+                batch_x, batch_y = augment_hand_mirroring(
+                    batch_x, batch_y, probability=1, is_additive=True
+                )
             if FLAG_AUGMENT_AXIS_PERMUTATION:
-                batch_x, batch_y = augment_axis_permutation(batch_x, batch_y)
+                batch_x, batch_y = augment_axis_permutation(
+                    batch_x, batch_y, probability=0.5, is_additive=True
+                )
             if FLAG_AUGMENT_PLANAR_ROTATION:
-                batch_x, batch_y = augment_planar_rotation(batch_x, batch_y)
+                batch_x, batch_y = augment_planar_rotation(
+                    batch_x, batch_y, probability=0.5, is_additive=True
+                )
             if FLAG_AUGMENT_SPATIAL_ORIENTATION:
-                batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y)
-            # Rearrange dimensions and move data to the configured device
+                batch_x, batch_y = augment_spatial_orientation(
+                    batch_x, batch_y, probability=0.5, is_additive=True
+                )
+            # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
+            # Shape of batch_x: [batch_size, channels, seq_len]
             batch_x = batch_x.permute(0, 2, 1).to(device)
             batch_y = batch_y.to(device)
             optimizer.zero_grad()

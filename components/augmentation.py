@@ -15,7 +15,6 @@ Description : This script provides functions for augmenting IMU data, including
 
 import numpy as np
 import torch
-from components.pre_processing import hand_mirroring
 
 
 def rotation_matrix_x(angle_rad):
@@ -56,161 +55,405 @@ def rotation_matrix_z(angle_rad):
     )
 
 
-def augment_hand_mirroring(batch_x, batch_y):
+def augment_hand_mirroring(batch_x, batch_y, probability=0.5, is_additive=True):
     """
-    Augments the input batch by adding mirrored versions of each sample.
-    It applies the hand_mirroring transformation (which performs the mirroring operation)
-    to generate the mirrored samples. The returned data contains both the original
-    and the mirrored samples, with labels remaining the same.
+    Augment data by mirroring IMU data to simulate wearing the device on the opposite hand.
+
+    In many real-world datasets, the hand on which the IMU is worn (left or right) is not
+    explicitly labeled. This augmentation applies a mirroring operation to simulate data
+    from the opposite hand, enhancing model robustness to hand placement variations.
 
     Args:
-        batch_x: Input tensor of shape (batch_size, sequence_length, features)
-        batch_y: Input labels of shape (batch_size, ...)
+        batch_x: Input tensor of shape [batch_size, seq_len, channels] where channels
+                typically represent [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+        batch_y: Input labels of shape [batch_size, seq_len]
+        probability: Probability of applying the mirroring to each sample (default: 0.5)
+        is_additive: If True, concatenate original data with mirrored data.
+                          If False, return only mirrored data based on probability (default: True)
 
     Returns:
-        augmented_batch_x: Tensor of shape (2 * batch_size, sequence_length, features)
-        augmented_batch_y: Tensor of shape (2 * batch_size, ...)
+        augmented_batch_x: Augmented input data
+        augmented_batch_y: Corresponding labels
     """
-    # Generate mirrored data using the hand_mirroring function
-    mirrored_batch_x = hand_mirroring(batch_x)
+    batch_size = batch_x.shape[0]
+    device = batch_x.device
 
-    # Concatenate the original and mirrored samples along the batch dimension
-    augmented_batch_x = torch.cat([batch_x, mirrored_batch_x], dim=0)
+    # Define the mirroring transformation matrix
+    mirroring_matrix = torch.tensor(
+        [
+            [-1, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, -1, 0],
+            [0, 0, 0, 0, 0, -1],
+        ],
+        dtype=torch.float32,
+        device=device,
+    )
 
-    # Duplicate the labels for the mirrored samples
-    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+    # Generate random mask based on probability
+    mask = torch.rand(batch_size, device=device) < probability
 
-    return augmented_batch_x, augmented_batch_y
+    # Create a copy of the input batch
+    augmented_batch_x = batch_x.clone()
 
-
-def augment_axis_permutation(batch_x, batch_y):
-    """
-    Augments IMU data by randomly swapping and flipping the X and Y axes,
-    while keeping the Z axis (index 2) unchanged. This simulates differences
-    in axis arrangement and sensor direction definitions across devices.
-
-    Args:
-        batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 3).
-        batch_y (torch.Tensor): Input labels of shape (batch_size, ...).
-
-    Returns:
-        tuple: Augmented tensor of shape (2 * batch_size, sequence_length, 3)
-               and augmented labels of shape (2 * batch_size, ...), where the augmented
-               batch is the concatenation of the original and augmented samples.
-    """
-    batch_size, seq_len, num_axes = batch_x.shape
-    assert num_axes == 3, "This function assumes 3-axis IMU data."
-
-    augmented = batch_x.clone()
-
-    for i in range(batch_size):
-        # Permute only X and Y axes (indices 0 and 1)
-        perm_xy = np.random.permutation([0, 1])
-        full_perm = [perm_xy[0], perm_xy[1], 2]  # Z stays at index 2
-        signs = np.random.choice([-1, 1], size=2)
-        full_signs = [signs[0], signs[1], 1]  # Z sign stays positive
-
-        # Build the transformation matrix
-        transform = np.zeros((3, 3))
-        for j in range(3):
-            transform[j, full_perm[j]] = full_signs[j]
-
-        sample_np = augmented[i].numpy()  # shape: (seq_len, 3)
-        sample_np = sample_np @ transform.T
-        augmented[i] = torch.tensor(sample_np, dtype=batch_x.dtype)
-
-    augmented_batch_x = torch.cat([batch_x, augmented], dim=0)
-    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
-    return augmented_batch_x, augmented_batch_y
-
-
-def augment_planar_rotation(batch_x, batch_y):
-    """
-    Augments IMU data by applying a discrete random rotation (0°, 90°, 180°, or 270°)
-    to the x-y components of each sample while keeping the z component unchanged.
-    This simulates differences in sensor alignment across devices.
-    The transformation is applied to every sample.
-
-    Args:
-        batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 3).
-        batch_y (torch.Tensor): Input labels of shape (batch_size, ...).
-
-    Returns:
-        tuple: Augmented tensor of shape (2 * batch_size, sequence_length, 3)
-               and augmented labels of shape (2 * batch_size, ...), where the augmented
-               batch is the concatenation of the original and augmented samples.
-    """
-    batch_size, seq_len, _ = batch_x.shape
-    augmented = batch_x.clone()
-
-    for i in range(batch_size):
-        # Choose a random rotation angle from {0, 90, 180, 270} degrees.
-        angle_deg = np.random.choice([0, 90, 180, 270])
-        angle_rad = np.deg2rad(angle_deg)
-        # Construct a 2D rotation matrix for the x-y plane.
-        rotation_2d = np.array(
-            [
-                [np.cos(angle_rad), -np.sin(angle_rad)],
-                [np.sin(angle_rad), np.cos(angle_rad)],
-            ]
-        )
-        sample_np = augmented[i].numpy()  # shape: (seq_len, 3)
-        sample_np[:, :2] = sample_np[:, :2] @ rotation_2d.T
-        augmented[i] = torch.tensor(sample_np, dtype=batch_x.dtype)
-
-    augmented_batch_x = torch.cat([batch_x, augmented], dim=0)
-    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
-    return augmented_batch_x, augmented_batch_y
-
-
-def augment_spatial_orientation(batch_x, batch_y):
-    """
-    Augments IMU data by applying a random 3D rotation to both accelerometer and gyroscope readings.
-    This simulates variations in device orientation due to different wearing positions.
-    The input is assumed to have 6 features per timestep (3 for accelerometer, 3 for gyroscope).
-    The transformation is applied to every sample.
-
-    Args:
-        batch_x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, 6).
-        batch_y (torch.Tensor): Input labels of shape (batch_size, ...).
-
-    Returns:
-        tuple: Augmented tensor of shape (2 * batch_size, sequence_length, 6)
-               and augmented labels of shape (2 * batch_size, ...), where the augmented
-               batch is the concatenation of the original and augmented samples.
-    """
-    batch_size, seq_len, features = batch_x.shape
-    augmented = batch_x.clone()
-
-    for i in range(batch_size):
-        # Generate random rotation angles (with standard deviation ~10° converted to radians).
-        theta_x = np.random.normal(0, 10 * np.pi / 180)
-        theta_z = np.random.normal(0, 10 * np.pi / 180)
-
-        # Create basic rotation matrices.
-        rot_x = rotation_matrix_x(theta_x)
-        rot_z = rotation_matrix_z(theta_z)
-
-        # Randomly select one of four transformation orders.
-        choice = np.random.choice([0, 1, 2, 3])
-        if choice == 0:
-            transformation = rot_x
-        elif choice == 1:
-            transformation = rot_z
-        elif choice == 2:
-            transformation = np.dot(rot_x, rot_z)
-        else:
-            transformation = np.dot(rot_z, rot_x)
-
-        # Build a 6x6 block-diagonal transformation matrix for both accelerometer and gyroscope.
-        full_transformation = np.block(
-            [[transformation, np.zeros((3, 3))], [np.zeros((3, 3)), transformation]]
+    # Apply mirroring transformation only to selected samples
+    if mask.any():
+        # Apply the transformation only to samples selected by the mask
+        augmented_batch_x[mask] = torch.matmul(
+            augmented_batch_x[mask], mirroring_matrix.T
         )
 
-        sample_np = augmented[i].numpy()  # shape: (seq_len, 6)
-        transformed_sample = np.dot(full_transformation, sample_np.T).T
-        augmented[i] = torch.tensor(transformed_sample, dtype=batch_x.dtype)
+    # If include_original is True, concatenate original and augmented data
+    if is_additive and mask.any():
+        augmented_batch_x = torch.cat([batch_x, augmented_batch_x[mask]], dim=0)
+        augmented_batch_y = torch.cat([batch_y, batch_y[mask]], dim=0)
+    else:
+        # Otherwise, just return the modified batch
+        augmented_batch_y = batch_y.clone()
 
-    augmented_batch_x = torch.cat([batch_x, augmented], dim=0)
-    augmented_batch_y = torch.cat([batch_y, batch_y], dim=0)
+    return augmented_batch_x, augmented_batch_y
+
+
+def augment_axis_permutation(batch_x, batch_y, probability=0.5, is_additive=True):
+    """
+    Augments IMU data by permuting sensor axes to improve model robustness against device variability.
+
+    Different IMU devices often use inconsistent axis conventions and orientations, causing the same
+    physical movement to produce different sensor readings across devices. This augmentation simulates
+    these variations by applying transformations between the X and Y axes (swapping and/or sign flipping)
+    while preserving the Z axis, which typically aligns with gravity or vertical movement.
+
+    This technique helps the model learn device-agnostic features and improves generalization to data
+    collected from various IMU sensor configurations without requiring explicit calibration or
+    standardization during deployment.
+
+    Args:
+        batch_x: Input tensor of shape [batch_size, seq_len, channels] where channels
+                typically represent [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+        batch_y: Input labels of shape [batch_size, seq_len]
+        probability: Probability of applying the permutation to each sample (default: 0.5)
+        is_additive: If True, concatenate original data with permuted data to expand the dataset.
+                     If False, return only permuted data based on probability (default: False)
+
+    Returns:
+        augmented_batch_x: Tensor containing augmented sensor data
+        augmented_batch_y: Corresponding labels for the augmented data
+    """
+    batch_size = batch_x.shape[0]
+    device = batch_x.device
+
+    # Create a copy of the input batch
+    augmented_batch_x = batch_x.clone()
+
+    # Generate random mask based on probability
+    mask = torch.rand(batch_size, device=device) < probability
+
+    if mask.any():
+        # Apply axis permutation to selected samples
+        # Assuming channels are [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+        # Swap X and Y axes and potentially flip signs
+        # Create a list of possible permutation matrices
+        permutation_options = [
+            # Swap X and Y axes
+            torch.tensor(
+                [
+                    [0, 1, 0, 0, 0, 0],
+                    [1, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 0, 1, 0],
+                    [0, 0, 0, 1, 0, 0],
+                    [0, 0, 0, 0, 0, 1],
+                ],
+                dtype=torch.float32,
+                device=device,
+            ),
+            # Swap X and Y axes and flip X sign
+            torch.tensor(
+                [
+                    [0, -1, 0, 0, 0, 0],
+                    [1, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 0, -1, 0],
+                    [0, 0, 0, 1, 0, 0],
+                    [0, 0, 0, 0, 0, 1],
+                ],
+                dtype=torch.float32,
+                device=device,
+            ),
+            # Swap X and Y axes and flip Y sign
+            torch.tensor(
+                [
+                    [0, 1, 0, 0, 0, 0],
+                    [-1, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 0, 1, 0],
+                    [0, 0, 0, -1, 0, 0],
+                    [0, 0, 0, 0, 0, 1],
+                ],
+                dtype=torch.float32,
+                device=device,
+            ),
+            # Swap X and Y axes and flip both signs
+            torch.tensor(
+                [
+                    [0, -1, 0, 0, 0, 0],
+                    [-1, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 0, -1, 0],
+                    [0, 0, 0, -1, 0, 0],
+                    [0, 0, 0, 0, 0, 1],
+                ],
+                dtype=torch.float32,
+                device=device,
+            ),
+        ]
+
+        # For each sample to be permuted, randomly choose one permutation matrix
+        for i in range(batch_size):
+            if mask[i]:
+                # Randomly select one of the permutation options
+                perm_idx = torch.randint(
+                    0, len(permutation_options), (1,), device=device
+                ).item()
+                perm_matrix = permutation_options[perm_idx]
+
+                # Apply the permutation
+                augmented_batch_x[i] = torch.matmul(augmented_batch_x[i], perm_matrix.T)
+
+    # If is_additive is True, concatenate original and permuted data
+    if is_additive and mask.any():
+        augmented_batch_x = torch.cat([batch_x, augmented_batch_x[mask]], dim=0)
+        augmented_batch_y = torch.cat([batch_y, batch_y[mask]], dim=0)
+    else:
+        # Otherwise, just return the modified batch
+        augmented_batch_y = batch_y.clone()
+
+    return augmented_batch_x, augmented_batch_y
+
+
+def augment_planar_rotation(batch_x, batch_y, probability=0.5, is_additive=True):
+    """
+    Augments IMU data by simulating different planar rotations of the sensor device on the wrist.
+
+    In wearable IMU applications, sensor placement can vary significantly between users. When
+    participants attach sensors themselves (as in the FD dataset with Shimmer3 IMU modules),
+    the device orientation on the wrist can rotate in the xy-plane by 90°, 180°, or 270°.
+    This inconsistency causes substantial variability in IMU signals for identical actions.
+
+    This augmentation simulates these rotational variations by applying planar rotations to
+    the accelerometer and gyroscope data. By exposing the model to these orientation variations
+    during training, it learns to recognize activities regardless of how the device is positioned
+    on the wrist, improving robustness for real-world deployments.
+
+    Args:
+        batch_x: Input tensor of shape [batch_size, seq_len, channels] where channels
+                typically represent [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+        batch_y: Input labels of shape [batch_size, seq_len]
+        probability: Probability of applying rotation to each sample (default: 0.5)
+        is_additive: If True, concatenate original data with rotated data to expand the dataset.
+                     If False, return only rotated data based on probability (default: False)
+
+    Returns:
+        augmented_batch_x: Tensor containing augmented sensor data
+        augmented_batch_y: Corresponding labels for the augmented data
+    """
+    batch_size = batch_x.shape[0]
+    device = batch_x.device
+
+    # Create a copy of the input batch
+    augmented_batch_x = batch_x.clone()
+
+    # Generate random mask based on probability
+    mask = torch.rand(batch_size, device=device) < probability
+
+    if mask.any():
+        # Define rotation matrices for 90°, 180°, and 270° in the xy-plane
+        # These matrices will apply to both accelerometer and gyroscope data
+        rotation_options = [
+            # 90° rotation in xy-plane
+            torch.tensor(
+                [
+                    [0, 1, 0, 0, 0, 0],
+                    [-1, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 0, 1, 0],
+                    [0, 0, 0, -1, 0, 0],
+                    [0, 0, 0, 0, 0, 1],
+                ],
+                dtype=torch.float32,
+                device=device,
+            ),
+            # 180° rotation in xy-plane
+            torch.tensor(
+                [
+                    [-1, 0, 0, 0, 0, 0],
+                    [0, -1, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, -1, 0, 0],
+                    [0, 0, 0, 0, -1, 0],
+                    [0, 0, 0, 0, 0, 1],
+                ],
+                dtype=torch.float32,
+                device=device,
+            ),
+            # 270° rotation in xy-plane
+            torch.tensor(
+                [
+                    [0, -1, 0, 0, 0, 0],
+                    [1, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 0, -1, 0],
+                    [0, 0, 0, 1, 0, 0],
+                    [0, 0, 0, 0, 0, 1],
+                ],
+                dtype=torch.float32,
+                device=device,
+            ),
+        ]
+
+        # For each sample to be rotated, randomly choose one rotation angle
+        for i in range(batch_size):
+            if mask[i]:
+                # Randomly select one of the rotation options
+                rot_idx = torch.randint(
+                    0, len(rotation_options), (1,), device=device
+                ).item()
+                rot_matrix = rotation_options[rot_idx]
+
+                # Apply the rotation
+                augmented_batch_x[i] = torch.matmul(augmented_batch_x[i], rot_matrix.T)
+
+    # If is_additive is True, concatenate original and rotated data
+    if is_additive and mask.any():
+        augmented_batch_x = torch.cat([batch_x, augmented_batch_x[mask]], dim=0)
+        augmented_batch_y = torch.cat([batch_y, batch_y[mask]], dim=0)
+    else:
+        # Otherwise, just return the modified batch
+        augmented_batch_y = batch_y.clone()
+
+    return augmented_batch_x, augmented_batch_y
+
+
+def augment_spatial_orientation(batch_x, batch_y, probability=0.5, is_additive=True):
+    """
+    Augments IMU data by simulating subtle variations in sensor placement and orientation.
+
+    Even when using identical devices, small differences in sensor placement—such as positioning
+    on the wrist, strap tightness, or attachment angle—can significantly affect accelerometer
+    and gyroscope readings. These spatial variations create signal inconsistencies across users
+    that can degrade model generalization.
+
+    This augmentation applies small random rotations around the x and z axes (typically ±10°)
+    to simulate these natural placement variations. By training on data with these subtle
+    orientation differences, the model becomes more robust to the inevitable variability in
+    how users wear sensors in real-world conditions.
+
+    Args:
+        batch_x: Input tensor of shape [batch_size, seq_len, channels] where channels
+                typically represent [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+        batch_y: Input labels of shape [batch_size, seq_len]
+        probability: Probability of applying orientation change to each sample (default: 0.5)
+        is_additive: If True, concatenate original data with augmented data to expand the dataset.
+                     If False, return only augmented data based on probability (default: False)
+
+    Returns:
+        augmented_batch_x: Tensor containing augmented sensor data
+        augmented_batch_y: Corresponding labels for the augmented data
+    """
+    batch_size = batch_x.shape[0]
+    device = batch_x.device
+
+    # Create a copy of the input batch
+    augmented_batch_x = batch_x.clone()
+
+    # Generate random mask based on probability
+    mask = torch.rand(batch_size, device=device) < probability
+
+    if mask.any():
+        for i in range(batch_size):
+            if mask[i]:
+                # Generate random rotation angles (with standard deviation ~10° converted to radians)
+                theta_x = torch.normal(
+                    mean=torch.tensor(0.0), std=torch.tensor(10.0 * torch.pi / 180.0)
+                ).item()
+                theta_z = torch.normal(
+                    mean=torch.tensor(0.0), std=torch.tensor(10.0 * torch.pi / 180.0)
+                ).item()
+
+                # Create rotation matrices
+                rot_x = torch.tensor(
+                    [
+                        [1, 0, 0],
+                        [
+                            0,
+                            torch.cos(torch.tensor(theta_x)),
+                            -torch.sin(torch.tensor(theta_x)),
+                        ],
+                        [
+                            0,
+                            torch.sin(torch.tensor(theta_x)),
+                            torch.cos(torch.tensor(theta_x)),
+                        ],
+                    ],
+                    dtype=torch.float32,
+                    device=device,
+                )
+
+                rot_z = torch.tensor(
+                    [
+                        [
+                            torch.cos(torch.tensor(theta_z)),
+                            -torch.sin(torch.tensor(theta_z)),
+                            0,
+                        ],
+                        [
+                            torch.sin(torch.tensor(theta_z)),
+                            torch.cos(torch.tensor(theta_z)),
+                            0,
+                        ],
+                        [0, 0, 1],
+                    ],
+                    dtype=torch.float32,
+                    device=device,
+                )
+
+                # Randomly select one of four transformation orders
+                choice = torch.randint(0, 4, (1,), device=device).item()
+                if choice == 0:
+                    transformation = rot_x
+                elif choice == 1:
+                    transformation = rot_z
+                elif choice == 2:
+                    transformation = torch.matmul(rot_x, rot_z)
+                else:
+                    transformation = torch.matmul(rot_z, rot_x)
+
+                # Build a 6x6 block-diagonal transformation matrix for both accelerometer and gyroscope
+                zeros = torch.zeros((3, 3), device=device)
+                full_transformation = torch.cat(
+                    [
+                        torch.cat([transformation, zeros], dim=1),
+                        torch.cat([zeros, transformation], dim=1),
+                    ],
+                    dim=0,
+                )
+
+                # Apply transformation to each time step in the sequence
+                for t in range(
+                    augmented_batch_x.shape[1]
+                ):  # Loop through sequence length
+                    augmented_batch_x[i, t] = torch.matmul(
+                        full_transformation, augmented_batch_x[i, t]
+                    )
+
+    # If is_additive is True, concatenate original and augmented data
+    if is_additive and mask.any():
+        augmented_batch_x = torch.cat([batch_x, augmented_batch_x[mask]], dim=0)
+        augmented_batch_y = torch.cat([batch_y, batch_y[mask]], dim=0)
+    else:
+        # Otherwise, just return the modified batch
+        augmented_batch_y = batch_y.clone()
+
     return augmented_batch_x, augmented_batch_y

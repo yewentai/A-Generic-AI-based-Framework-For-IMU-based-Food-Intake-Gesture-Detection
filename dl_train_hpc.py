@@ -156,7 +156,9 @@ def main(local_rank=None, world_size=None):
     Y = np.concatenate([Y_L, Y_R], axis=0)
 
     # Create the full dataset using the defined window size
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE)
+    full_dataset = IMUDataset(
+        X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR
+    )
 
     # Augment Dataset with FDIII (if using FDII/FDI)
     fdiii_dataset = None
@@ -170,9 +172,18 @@ def main(local_rank=None, world_size=None):
             X_R_fdiii = np.array(pickle.load(f), dtype=object)
         with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
             Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+        if FLAG_DATASET_MIRROR:
+            X_L_fdiii = np.array(
+                [hand_mirroring(sample) for sample in X_L_fdiii], dtype=object
+            )
         X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
         Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-        fdiii_dataset = IMUDataset(X_fdiii, Y_fdiii, sequence_length=WINDOW_SIZE)
+        fdiii_dataset = IMUDataset(
+            X_fdiii,
+            Y_fdiii,
+            sequence_length=WINDOW_SIZE,
+            downsample_factor=DOWNSAMPLE_FACTOR,
+        )
 
     # Create validation folds based on the dataset type
     if DATASET == "FDI":
@@ -186,10 +197,6 @@ def main(local_rank=None, world_size=None):
 
     # -------------------- Cross-Validation Loop --------------------
     for fold, validate_subjects in enumerate(validate_folds):
-        # Skip the first 5 folds
-        if fold < 5:
-            continue
-
         # Split training and validation indices based on subject IDs
         train_indices = [
             i
@@ -217,15 +224,35 @@ def main(local_rank=None, world_size=None):
         )
 
         # -------------------- Model Setup --------------------
-        model = MSTCN(
-            num_stages=NUM_STAGES,
-            num_layers=NUM_LAYERS,
-            num_classes=NUM_CLASSES,
-            input_dim=INPUT_DIM,
-            num_filters=NUM_FILTERS,
-            kernel_size=KERNEL_SIZE,
-            dropout=DROPOUT,
-        ).to(device)
+        # Create Model and Optimizer
+        if MODEL == "TCN":
+            model = TCN(
+                num_layers=NUM_LAYERS,
+                num_classes=NUM_CLASSES,
+                input_dim=INPUT_DIM,
+                num_filters=NUM_FILTERS,
+                kernel_size=KERNEL_SIZE,
+                dropout=DROPOUT,
+            ).to(device)
+        elif MODEL == "MSTCN":
+            model = MSTCN(
+                num_stages=NUM_STAGES,
+                num_layers=NUM_LAYERS,
+                num_classes=NUM_CLASSES,
+                input_dim=INPUT_DIM,
+                num_filters=NUM_FILTERS,
+                kernel_size=KERNEL_SIZE,
+                dropout=DROPOUT,
+            ).to(device)
+        elif MODEL == "CNN_LSTM":
+            model = CNNLSTM(
+                input_channels=INPUT_DIM,
+                conv_filters=CONV_FILTERS,
+                lstm_hidden=LSTM_HIDDEN,
+                num_classes=NUM_CLASSES,
+            ).to(device)
+        else:
+            raise ValueError(f"Invalid model: {MODEL}")
         # Wrap the model with DistributedDataParallel
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[local_rank]
@@ -242,22 +269,38 @@ def main(local_rank=None, world_size=None):
             training_loss_mse = 0.0
 
             for batch_x, batch_y in train_loader:
+                # Shape of batch_x: [batch_size, seq_len, channels]
+                # Shape of batch_y: [batch_size, seq_len]
                 # Optionally apply data augmentation
                 if FLAG_AUGMENT_HAND_MIRRORING:
-                    batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y)
+                    batch_x, batch_y = augment_hand_mirroring(
+                        batch_x, batch_y, probability=1, is_additive=True
+                    )
                 if FLAG_AUGMENT_AXIS_PERMUTATION:
-                    batch_x, batch_y = augment_axis_permutation(batch_x, batch_y)
+                    batch_x, batch_y = augment_axis_permutation(
+                        batch_x, batch_y, probability=0.5, is_additive=True
+                    )
                 if FLAG_AUGMENT_PLANAR_ROTATION:
-                    batch_x, batch_y = augment_planar_rotation(batch_x, batch_y)
+                    batch_x, batch_y = augment_planar_rotation(
+                        batch_x, batch_y, probability=0.5, is_additive=True
+                    )
                 if FLAG_AUGMENT_SPATIAL_ORIENTATION:
-                    batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y)
-                # Rearrange dimensions and move data to the configured device
+                    batch_x, batch_y = augment_spatial_orientation(
+                        batch_x, batch_y, probability=0.5, is_additive=True
+                    )
+                # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
+                # Shape of batch_x: [batch_size, channels, seq_len]
                 batch_x = batch_x.permute(0, 2, 1).to(device)
                 batch_y = batch_y.to(device)
 
                 optimizer.zero_grad()
                 outputs = model(batch_x)
-                ce_loss, mse_loss = MSTCN_Loss(outputs, batch_y)
+                loss_fn = {
+                    "MSTCN": MSTCN_Loss,
+                    "TCN": TCN_Loss,
+                    "CNN_LSTM": CNNLSTM_Loss,
+                }[MODEL]
+                ce_loss, mse_loss = loss_fn(outputs, batch_y)
                 loss = ce_loss + LAMBDA_COEF * mse_loss
                 loss.backward()
                 optimizer.step()

@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=18                  # Number of CPU cores to use per node (Maximum 72 cores)
 #SBATCH --gpus-per-node=4                     # Number of GPUs to request per node (Maximum 4 GPUs)
 #SBATCH --partition=gpu_a100                  # Partition to use (A100 GPUs)
-#SBATCH --time=10:00:00                       # Maximum wall time (3 days)
+#SBATCH --time=24:00:00                       # Maximum wall time (3 days)
 #SBATCH --output=logs/ddp_train_%j.output     # Output file for job logs
 
 # Load Miniconda
@@ -25,4 +25,4 @@ export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1
 
 # Launch the training script with torchrun for DDP (Distributed Data Parallel) support
-torchrun --nnodes=1 --nproc_per_node=1 train_hpc.py
+torchrun --nnodes=1 --nproc_per_node=1 dl_train_hpc.py
