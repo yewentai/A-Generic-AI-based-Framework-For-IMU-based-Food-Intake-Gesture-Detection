@@ -19,9 +19,7 @@ import pickle
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
-from datetime import datetime
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 try:
@@ -30,7 +28,6 @@ except ImportError:
     classification_report, confusion_matrix = None, None
 
 from components.datasets import IMUDataset
-from components.pre_processing import hand_mirroring
 
 
 # Define the same classifier structure as in fine-tuning

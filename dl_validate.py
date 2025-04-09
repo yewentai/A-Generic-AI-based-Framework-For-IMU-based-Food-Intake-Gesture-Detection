@@ -17,7 +17,6 @@ Usage       : Execute the script in your terminal:
 
 import os
 import json
-import glob
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
