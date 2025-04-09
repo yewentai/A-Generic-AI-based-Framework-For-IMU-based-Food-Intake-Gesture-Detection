@@ -49,9 +49,7 @@ def main():
 
     # ---------------------- Model Construction ----------------------
     latent_dim = 64
-    vae_model = VAE(
-        input_channels=6, sequence_length=sequence_length, latent_dim=latent_dim
-    ).to(device)
+    vae_model = VAE(input_channels=6, sequence_length=sequence_length, latent_dim=latent_dim).to(device)
     optimizer = optim.Adam(vae_model.parameters(), lr=1e-3)
     num_epochs = 50
 

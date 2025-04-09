@@ -33,19 +33,13 @@ class AccNet(nn.Module):
         """
         super(AccNet, self).__init__()
         # First convolutional block
-        self.conv1 = nn.Conv1d(
-            in_channels=input_channels, out_channels=32, kernel_size=3, padding=1
-        )
+        self.conv1 = nn.Conv1d(in_channels=input_channels, out_channels=32, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(32)
         # Second convolutional block
-        self.conv2 = nn.Conv1d(
-            in_channels=32, out_channels=64, kernel_size=3, padding=1
-        )
+        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(64)
         # Third convolutional block
-        self.conv3 = nn.Conv1d(
-            in_channels=64, out_channels=128, kernel_size=3, padding=1
-        )
+        self.conv3 = nn.Conv1d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
         self.bn3 = nn.BatchNorm1d(128)
 
         # Max pooling to reduce temporal resolution

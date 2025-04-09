@@ -38,9 +38,7 @@ class Classifier(nn.Module):
     def __init__(self, encoder, feature_dim, num_classes):
         super(Classifier, self).__init__()
         self.encoder = encoder
-        self.fc = nn.Sequential(
-            nn.Linear(feature_dim, 64), nn.ReLU(), nn.Linear(64, num_classes)
-        )
+        self.fc = nn.Sequential(nn.Linear(feature_dim, 64), nn.ReLU(), nn.Linear(64, num_classes))
 
     def forward(self, x):
         features = self.encoder(x)
@@ -71,9 +69,7 @@ def main():
     sequence_length = 300
     dataset = IMUDataset(X, Y, sequence_length=sequence_length)
     batch_size = 64
-    dataloader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=False, num_workers=4
-    )
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -112,11 +108,7 @@ def main():
     encoder = TCN_EncoderWrapper(tcn_encoder).to(device)
     # Load encoder weights from the fine-tuned model checkpoint
     state_dict = torch.load(classifier_ckpt, map_location=device)
-    encoder_state_dict = {
-        k.replace("encoder.", ""): v
-        for k, v in state_dict.items()
-        if k.startswith("encoder.")
-    }
+    encoder_state_dict = {k.replace("encoder.", ""): v for k, v in state_dict.items() if k.startswith("encoder.")}
     encoder.load_state_dict(encoder_state_dict)
     encoder.eval()
 

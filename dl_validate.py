@@ -132,13 +132,9 @@ if validate_folds is None:
 validating_statistics = []
 
 
-for fold, validate_subjects in enumerate(
-    tqdm(validate_folds, desc="K-Fold", leave=True)
-):
+for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", leave=True)):
     # Construct the checkpoint path for the current fold
-    CHECKPOINT_PATH = os.path.join(
-        RESULT_DIR, RESULT_VERSION, f"best_model_fold{fold+1}.pth"
-    )
+    CHECKPOINT_PATH = os.path.join(RESULT_DIR, RESULT_VERSION, f"best_model_fold{fold+1}.pth")
 
     # Check if the checkpoint for this fold exists
     if not os.path.exists(CHECKPOINT_PATH):
@@ -192,11 +188,7 @@ for fold, validate_subjects in enumerate(
     model.load_state_dict(new_state_dict)
 
     # Split validation indices based on subject IDs
-    validate_indices = [
-        i
-        for i, subject in enumerate(full_dataset.subject_indices)
-        if subject in validate_subjects
-    ]
+    validate_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject in validate_subjects]
 
     # Create DataLoader for the validation subset of the current fold
     validate_loader = DataLoader(
@@ -215,9 +207,7 @@ for fold, validate_subjects in enumerate(
     all_labels = []
 
     with torch.no_grad():
-        for batch_x, batch_y in tqdm(
-            validate_loader, desc=f"Validating Fold {fold+1}", leave=False
-        ):
+        for batch_x, batch_y in tqdm(validate_loader, desc=f"Validating Fold {fold+1}", leave=False):
             batch_x = batch_x.permute(0, 2, 1).to(device)
             outputs = model(batch_x)
             # If the model produces outputs with multiple stages (4D tensor), select the last stage.
@@ -236,9 +226,7 @@ for fold, validate_subjects in enumerate(
 
     # Compute label distribution
     unique_labels, counts = np.unique(all_labels, return_counts=True)
-    label_distribution = {
-        float(label): int(count) for label, count in zip(unique_labels, counts)
-    }
+    label_distribution = {float(label): int(count) for label, count in zip(unique_labels, counts)}
 
     preds_tensor = torch.tensor(all_predictions)
     labels_tensor = torch.tensor(all_labels)
@@ -254,12 +242,8 @@ for fold, validate_subjects in enumerate(
         metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
 
     # Additional sample-wise metrics
-    cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(
-        preds_tensor, labels_tensor
-    ).item()
-    matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(
-        preds_tensor, labels_tensor
-    ).item()
+    cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(preds_tensor, labels_tensor).item()
+    matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(preds_tensor, labels_tensor).item()
 
     # Post-process predictions
     all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
@@ -330,9 +314,7 @@ for entry in validate_stats:
         weight = label_dist.get(label_int, 0)
         weighted_f1_sample += stats["f1"] * weight
         total_weight_sample += weight
-    f1_sample_weighted = (
-        weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
-    )
+    f1_sample_weighted = weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
 
     # Compute weighted average F1 for segment-wise metrics
     total_weight_segment = 0.0
@@ -342,9 +324,7 @@ for entry in validate_stats:
         weight = label_dist.get(label_int, 0)
         weighted_f1_segment += stats["f1"] * weight
         total_weight_segment += weight
-    f1_segment_weighted = (
-        weighted_f1_segment / total_weight_segment if total_weight_segment > 0 else 0.0
-    )
+    f1_segment_weighted = weighted_f1_segment / total_weight_segment if total_weight_segment > 0 else 0.0
 
     label_distribution.append(label_dist)
     f1_scores_sample.append(f1_sample_weighted)

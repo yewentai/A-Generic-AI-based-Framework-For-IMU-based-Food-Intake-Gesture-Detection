@@ -20,9 +20,7 @@ import torch.nn.functional as F
 class DilatedResidualLayer(nn.Module):
     def __init__(self, num_filters, dilation, kernel_size=3, dropout=0.3):
         super(DilatedResidualLayer, self).__init__()
-        self.conv_dilated = nn.Conv1d(
-            num_filters, num_filters, kernel_size, padding=dilation, dilation=dilation
-        )
+        self.conv_dilated = nn.Conv1d(num_filters, num_filters, kernel_size, padding=dilation, dilation=dilation)
         self.relu = nn.ReLU()
         self.conv_1x1 = nn.Conv1d(num_filters, num_filters, kernel_size=1)
         self.dropout = nn.Dropout(dropout)
@@ -49,9 +47,7 @@ class TCN(nn.Module):
         self.conv_in = nn.Conv1d(input_dim, num_filters, kernel_size=1)
         self.layers = nn.ModuleList(
             [
-                DilatedResidualLayer(
-                    num_filters, dilation=2**i, kernel_size=kernel_size, dropout=dropout
-                )
+                DilatedResidualLayer(num_filters, dilation=2**i, kernel_size=kernel_size, dropout=dropout)
                 for i in range(num_layers)
             ]
         )
@@ -76,9 +72,7 @@ def TCN_Loss(outputs, targets):
     batch_size, num_classes, seq_len = outputs.size()
 
     # Cross-entropy loss
-    ce_loss = loss_ce_fn(
-        outputs.transpose(2, 1).contiguous().view(-1, num_classes), targets.view(-1)
-    )
+    ce_loss = loss_ce_fn(outputs.transpose(2, 1).contiguous().view(-1, num_classes), targets.view(-1))
 
     # Temporal smoothing loss
     if seq_len > 1:

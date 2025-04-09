@@ -20,9 +20,7 @@ import os
 
 
 class IMUDataset(Dataset):
-    def __init__(
-        self, X, Y, sequence_length=128, downsample_factor=4, apply_antialias=True
-    ):
+    def __init__(self, X, Y, sequence_length=128, downsample_factor=4, apply_antialias=True):
         """
         Initialize the IMUDataset.
 
@@ -99,9 +97,7 @@ class IMUDataset(Dataset):
         """
         if apply_antialias:
             nyquist = 0.5 * data.shape[0]  # Original Nyquist frequency
-            cutoff = (
-                0.5 / factor
-            ) * nyquist  # Limit to 80% of the new Nyquist frequency
+            cutoff = (0.5 / factor) * nyquist  # Limit to 80% of the new Nyquist frequency
             b, a = signal.butter(4, cutoff / nyquist, btype="low", analog=False)
             data = signal.filtfilt(b, a, data, axis=0)
 
@@ -168,9 +164,7 @@ def create_balanced_subject_folds(dataset, num_folds=7):
     return folds
 
 
-def load_predefined_validate_folds(
-    num_folds=7, base_dir="dataset/FD/FD1_7_fold_id_list"
-):
+def load_predefined_validate_folds(num_folds=7, base_dir="dataset/FD/FD1_7_fold_id_list"):
     """
     Load predefined test folds from .npy files.
 

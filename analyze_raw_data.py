@@ -52,14 +52,10 @@ def basic_statistics(X, Y, side):
         for label, count in zip(unique, counts):
             label_counts[label] = count
 
-        label_counts_per_subject.append(
-            (subj_idx + 1, label_counts[0], label_counts[1], label_counts[2])
-        )
+        label_counts_per_subject.append((subj_idx + 1, label_counts[0], label_counts[1], label_counts[2]))
 
     # Compute overall label counts
-    total_counts = np.sum(
-        [[count[1], count[2], count[3]] for count in label_counts_per_subject], axis=0
-    )
+    total_counts = np.sum([[count[1], count[2], count[3]] for count in label_counts_per_subject], axis=0)
 
     # Write to file
     with open(stats_file, "a") as f:  # Append to existing file
@@ -198,9 +194,7 @@ def analyze_segments(X, Y, side="L"):
                 )
 
             # Highlight the "during" period.
-            plt.axvspan(
-                start / fs, end / fs, color="red", alpha=0.2, label="During period"
-            )
+            plt.axvspan(start / fs, end / fs, color="red", alpha=0.2, label="During period")
 
             plt.title(f"Subject {subj_idx+1} - Label {label} - Time Domain ({side})")
             plt.xlabel("Time (s)")
@@ -208,9 +202,7 @@ def analyze_segments(X, Y, side="L"):
             plt.legend()
             plt.grid(True, alpha=0.3)
             plt.savefig(
-                os.path.join(
-                    save_dir, f"subj{subj_idx+1}_label{label}_time_{side}.png"
-                ),
+                os.path.join(save_dir, f"subj{subj_idx+1}_label{label}_time_{side}.png"),
                 dpi=150,
             )
             plt.close()

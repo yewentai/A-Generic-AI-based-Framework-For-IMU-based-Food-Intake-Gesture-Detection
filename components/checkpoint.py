@@ -16,9 +16,7 @@ import os
 import torch
 
 
-def save_best_model(
-    model, fold, current_metric, best_metric, checkpoint_dir, mode="max"
-):
+def save_best_model(model, fold, current_metric, best_metric, checkpoint_dir, mode="max"):
     """
     Save the best model for a given fold based on a performance metric.
 
@@ -35,11 +33,7 @@ def save_best_model(
         float: The updated best metric value.
     """
     # Determine if the current metric is better than the best metric so far
-    is_better = (
-        (current_metric > best_metric)
-        if mode == "max"
-        else (current_metric < best_metric)
-    )
+    is_better = (current_metric > best_metric) if mode == "max" else (current_metric < best_metric)
 
     if is_better:
         best_metric = current_metric
@@ -73,7 +67,5 @@ def load_checkpoint(model, optimizer, checkpoint_path):
     f1_score = checkpoint["f1_score"]
     fold = checkpoint["fold"]
 
-    print(
-        f"Loaded checkpoint from fold {fold}, epoch {epoch} with F1 score: {f1_score:.4f}"
-    )
+    print(f"Loaded checkpoint from fold {fold}, epoch {epoch} with F1 score: {f1_score:.4f}")
     return model, optimizer, epoch, f1_score

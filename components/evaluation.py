@@ -203,16 +203,8 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
                     _plot_span(ax2, (ps, pe), "TP", "red")
 
         # Identify leftovers
-        remaining_gt = [
-            (i, (s, e))
-            for i, (s, e) in enumerate(gt_subset)
-            if i not in {r for r, _ in matched}
-        ]
-        remaining_pred = [
-            (j, (s, e))
-            for j, (s, e) in enumerate(pred_subset)
-            if j not in {c for _, c in matched}
-        ]
+        remaining_gt = [(i, (s, e)) for i, (s, e) in enumerate(gt_subset) if i not in {r for r, _ in matched}]
+        remaining_pred = [(j, (s, e)) for j, (s, e) in enumerate(pred_subset) if j not in {c for _, c in matched}]
 
         # Greedy overlap matching for leftovers
         used_gt = set()

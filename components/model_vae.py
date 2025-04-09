@@ -53,17 +53,11 @@ class VAE(nn.Module):
         # Decoder: Map the latent vector back to convolutional features and use transposed convolutions to reconstruct.
         self.decoder_input = nn.Linear(latent_dim, self.feature_dim)
         self.decoder = nn.Sequential(
-            nn.ConvTranspose1d(
-                128, 64, kernel_size=3, stride=2, padding=1, output_padding=1
-            ),
+            nn.ConvTranspose1d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.ReLU(),
-            nn.ConvTranspose1d(
-                64, 32, kernel_size=3, stride=2, padding=1, output_padding=1
-            ),
+            nn.ConvTranspose1d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.ReLU(),
-            nn.ConvTranspose1d(
-                32, input_channels, kernel_size=3, stride=2, padding=1, output_padding=1
-            ),
+            nn.ConvTranspose1d(32, input_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.Sigmoid(),  # Use Sigmoid if data is normalized to [0, 1].
         )
 

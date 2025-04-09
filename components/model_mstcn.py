@@ -22,9 +22,7 @@ import torch.nn.functional as F
 class DilatedResidualLayer(nn.Module):
     def __init__(self, num_filters, dilation, kernel_size=3, dropout=0.3):
         super(DilatedResidualLayer, self).__init__()
-        self.conv_dilated = nn.Conv1d(
-            num_filters, num_filters, kernel_size, padding=dilation, dilation=dilation
-        )
+        self.conv_dilated = nn.Conv1d(num_filters, num_filters, kernel_size, padding=dilation, dilation=dilation)
         self.relu = nn.ReLU()
         self.conv_1x1 = nn.Conv1d(num_filters, num_filters, kernel_size=1)
         self.dropout = nn.Dropout(dropout)
@@ -52,9 +50,7 @@ class SSTCN(nn.Module):
         self.conv_in = nn.Conv1d(in_channels, num_filters, kernel_size=1)
         self.layers = nn.ModuleList(
             [
-                DilatedResidualLayer(
-                    num_filters, dilation=2**i, kernel_size=kernel_size, dropout=dropout
-                )
+                DilatedResidualLayer(num_filters, dilation=2**i, kernel_size=kernel_size, dropout=dropout)
                 for i in range(num_layers)
             ]
         )
@@ -83,9 +79,7 @@ class MSTCN(nn.Module):
         super(MSTCN, self).__init__()
         self.stages = nn.ModuleList()
         # The first stage takes the original features as input
-        self.stages.append(
-            SSTCN(num_layers, input_dim, num_classes, num_filters, kernel_size, dropout)
-        )
+        self.stages.append(SSTCN(num_layers, input_dim, num_classes, num_filters, kernel_size, dropout))
         # Subsequent stages take the predictions (number of classes) from the previous stage as input
         for s in range(1, num_stages):
             self.stages.append(
@@ -108,12 +102,8 @@ class MSTCN(nn.Module):
         for stage in self.stages[1:]:
             out = stage(F.softmax(out, dim=1))
             outputs.append(out.unsqueeze(0))
-        outputs = torch.cat(
-            outputs, dim=0
-        )  # shape: [num_stages, batch, num_classes, seq_len]
-        outputs = outputs.permute(
-            1, 0, 2, 3
-        )  # shape: [batch, num_stages, num_classes, seq_len]
+        outputs = torch.cat(outputs, dim=0)  # shape: [num_stages, batch, num_classes, seq_len]
+        outputs = outputs.permute(1, 0, 2, 3)  # shape: [batch, num_stages, num_classes, seq_len]
         return outputs
 
 

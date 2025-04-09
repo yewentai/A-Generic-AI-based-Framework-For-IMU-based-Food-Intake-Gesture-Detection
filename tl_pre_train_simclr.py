@@ -55,9 +55,7 @@ class TCN_EncoderWrapper(nn.Module):
 class ProjectionHead(nn.Module):
     def __init__(self, input_dim, proj_dim=64, hidden_dim=128):
         super(ProjectionHead, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, proj_dim)
-        )
+        self.net = nn.Sequential(nn.Linear(input_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, proj_dim))
 
     def forward(self, x):
         return self.net(x)

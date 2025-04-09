@@ -54,12 +54,8 @@ class CNNLSTM(nn.Module):
             dilation=1,
             padding=2,
         )
-        self.conv2 = nn.Conv1d(
-            in_channels=f1, out_channels=f2, kernel_size=3, dilation=2, padding=2
-        )
-        self.conv3 = nn.Conv1d(
-            in_channels=f2, out_channels=f3, kernel_size=3, dilation=4, padding=4
-        )
+        self.conv2 = nn.Conv1d(in_channels=f1, out_channels=f2, kernel_size=3, dilation=2, padding=2)
+        self.conv3 = nn.Conv1d(in_channels=f2, out_channels=f3, kernel_size=3, dilation=4, padding=4)
         self.relu = nn.ReLU()
 
         # LSTM that processes the sequence with length M
@@ -124,9 +120,7 @@ def CNNLSTM_Loss(outputs, targets):
 
     # Compute cross-entropy loss.
     # Transpose outputs to [batch_size, seq_len, num_classes] and reshape.
-    ce_loss = loss_ce_fn(
-        outputs.transpose(2, 1).contiguous().view(-1, num_classes), targets.view(-1)
-    )
+    ce_loss = loss_ce_fn(outputs.transpose(2, 1).contiguous().view(-1, num_classes), targets.view(-1))
 
     # Compute temporal smoothing loss if there is more than one time step.
     if seq_len > 1:

@@ -54,9 +54,7 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
     dataset_type = "DX"
-    sub_version = (
-        DATASET.replace("DX", "").upper() or "I"
-    )  # Handles formats like DX/DXII
+    sub_version = DATASET.replace("DX", "").upper() or "I"  # Handles formats like DX/DXII
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
 elif DATASET.startswith("FD"):
@@ -149,9 +147,7 @@ X = np.concatenate([X_L, X_R], axis=0)
 Y = np.concatenate([Y_L, Y_R], axis=0)
 
 # Create the full dataset using the defined window size
-full_dataset = IMUDataset(
-    X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR
-)
+full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 
 # Augment Dataset with FDIII (if using FDII/FDI)
 fdiii_dataset = None
@@ -166,9 +162,7 @@ if DATASET in ["FDII", "FDI"]:
     with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
         Y_R_fdiii = np.array(pickle.load(f), dtype=object)
     if FLAG_DATASET_MIRROR:
-        X_L_fdiii = np.array(
-            [hand_mirroring(sample) for sample in X_L_fdiii], dtype=object
-        )
+        X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
     fdiii_dataset = IMUDataset(
@@ -190,26 +184,18 @@ else:
 
 training_statistics = []
 
-for fold, validate_subjects in enumerate(
-    tqdm(validate_folds, desc="K-Fold", leave=True)
-):
+for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", leave=True)):
     # Process only the first fold for demonstration; remove the condition to run all folds.
     if FLAG_SKIP:
         FLAG_SKIP = False
         continue
 
     # Split training indices based on subject IDs
-    train_indices = [
-        i
-        for i, subject in enumerate(full_dataset.subject_indices)
-        if subject not in validate_subjects
-    ]
+    train_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject not in validate_subjects]
 
     # Augment training data with FDIII if applicable
     if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
-        train_dataset = ConcatDataset(
-            [Subset(full_dataset, train_indices), fdiii_dataset]
-        )
+        train_dataset = ConcatDataset([Subset(full_dataset, train_indices), fdiii_dataset])
     else:
         train_dataset = Subset(full_dataset, train_indices)
 
@@ -269,21 +255,13 @@ for fold, validate_subjects in enumerate(
             # Shape of batch_y: [batch_size, seq_len]
             # Optionally apply data augmentation
             if FLAG_AUGMENT_HAND_MIRRORING:
-                batch_x, batch_y = augment_hand_mirroring(
-                    batch_x, batch_y, probability=1, is_additive=True
-                )
+                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y, probability=1, is_additive=True)
             if FLAG_AUGMENT_AXIS_PERMUTATION:
-                batch_x, batch_y = augment_axis_permutation(
-                    batch_x, batch_y, probability=0.5, is_additive=True
-                )
+                batch_x, batch_y = augment_axis_permutation(batch_x, batch_y, probability=0.5, is_additive=True)
             if FLAG_AUGMENT_PLANAR_ROTATION:
-                batch_x, batch_y = augment_planar_rotation(
-                    batch_x, batch_y, probability=0.5, is_additive=True
-                )
+                batch_x, batch_y = augment_planar_rotation(batch_x, batch_y, probability=0.5, is_additive=True)
             if FLAG_AUGMENT_SPATIAL_ORIENTATION:
-                batch_x, batch_y = augment_spatial_orientation(
-                    batch_x, batch_y, probability=0.5, is_additive=True
-                )
+                batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y, probability=0.5, is_additive=True)
             # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
             # Shape of batch_x: [batch_size, channels, seq_len]
             batch_x = batch_x.permute(0, 2, 1).to(device)

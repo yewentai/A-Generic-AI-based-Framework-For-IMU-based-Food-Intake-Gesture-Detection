@@ -101,9 +101,7 @@ def augment_hand_mirroring(batch_x, batch_y, probability=0.5, is_additive=True):
     # Apply mirroring transformation only to selected samples
     if mask.any():
         # Apply the transformation only to samples selected by the mask
-        augmented_batch_x[mask] = torch.matmul(
-            augmented_batch_x[mask], mirroring_matrix.T
-        )
+        augmented_batch_x[mask] = torch.matmul(augmented_batch_x[mask], mirroring_matrix.T)
 
     # If include_original is True, concatenate original and augmented data
     if is_additive and mask.any():
@@ -214,9 +212,7 @@ def augment_axis_permutation(batch_x, batch_y, probability=0.5, is_additive=True
         for i in range(batch_size):
             if mask[i]:
                 # Randomly select one of the permutation options
-                perm_idx = torch.randint(
-                    0, len(permutation_options), (1,), device=device
-                ).item()
+                perm_idx = torch.randint(0, len(permutation_options), (1,), device=device).item()
                 perm_matrix = permutation_options[perm_idx]
 
                 # Apply the permutation
@@ -317,9 +313,7 @@ def augment_planar_rotation(batch_x, batch_y, probability=0.5, is_additive=True)
         for i in range(batch_size):
             if mask[i]:
                 # Randomly select one of the rotation options
-                rot_idx = torch.randint(
-                    0, len(rotation_options), (1,), device=device
-                ).item()
+                rot_idx = torch.randint(0, len(rotation_options), (1,), device=device).item()
                 rot_matrix = rotation_options[rot_idx]
 
                 # Apply the rotation
@@ -375,12 +369,8 @@ def augment_spatial_orientation(batch_x, batch_y, probability=0.5, is_additive=T
         for i in range(batch_size):
             if mask[i]:
                 # Generate random rotation angles (with standard deviation ~10° converted to radians)
-                theta_x = torch.normal(
-                    mean=torch.tensor(0.0), std=torch.tensor(10.0 * torch.pi / 180.0)
-                ).item()
-                theta_z = torch.normal(
-                    mean=torch.tensor(0.0), std=torch.tensor(10.0 * torch.pi / 180.0)
-                ).item()
+                theta_x = torch.normal(mean=torch.tensor(0.0), std=torch.tensor(10.0 * torch.pi / 180.0)).item()
+                theta_z = torch.normal(mean=torch.tensor(0.0), std=torch.tensor(10.0 * torch.pi / 180.0)).item()
 
                 # Create rotation matrices
                 rot_x = torch.tensor(
@@ -441,12 +431,8 @@ def augment_spatial_orientation(batch_x, batch_y, probability=0.5, is_additive=T
                 )
 
                 # Apply transformation to each time step in the sequence
-                for t in range(
-                    augmented_batch_x.shape[1]
-                ):  # Loop through sequence length
-                    augmented_batch_x[i, t] = torch.matmul(
-                        full_transformation, augmented_batch_x[i, t]
-                    )
+                for t in range(augmented_batch_x.shape[1]):  # Loop through sequence length
+                    augmented_batch_x[i, t] = torch.matmul(full_transformation, augmented_batch_x[i, t])
 
     # If is_additive is True, concatenate original and augmented data
     if is_additive and mask.any():

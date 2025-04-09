@@ -42,9 +42,7 @@ def nonzero_intervals(x):
     return np.array(results, dtype=int)
 
 
-def post_process_binary_mask(
-    binary_mask, sampling_freq, min_length_sec, merge_distance_sec
-):
+def post_process_binary_mask(binary_mask, sampling_freq, min_length_sec, merge_distance_sec):
     """
     Post-process a binary mask by removing short segments and merging close segments.
 
@@ -64,19 +62,12 @@ def post_process_binary_mask(
     intervals = nonzero_intervals(binary_mask)
 
     # Remove segments shorter than the minimum length.
-    intervals = [
-        interval
-        for interval in intervals
-        if (interval[1] - interval[0]) >= min_length_samples
-    ]
+    intervals = [interval for interval in intervals if (interval[1] - interval[0]) >= min_length_samples]
 
     # Merge intervals that are close to each other.
     merged_intervals = []
     for interval in intervals:
-        if (
-            not merged_intervals
-            or (interval[0] - merged_intervals[-1][1]) > merge_distance_samples
-        ):
+        if not merged_intervals or (interval[0] - merged_intervals[-1][1]) > merge_distance_samples:
             merged_intervals.append(interval)
         else:
             merged_intervals[-1][1] = interval[1]
@@ -89,9 +80,7 @@ def post_process_binary_mask(
     return new_mask
 
 
-def post_process_predictions(
-    predictions, sampling_freq, min_length_sec=1.0, merge_distance_sec=0.1
-):
+def post_process_predictions(predictions, sampling_freq, min_length_sec=1.0, merge_distance_sec=0.1):
     """
     Post-process predictions by removing short segments and merging close segments.
     Supports both binary (0/1) and multi-class predictions.
@@ -112,9 +101,7 @@ def post_process_predictions(
 
     # If predictions are binary (0/1), process directly.
     if len(unique_labels) <= 2 and set(unique_labels) == {0, 1}:
-        return post_process_binary_mask(
-            predictions, sampling_freq, min_length_sec, merge_distance_sec
-        )
+        return post_process_binary_mask(predictions, sampling_freq, min_length_sec, merge_distance_sec)
 
     # Multi-class case: process each class separately.
     new_predictions = np.zeros_like(predictions)
@@ -122,9 +109,7 @@ def post_process_predictions(
         # Create a binary mask for the current class.
         binary_mask = (predictions == label).astype(np.int32)
         # Post-process the binary mask.
-        processed_mask = post_process_binary_mask(
-            binary_mask, sampling_freq, min_length_sec, merge_distance_sec
-        )
+        processed_mask = post_process_binary_mask(binary_mask, sampling_freq, min_length_sec, merge_distance_sec)
         # Assign the label to the refined intervals.
         new_predictions[processed_mask == 1] = label
 

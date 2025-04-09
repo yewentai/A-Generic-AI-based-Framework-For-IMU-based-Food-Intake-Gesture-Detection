@@ -42,9 +42,7 @@ def hand_mirroring(data):
 
     if isinstance(data, torch.Tensor):
         # Convert the mirroring matrix to a tensor and move it to the same device as the data
-        mirroring_matrix = torch.tensor(
-            mirroring_matrix, dtype=torch.float32, device=data.device
-        )
+        mirroring_matrix = torch.tensor(mirroring_matrix, dtype=torch.float32, device=data.device)
         # Apply the transformation
         data = torch.matmul(data, mirroring_matrix.T)
     else:

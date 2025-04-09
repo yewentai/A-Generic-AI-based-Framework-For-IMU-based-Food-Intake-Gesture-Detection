@@ -61,9 +61,7 @@ class Classifier(nn.Module):
         if freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
-        self.fc = nn.Sequential(
-            nn.Linear(feature_dim, 64), nn.ReLU(), nn.Linear(64, num_classes)
-        )
+        self.fc = nn.Sequential(nn.Linear(feature_dim, 64), nn.ReLU(), nn.Linear(64, num_classes))
 
     def forward(self, x):
         features = self.encoder(x)  # [B, feature_dim]
@@ -115,22 +113,14 @@ def main():
     encoder = TCN_EncoderWrapper(tcn_encoder).to(device)
     state_dict = torch.load(simclr_ckpt, map_location=device)
     # Assume the saved state dict has keys prefixed with "encoder."; adjust if necessary
-    encoder.load_state_dict(
-        {
-            k.replace("encoder.", ""): v
-            for k, v in state_dict.items()
-            if k.startswith("encoder.")
-        }
-    )
+    encoder.load_state_dict({k.replace("encoder.", ""): v for k, v in state_dict.items() if k.startswith("encoder.")})
     encoder.eval()
     feature_dim = 128  # The output dimension of the encoder
 
     num_classes = 3  # Modify to match your downstream task
 
     # ---------------------- Build Classifier Model ----------------------
-    model = Classifier(encoder, feature_dim, num_classes, freeze_encoder=False).to(
-        device
-    )
+    model = Classifier(encoder, feature_dim, num_classes, freeze_encoder=False).to(device)
     optimizer = optim.Adam(model.parameters(), lr=5e-4)
     criterion = nn.CrossEntropyLoss()
 
@@ -140,9 +130,7 @@ def main():
         epoch_loss = 0.0
         correct = 0
         total = 0
-        for batch_x, batch_y in tqdm(
-            dataloader, desc=f"Fine-tune Epoch {epoch+1}/{num_epochs_ft}"
-        ):
+        for batch_x, batch_y in tqdm(dataloader, desc=f"Fine-tune Epoch {epoch+1}/{num_epochs_ft}"):
             batch_x = batch_x.to(device).permute(0, 2, 1)
             # Use the first label of each sequence as the sample label
             labels = batch_y[:, 0].long().to(device)
