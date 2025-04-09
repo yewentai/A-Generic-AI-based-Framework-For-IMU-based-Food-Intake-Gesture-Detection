@@ -26,4 +26,4 @@ export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1
 
 # Launch the training script with torchrun for DDP support
-torchrun --nnodes=1 --nproc_per_node=2 dl_train_hpc.py
+torchrun --nnodes=1 --nproc_per_node=2 dl_train_hpc_4.py
