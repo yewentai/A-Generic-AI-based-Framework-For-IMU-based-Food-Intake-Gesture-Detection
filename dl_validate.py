@@ -39,12 +39,10 @@ from components.pre_processing import hand_mirroring
 #                   Configuration and Parameters
 # -----------------------------------------------------------------------------
 
-result_dir = "result"
-
 # result_version = max(glob.glob(os.path.join(result_root, "*")), key=os.path.getmtime).split(os.sep)[-1]
 result_version = "202503281533"  # <- Manually set version
 
-result_dir = os.path.join(result_dir, result_version)
+result_dir = os.path.join("result", result_version)
 config_file = os.path.join(result_dir, "config.json")
 
 # Load the configuration parameters from the JSON file
@@ -64,7 +62,7 @@ THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
 FLAG_DATASET_MIRROR = False
 
-VALIDATING_STATS_FILE = os.path.join(
+validating_stats_file = os.path.join(
     result_dir,
     "validate_stats_mirrored.npy" if FLAG_DATASET_MIRROR else "validate_stats.npy",
 )
@@ -130,10 +128,10 @@ def main():
 
     for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", leave=True)):
         # Construct the checkpoint path for the current fold
-        CHECKPOINT_PATH = os.path.join(result_dir, result_version, f"best_model_fold{fold+1}.pth")
+        checkpoint_path = os.path.join(result_dir, "checkpoints", f"best_model_fold{fold+1}.pth")
 
         # Check if the checkpoint for this fold exists
-        if not os.path.exists(CHECKPOINT_PATH):
+        if not os.path.exists(checkpoint_path):
             continue
 
         # Instantiate the model based on the saved configuration
@@ -178,7 +176,7 @@ def main():
             raise ValueError(f"Invalid model: {MODEL}")
 
         # Load the checkpoint for the current fold
-        state_dict = torch.load(CHECKPOINT_PATH, map_location=device, weights_only=True)
+        state_dict = torch.load(checkpoint_path, map_location=device, weights_only=True)
         # Remove 'module.' prefix if it exists.
         new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
         model.load_state_dict(new_state_dict)
@@ -285,8 +283,8 @@ def main():
     # -----------------------------------------------------------------------------
 
     # Save validating statistics
-    np.save(VALIDATING_STATS_FILE, validating_statistics)
-    print(f"\nValidating statistics saved to {VALIDATING_STATS_FILE}")
+    np.save(validating_stats_file, validating_statistics)
+    print(f"\nValidating statistics saved to {validating_stats_file}")
 
 
 if __name__ == "__main__":

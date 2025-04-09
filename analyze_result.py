@@ -25,14 +25,15 @@ from dl_validate import THRESHOLD_LIST
 # ==============================================================================
 
 FLAG_DATASET_MIRROR = False  # Toggle for mirrored dataset variant
+PLOT_LOSS_CURVE = False  # Toggle for plotting training loss curves
 
 # Define the root directory where result folders are saved
-result_dir = "result"
+result_root = "result"
 
 # result_version = max(glob.glob(os.path.join(result_dir, "*")), key=os.path.getmtime).split(os.sep)[-1]
 result_version = "202503281533"  # <- Manually set version
 
-result_dir = os.path.join(result_dir, result_version)
+result_dir = os.path.join(result_root, result_version)
 
 # File paths for training and validation statistics
 train_stats_file = os.path.join(result_dir, "train_stats.npy")
@@ -45,48 +46,51 @@ valid_stats_file = os.path.join(
 #                    TRAINING LOSS CURVE: ONE PLOT PER FOLD
 # ==============================================================================
 
-train_stats = np.load(train_stats_file, allow_pickle=True).tolist()
-folds = sorted(set(entry["fold"] for entry in train_stats))  # Unique folds
+if PLOT_LOSS_CURVE:
+    loss_curve_plot_dir = os.path.join(result_dir, "loss_curve")
+    os.makedirs(loss_curve_plot_dir, exist_ok=True)
+    train_stats = np.load(train_stats_file, allow_pickle=True).tolist()
+    folds = sorted(set(entry["fold"] for entry in train_stats))  # Unique folds
 
-for fold in folds:
-    # Filter entries belonging to the current fold
-    stats_fold = [entry for entry in train_stats if entry["fold"] == fold]
+    for fold in folds:
+        # Filter entries belonging to the current fold
+        stats_fold = [entry for entry in train_stats if entry["fold"] == fold]
 
-    # Get all unique epochs for this fold
-    epochs = sorted(set(entry["epoch"] for entry in stats_fold))
+        # Get all unique epochs for this fold
+        epochs = sorted(set(entry["epoch"] for entry in stats_fold))
 
-    # Initialize containers for loss components
-    loss_per_epoch = {epoch: [] for epoch in epochs}
-    loss_ce_per_epoch = {epoch: [] for epoch in epochs}
-    loss_mse_per_epoch = {epoch: [] for epoch in epochs}
+        # Initialize containers for loss components
+        loss_per_epoch = {epoch: [] for epoch in epochs}
+        loss_ce_per_epoch = {epoch: [] for epoch in epochs}
+        loss_mse_per_epoch = {epoch: [] for epoch in epochs}
 
-    # Group values by epoch
-    for entry in stats_fold:
-        epoch = entry["epoch"]
-        loss_per_epoch[epoch].append(entry["train_loss"])
-        loss_ce_per_epoch[epoch].append(entry["train_loss_ce"])
-        loss_mse_per_epoch[epoch].append(entry["train_loss_mse"])
+        # Group values by epoch
+        for entry in stats_fold:
+            epoch = entry["epoch"]
+            loss_per_epoch[epoch].append(entry["train_loss"])
+            loss_ce_per_epoch[epoch].append(entry["train_loss_ce"])
+            loss_mse_per_epoch[epoch].append(entry["train_loss_mse"])
 
-    # Compute mean loss for each epoch
-    mean_loss = [np.mean(loss_per_epoch[e]) for e in epochs]
-    mean_ce = [np.mean(loss_ce_per_epoch[e]) for e in epochs]
-    mean_mse = [np.mean(loss_mse_per_epoch[e]) for e in epochs]
+        # Compute mean loss for each epoch
+        mean_loss = [np.mean(loss_per_epoch[e]) for e in epochs]
+        mean_ce = [np.mean(loss_ce_per_epoch[e]) for e in epochs]
+        mean_mse = [np.mean(loss_mse_per_epoch[e]) for e in epochs]
 
-    # Plot training loss over epochs
-    plt.figure(figsize=(10, 6))
-    plt.plot(epochs, mean_loss, label="Total Loss", color="blue")
-    plt.plot(epochs, mean_ce, label="Cross Entropy Loss", linestyle="--", color="red")
-    plt.plot(epochs, mean_mse, label="MSE Loss", linestyle=":", color="green")
-    plt.yscale("log")
+        # Plot training loss over epochs
+        plt.figure(figsize=(10, 6))
+        plt.plot(epochs, mean_loss, label="Total Loss", color="blue")
+        plt.plot(epochs, mean_ce, label="Cross Entropy Loss", linestyle="--", color="red")
+        plt.plot(epochs, mean_mse, label="MSE Loss", linestyle=":", color="green")
+        plt.yscale("log")
 
-    plt.title(f"Training Loss Over Epochs (Fold {fold})")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss (Log Scale)")
-    plt.grid(True, which="both", linestyle="--", alpha=0.6)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(os.path.join(result_dir, f"train_loss_fold{fold}.png"), dpi=300)
-    plt.close()
+        plt.title(f"Training Loss Over Epochs (Fold {fold})")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss (Log Scale)")
+        plt.grid(True, which="both", linestyle="--", alpha=0.6)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(loss_curve_plot_dir, f"train_loss_fold{fold}.png"), dpi=300)
+        plt.close()
 
 # ==============================================================================
 #                  VALIDATION METRICS ANALYSIS & VISUALIZATION

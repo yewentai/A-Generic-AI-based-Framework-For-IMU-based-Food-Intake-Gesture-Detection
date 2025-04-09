@@ -118,6 +118,8 @@ os.makedirs(result_dir, exist_ok=True)
 # Define file paths for saving statistics and configuration
 training_stas_file = os.path.join(result_dir, f"train_stats.npy")
 config_file = os.path.join(result_dir, "config.json")
+checkpoint_dir = os.path.join(result_dir, "checkpoints")
+os.makedirs(checkpoint_dir, exist_ok=True)
 
 # ===============================================================================================
 #                                Data Loading and Pre-processing
@@ -288,7 +290,7 @@ for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", lea
             fold=fold + 1,
             current_metric=loss.item(),
             best_metric=best_loss,
-            checkpoint_dir=result_dir,
+            checkpoint_dir=checkpoint_dir,
             mode="min",
         )
 

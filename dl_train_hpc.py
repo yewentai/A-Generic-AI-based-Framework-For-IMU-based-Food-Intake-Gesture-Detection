@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Distributed Version)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-03-29
+Edited      : 2025-04-09
 Description : This script trains an MSTCN model on IMU data using cross-validation.
               It has been adapted to run on an HPC with multiple GPUs using PyTorch’s
               DistributedDataParallel. The code initializes a distributed process group,
@@ -18,6 +18,7 @@ Description : This script trains an MSTCN model on IMU data using cross-validati
 import os
 import json
 import pickle
+from tabnanny import check
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -127,6 +128,8 @@ def main(local_rank=None, world_size=None):
         # Define file paths for saving statistics and configuration
         training_stas_file = os.path.join(result_dir, f"train_stats.npy")
         config_file = os.path.join(result_dir, "config.json")
+        checkpoint_dir = os.path.join(result_dir, "checkpoint")
+        os.makedirs(checkpoint_dir, exist_ok=True)
 
     # -------------------- Dataset Loading --------------------
     # Define file paths for the dataset
@@ -295,7 +298,7 @@ def main(local_rank=None, world_size=None):
                     fold=fold + 1,
                     current_metric=loss.item(),
                     best_metric=best_loss,
-                    checkpoint_dir=result_dir,
+                    checkpoint_dir=checkpoint_dir,
                     mode="min",
                 )
                 stats = {
