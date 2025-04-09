@@ -346,7 +346,7 @@ config_info.update(
         "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
         "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
         "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
-        "dataset_mirror": FLAG_DATASET_MIRROR,
+        "dataset_mirroring": FLAG_DATASET_MIRROR,
         "validate_folds": validate_folds,
     }
 )

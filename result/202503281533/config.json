@@ -15,7 +15,7 @@
     "num_epochs": 100,
     "batch_size": 64,
     "augmentation_hand_mirroring": false,
-    "mirroring": false,
+    "dataset_mirroring": false,
     "validate_folds": [
         [
             1,

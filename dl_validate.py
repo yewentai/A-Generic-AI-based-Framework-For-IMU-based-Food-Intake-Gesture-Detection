@@ -19,7 +19,6 @@ import os
 import json
 import pickle
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
 from datetime import datetime
@@ -65,7 +64,7 @@ SAMPLING_FREQ = config_info["sampling_freq"]
 WINDOW_SIZE = config_info["window_size"]
 BATCH_SIZE = config_info["batch_size"]
 NUM_WORKERS = 4
-THRESHOLD = 0.5
+THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
 FLAG_DATASET_MIRROR = False
 
@@ -249,29 +248,33 @@ for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", lea
     all_labels = np.array(all_labels)
 
     # Segment-wise evaluation metrics
-    metrics_segment = {}
-    for label in range(1, NUM_CLASSES):
-        fn, fp, tp = segment_evaluation(
-            all_predictions,
-            all_labels,
-            class_label=label,
-            threshold=THRESHOLD,
-            debug_plot=DEBUG_PLOT,
-        )
-        f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-        metrics_segment[f"{label}"] = {
-            "fn": int(fn),
-            "fp": int(fp),
-            "tp": int(tp),
-            "f1": float(f1),
-        }
+    metrics_segment_all_thresholds = {}
+
+    for threshold in THRESHOLD_LIST:
+        metrics_segment = {}
+        for label in range(1, NUM_CLASSES):
+            fn, fp, tp = segment_evaluation(
+                all_predictions,
+                all_labels,
+                class_label=label,
+                threshold=threshold,
+                debug_plot=DEBUG_PLOT,
+            )
+            f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
+            metrics_segment[str(label)] = {
+                "fn": int(fn),
+                "fp": int(fp),
+                "tp": int(tp),
+                "f1": float(f1),
+            }
+        metrics_segment_all_thresholds[str(threshold)] = metrics_segment
 
     # Record validating statistics for the current fold
     fold_statistics = {
         "date": datetime.now().strftime("%Y-%m-%d"),
         "time": datetime.now().strftime("%H:%M:%S"),
         "fold": fold + 1,
-        "metrics_segment": metrics_segment,
+        "metrics_segment": metrics_segment_all_thresholds,
         "metrics_sample": metrics_sample,
         "cohen_kappa": cohen_kappa_val,
         "matthews_corrcoef": matthews_corrcoef_val,
@@ -286,115 +289,3 @@ for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", lea
 # Save validating statistics
 np.save(VALIDATING_STATS_FILE, validating_statistics)
 print(f"\nValidating statistics saved to {VALIDATING_STATS_FILE}")
-
-
-# =============================================================================
-#                               PLOTTING SECTION
-# =============================================================================
-
-# Define the specific directory for this version
-validate_stats = np.load(VALIDATING_STATS_FILE, allow_pickle=True).tolist()
-
-# Initialize lists to store validation metrics for each fold
-label_distribution = []  # Label distribution
-f1_scores_sample = []  # Sample-wise F1 scores
-f1_scores_segment = []  # Segment-wise F1 scores
-cohen_kappa_scores = []  # Cohen's kappa scores
-matthews_corrcoef_scores = []  # Matthews correlation coefficient scores
-
-for entry in validate_stats:
-    label_dist = entry["label_distribution"]  # dictionary: {label: count}
-
-    # Compute weighted average F1 for sample-wise metrics
-    total_weight_sample = 0.0
-    weighted_f1_sample = 0.0
-    for label_str, stats in entry["metrics_sample"].items():
-        label_int = int(label_str)
-        weight = label_dist.get(label_int, 0)
-        weighted_f1_sample += stats["f1"] * weight
-        total_weight_sample += weight
-    f1_sample_weighted = weighted_f1_sample / total_weight_sample if total_weight_sample > 0 else 0.0
-
-    # Compute weighted average F1 for segment-wise metrics
-    total_weight_segment = 0.0
-    weighted_f1_segment = 0.0
-    for label_str, stats in entry["metrics_segment"].items():
-        label_int = int(label_str)
-        weight = label_dist.get(label_int, 0)
-        weighted_f1_segment += stats["f1"] * weight
-        total_weight_segment += weight
-    f1_segment_weighted = weighted_f1_segment / total_weight_segment if total_weight_segment > 0 else 0.0
-
-    label_distribution.append(label_dist)
-    f1_scores_sample.append(f1_sample_weighted)
-    f1_scores_segment.append(f1_segment_weighted)
-    cohen_kappa_scores.append(entry["cohen_kappa"])
-    matthews_corrcoef_scores.append(entry["matthews_corrcoef"])
-
-# Create a bar plot for validation metrics across folds
-plt.figure(figsize=(12, 6))
-width = 0.2  # Width of each bar
-fold_indices = np.arange(1, len(cohen_kappa_scores) + 1)
-
-plt.bar(
-    fold_indices - width * 1.5,
-    cohen_kappa_scores,
-    width=width,
-    label="Cohen Kappa Coefficient",
-    color="orange",
-)
-plt.bar(
-    fold_indices - width / 2,
-    matthews_corrcoef_scores,
-    width=width,
-    label="Matthews Correlation Coefficient",
-    color="purple",
-)
-plt.bar(
-    fold_indices + width / 2,
-    f1_scores_sample,
-    width=width,
-    label="Weighted Sample-wise F1 Score",
-    color="blue",
-)
-plt.bar(
-    fold_indices + width * 1.5,
-    f1_scores_segment,
-    width=width,
-    label=f"Weighted Segment-wise F1 Score (Threshold={THRESHOLD})",
-    color="green",
-)
-
-plt.xticks(fold_indices)
-plt.xlabel("Fold")
-plt.ylabel("Score")
-title_suffix = " (Mirrored)" if FLAG_DATASET_MIRROR else ""
-filename_suffix = "_mirrored" if FLAG_DATASET_MIRROR else ""
-plt.title(f"Fold-wise Performance Metrics{title_suffix}")
-plt.legend(loc="lower right")
-plt.grid(axis="y", linestyle="--", alpha=0.7)
-plt.tight_layout()
-plt.savefig(
-    os.path.join(RESULT_DIR, RESULT_VERSION, f"validate_metrics{filename_suffix}.png"),
-    dpi=300,
-)
-plt.close()
-
-# Calculate the average metrics and variance across folds and save it to a json file
-average_metrics = {
-    "average_cohen_kappa": np.mean(cohen_kappa_scores),
-    "average_matthews_corrcoef": np.mean(matthews_corrcoef_scores),
-    "average_f1_sample": np.mean(f1_scores_sample),
-    "average_f1_segment": np.mean(f1_scores_segment),
-}
-average_metrics["variance_f1_sample"] = np.var(f1_scores_sample)
-average_metrics["variance_f1_segment"] = np.var(f1_scores_segment)
-average_metrics["variance_cohen_kappa"] = np.var(cohen_kappa_scores)
-average_metrics["variance_matthews_corrcoef"] = np.var(matthews_corrcoef_scores)
-average_metrics_file = os.path.join(
-    result_dir,
-    f"average_metrics{filename_suffix}.json",
-)
-with open(average_metrics_file, "w") as f:
-    json.dump(average_metrics, f, indent=4)
-print(f"\nAverage metrics saved to {average_metrics_file}")
