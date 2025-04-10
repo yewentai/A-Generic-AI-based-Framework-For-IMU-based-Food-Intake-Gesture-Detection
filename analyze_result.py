@@ -39,7 +39,7 @@ def main():
     #                            CONFIGURATION SECTION
     # ==============================================================================
 
-    result_version = max(glob.glob(os.path.join("result", "*")), key=os.path.getmtime).split(os.sep)[-1]
+    # result_version = max(glob.glob(os.path.join("result", "*")), key=os.path.getmtime).split(os.sep)[-1]
     # result_version = "202503281533"  # <- Manually set version
 
     result_dir = os.path.join("result", result_version)
@@ -182,7 +182,7 @@ def main():
     metrics = {"Cohen's Kappa": cohen_kappas, "Matthews CC": matthews_ccs}
 
     plt.figure(figsize=(8, 6))
-    plt.boxplot(metrics.values(), labels=metrics.keys())
+    plt.boxplot(metrics.values(), tick_labels=metrics.keys())
     plt.title("Agreement Metric Distributions Across Folds")
     plt.ylabel("Score Value")
     plt.ylim(-0.1, 1.1)

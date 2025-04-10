@@ -18,6 +18,7 @@ Usage       : Execute the script in your terminal:
 import os
 import sys
 import json
+import glob
 import pickle
 import numpy as np
 import torch
@@ -50,7 +51,7 @@ if len(sys.argv) >= 3 and sys.argv[2].lower() == "mirror":
 else:
     FLAG_DATASET_MIRROR = False
 
-# result_version = max(glob.glob(os.path.join(result_root, "*")), key=os.path.getmtime).split(os.sep)[-1]
+# result_version = max(glob.glob(os.path.join("result", "*")), key=os.path.getmtime).split(os.sep)[-1]
 # result_version = "202503281533"  # <- Manually set version
 
 result_dir = os.path.join("result", result_version)
@@ -139,7 +140,7 @@ def main():
 
     for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", leave=True)):
         # Construct the checkpoint path for the current fold
-        checkpoint_path = os.path.join(result_dir, "checkpoints", f"best_model_fold{fold+1}.pth")
+        checkpoint_path = os.path.join(result_dir, "checkpoint", f"best_model_fold{fold+1}.pth")
 
         # Check if the checkpoint for this fold exists
         if not os.path.exists(checkpoint_path):
