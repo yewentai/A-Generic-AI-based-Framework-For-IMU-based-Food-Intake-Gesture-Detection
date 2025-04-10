@@ -3,7 +3,9 @@ from datetime import date
 
 
 def get_changed_python_files():
-    result = subprocess.run(["git", "diff", "--name-only"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
     files = result.stdout.strip().split("\n")
     return [f for f in files if f.endswith(".py")]
 
