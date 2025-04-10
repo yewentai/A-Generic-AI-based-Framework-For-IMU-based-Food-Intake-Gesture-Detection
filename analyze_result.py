@@ -18,6 +18,7 @@ import sys
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from dl_validate import THRESHOLD_LIST
 
@@ -31,7 +32,7 @@ if len(sys.argv) >= 3 and sys.argv[2].lower() == "mirror":
 else:
     FLAG_DATASET_MIRROR = False
 
-PLOT_LOSS_CURVE = True  # Toggle for plotting training loss curves
+PLOT_LOSS_CURVE = False  # Toggle for plotting training loss curves
 
 
 def main():
@@ -105,90 +106,79 @@ def main():
     #                  VALIDATION METRICS ANALYSIS & VISUALIZATION
     # ==============================================================================
 
+    # Load validation statistics and create analysis directory
     validate_stats = np.load(valid_stats_file, allow_pickle=True).tolist()
-
-    # Initialize storage for aggregated metrics
-    segment_metrics = {str(t): {} for t in THRESHOLD_LIST}
-    sample_metrics = {}
-    cohen_kappas = []
-    matthews_ccs = []
-
-    # Aggregate metrics across all folds
-    for fold_stat in validate_stats:
-        # Collect sample-wise metrics
-        cohen_kappas.append(fold_stat["cohen_kappa"])
-        matthews_ccs.append(fold_stat["matthews_corrcoef"])
-
-        # Process segment metrics for each threshold
-        for threshold in THRESHOLD_LIST:
-            t = str(threshold)
-            for class_label, metrics in fold_stat["metrics_segment"][t].items():
-                if class_label not in segment_metrics[t]:
-                    segment_metrics[t][class_label] = {"f1": [], "tp": [], "fp": [], "fn": []}
-                segment_metrics[t][class_label]["f1"].append(metrics["f1"])
-                segment_metrics[t][class_label]["tp"].append(metrics["tp"])
-                segment_metrics[t][class_label]["fp"].append(metrics["fp"])
-                segment_metrics[t][class_label]["fn"].append(metrics["fn"])
-
-        # Process sample-wise class metrics
-        for class_label, metrics in fold_stat["metrics_sample"].items():
-            if class_label not in sample_metrics:
-                sample_metrics[class_label] = {"f1": [], "tp": [], "fp": [], "fn": []}
-            sample_metrics[class_label]["f1"].append(metrics["f1"])
-            sample_metrics[class_label]["tp"].append(metrics["tp"])
-            sample_metrics[class_label]["fp"].append(metrics["fp"])
-            sample_metrics[class_label]["fn"].append(metrics["fn"])
-
-    # Create analysis directory
     analysis_dir = os.path.join(result_dir, "analysis")
     os.makedirs(analysis_dir, exist_ok=True)
 
-    # 1. Segment-wise F1 Scores by Threshold
-    plt.figure(figsize=(10, 6))
-    colors = plt.cm.viridis(np.linspace(0, 1, len(THRESHOLD_LIST)))
+    weighted_f1_sample = []  # To store weighted F1 scores (sample-wise) per fold
+    weighted_f1_segment = []  # To store weighted F1 scores (segment-wise) per fold
+    threshold_list = THRESHOLD_LIST  # Assumed threshold list is available in the environment
 
-    for t, color in zip(THRESHOLD_LIST, colors):
-        t_str = str(t)
-        class_labels = sorted(segment_metrics[t_str].keys())
-        mean_f1s = [np.nanmean(segment_metrics[t_str][cl]["f1"]) for cl in class_labels]
+    for fold_stat in validate_stats:
+        fold = fold_stat["fold"]
 
+        # Extract weighted sample F1 score
+        weighted_f1_sample.append(fold_stat["metrics_sample"]["weighted_f1"])
+
+        # Extract weighted segment F1 score across thresholds
+        segment_f1_at_thresholds = {}
+        for threshold in threshold_list:
+            segment_f1_at_thresholds[threshold] = fold_stat["metrics_segment"][str(threshold)]["weighted_f1"]
+        weighted_f1_segment.append(segment_f1_at_thresholds)
+
+    # 1. Combined bar plot for sample-wise and segment-wise weighted F1 scores per fold
+    x = np.arange(1, len(weighted_f1_sample) + 1)  # Fold indices
+    bar_width = 0.35  # Width of the bars
+
+    # Sample-wise weighted F1 scores
+    plt.figure(figsize=(12, 8))
+    plt.bar(x - bar_width / 2, weighted_f1_sample, bar_width, label="Sample-wise Weighted F1", color="blue")
+
+    # Segment-wise weighted F1 scores at different thresholds
+    for i, threshold in enumerate(threshold_list):
+        segment_f1_at_threshold = [
+            fold_stat["metrics_segment"][str(threshold)]["weighted_f1"] for fold_stat in validate_stats
+        ]
         plt.bar(
-            [f"Class {cl}\n(t={t})" for cl in class_labels], mean_f1s, color=color, alpha=0.7, label=f"Threshold {t}"
+            x + (i - len(threshold_list) / 2) * bar_width / len(threshold_list),
+            segment_f1_at_threshold,
+            bar_width / len(threshold_list),
+            label=f"Segment-wise Weighted F1 (T{threshold})",
         )
 
-    plt.title("Segment-wise F1 Scores by Class and Threshold")
-    plt.ylabel("Mean F1 Score")
-    plt.ylim(0, 1)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.title("Weighted F1 Scores per Fold")
+    plt.xlabel("Fold")
+    plt.ylabel("Weighted F1 Score")
+    plt.xticks(x)
+    plt.legend(title="Metrics", loc="best")
+    plt.grid(axis="y", linestyle="--", alpha=0.6)
     plt.tight_layout()
-    plt.savefig(os.path.join(analysis_dir, "segment_f1_by_threshold.png"), dpi=300)
+    plt.savefig(os.path.join(analysis_dir, "weighted_f1_combined_per_fold.png"), dpi=300)
     plt.close()
 
-    # 2. Sample-wise Class Metrics
-    class_labels = sorted(sample_metrics.keys())
-    mean_f1s = [np.nanmean(sample_metrics[cl]["f1"]) for cl in class_labels]
-    std_f1s = [np.nanstd(sample_metrics[cl]["f1"]) for cl in class_labels]
+    # Combined boxplot for sample-wise and segment-wise weighted F1 scores
+    plt.figure(figsize=(12, 8))
 
-    plt.figure(figsize=(10, 6))
-    plt.bar([f"Class {cl}" for cl in class_labels], mean_f1s, yerr=std_f1s, capsize=5, color="skyblue", alpha=0.7)
-    plt.title("Sample-wise F1 Scores by Class")
-    plt.ylabel("Mean F1 Score ± SD")
-    plt.ylim(0, 1)
+    # Prepare data for boxplot
+    data = [weighted_f1_sample]  # Start with sample-wise weighted F1 scores
+    labels = ["Sample-wise"]  # Label for sample-wise F1 scores
+
+    # Add segment-wise weighted F1 scores for each threshold
+    for threshold in threshold_list:
+        segment_f1_scores = [
+            fold_stat["metrics_segment"][str(threshold)]["weighted_f1"] for fold_stat in validate_stats
+        ]
+        data.append(segment_f1_scores)
+        labels.append(f"Segment-wise (T{threshold})")
+
+    # Create boxplot
+    sns.boxplot(data=data)
+    plt.title("Boxplot of Weighted F1 Scores Across Folds")
+    plt.ylabel("Weighted F1 Score")
+    plt.xticks(range(len(labels)), labels, rotation=45)
     plt.tight_layout()
-    plt.savefig(os.path.join(analysis_dir, "sample_f1_by_class.png"), dpi=300)
-    plt.close()
-
-    # 3. Agreement Metrics Visualization
-    metrics = {"Cohen's Kappa": cohen_kappas, "Matthews CC": matthews_ccs}
-
-    plt.figure(figsize=(8, 6))
-    plt.boxplot(metrics.values(), tick_labels=metrics.keys())
-    plt.title("Agreement Metric Distributions Across Folds")
-    plt.ylabel("Score Value")
-    plt.ylim(-0.1, 1.1)
-    plt.grid(True, axis="y", linestyle="--")
-    plt.tight_layout()
-    plt.savefig(os.path.join(analysis_dir, "agreement_metrics.png"), dpi=300)
+    plt.savefig(os.path.join(analysis_dir, "boxplot_combined_weighted_f1.png"), dpi=300)
     plt.close()
 
 

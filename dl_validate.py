@@ -25,7 +25,6 @@ import torch
 import torch.nn.functional as F
 from datetime import datetime
 from tqdm import tqdm
-from torchmetrics import CohenKappa, MatthewsCorrCoef
 from torch.utils.data import DataLoader, Subset
 
 # Import model and utility modules from components package
@@ -43,8 +42,6 @@ from components.pre_processing import hand_mirroring
 
 if len(sys.argv) >= 2:
     result_version = sys.argv[1]
-else:
-    raise ValueError("Usage: python dl_validate.py <result_version> [mirror|no_mirror]")
 
 if len(sys.argv) >= 3 and sys.argv[2].lower() == "mirror":
     FLAG_DATASET_MIRROR = True
@@ -230,51 +227,63 @@ def main():
         #                        Evaluation Metrics Calculation
         # -----------------------------------------------------------------------------
 
-        # Compute label distribution
+        # Calculate label distribution and weights for weighted metrics
         unique_labels, counts = np.unique(all_labels, return_counts=True)
-        label_distribution = {float(label): int(count) for label, count in zip(unique_labels, counts)}
+        label_distribution = {int(label): int(count) for label, count in zip(unique_labels, counts)}
+        # Calculate weights only for non-background classes
+        positive_counts = {label: count for label, count in label_distribution.items() if label > 0}
+        total_positive_count = sum(positive_counts.values())
+        label_weight = {label: count / total_positive_count for label, count in positive_counts.items()}
 
-        preds_tensor = torch.tensor(all_predictions)
-        labels_tensor = torch.tensor(all_labels)
+        # Convert predictions and labels to numpy arrays for efficient processing
+        preds_array = np.array(all_predictions)
+        labels_array = np.array(all_labels)
 
-        # Sample-wise metrics for each class
+        # Calculate sample-wise metrics
         metrics_sample = {}
         for label in range(1, NUM_CLASSES):
-            tp = torch.sum((preds_tensor == label) & (labels_tensor == label)).item()
-            fp = torch.sum((preds_tensor == label) & (labels_tensor != label)).item()
-            fn = torch.sum((preds_tensor != label) & (labels_tensor == label)).item()
+            # Vectorized computation of confusion matrix elements
+            tp = np.sum((preds_array == label) & (labels_array == label))
+            fp = np.sum((preds_array == label) & (labels_array != label))
+            fn = np.sum((preds_array != label) & (labels_array == label))
+
+            # Safe F1 calculation
             denominator = 2 * tp + fp + fn
-            f1 = 2 * tp / denominator if denominator != 0 else 0.0
-            metrics_sample[f"{label}"] = {"fn": fn, "fp": fp, "tp": tp, "f1": f1}
+            f1 = (2 * tp / denominator) if denominator > 0 else 0.0
 
-        # Additional sample-wise metrics
-        cohen_kappa_val = CohenKappa(num_classes=NUM_CLASSES, task=TASK)(preds_tensor, labels_tensor).item()
-        matthews_corrcoef_val = MatthewsCorrCoef(num_classes=NUM_CLASSES, task=TASK)(preds_tensor, labels_tensor).item()
+            metrics_sample[f"{label}"] = {"tp": int(tp), "fp": int(fp), "fn": int(fn), "f1": float(f1)}
 
-        # Post-process predictions
-        all_predictions = post_process_predictions(np.array(all_predictions), SAMPLING_FREQ)
-        all_labels = np.array(all_labels)
+        # Calculate weighted sample F1 score
+        f1_score_sample_weighted = sum(
+            metrics_sample[str(label)]["f1"] * label_weight[label] for label in range(1, NUM_CLASSES)
+        )
+        metrics_sample["weighted_f1"] = float(f1_score_sample_weighted)
 
-        # Segment-wise evaluation metrics
+        # Post-process predictions for segment evaluation
+        processed_predictions = post_process_predictions(preds_array, SAMPLING_FREQ)
+
+        # Segment-wise evaluation across multiple thresholds
         metrics_segment_all_thresholds = {}
-
         for threshold in THRESHOLD_LIST:
             metrics_segment = {}
+
+            # Calculate metrics for each class
             for label in range(1, NUM_CLASSES):
                 fn, fp, tp = segment_evaluation(
-                    all_predictions,
-                    all_labels,
-                    class_label=label,
-                    threshold=threshold,
-                    debug_plot=DEBUG_PLOT,
+                    processed_predictions, labels_array, class_label=label, threshold=threshold, debug_plot=DEBUG_PLOT
                 )
-                f1 = 2 * tp / (2 * tp + fp + fn) if (fp + fn) != 0 else 0.0
-                metrics_segment[str(label)] = {
-                    "fn": int(fn),
-                    "fp": int(fp),
-                    "tp": int(tp),
-                    "f1": float(f1),
-                }
+
+                # Safe F1 calculation
+                total = 2 * tp + fp + fn
+                f1 = (2 * tp / total) if total > 0 else 0.0
+
+                metrics_segment[str(label)] = {"fn": int(fn), "fp": int(fp), "tp": int(tp), "f1": float(f1)}
+
+            # Calculate weighted segment F1 score
+            f1_score_segment_weighted = sum(
+                metrics_segment[str(label)]["f1"] * label_weight[label] for label in range(1, NUM_CLASSES)
+            )
+            metrics_segment["weighted_f1"] = float(f1_score_segment_weighted)
             metrics_segment_all_thresholds[str(threshold)] = metrics_segment
 
         # Record validating statistics for the current fold
@@ -284,8 +293,6 @@ def main():
             "fold": fold + 1,
             "metrics_segment": metrics_segment_all_thresholds,
             "metrics_sample": metrics_sample,
-            "cohen_kappa": cohen_kappa_val,
-            "matthews_corrcoef": matthews_corrcoef_val,
             "label_distribution": label_distribution,
         }
         validating_statistics.append(fold_statistics)

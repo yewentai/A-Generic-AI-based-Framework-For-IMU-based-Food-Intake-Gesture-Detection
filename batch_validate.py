@@ -13,7 +13,7 @@ for version in versions:
     # Validate without mirror
     # --------------------------
     stats_no_mirror = os.path.join(version_dir, "validate_stats.npy")
-    if os.path.exists(stats_no_mirror) and os.path.getsize(stats_no_mirror) > 2048:
+    if os.path.exists(stats_no_mirror) and os.path.getsize(stats_no_mirror) > 8048:
         print(f"\n[SKIP] {version} (no_mirror) already validated.")
     else:
         print(f"\n=== Validating Version: {version} (Mirror=False) ===\n")
@@ -23,7 +23,7 @@ for version in versions:
     # Validate with mirror
     # --------------------------
     stats_mirror = os.path.join(version_dir, "validate_stats_mirrored.npy")
-    if os.path.exists(stats_mirror) and os.path.getsize(stats_mirror) > 2048:
+    if os.path.exists(stats_mirror) and os.path.getsize(stats_mirror) > 8048:
         print(f"\n[SKIP] {version} (mirror) already validated.")
     else:
         print(f"\n=== Validating Version: {version} (Mirror=True) ===\n")
