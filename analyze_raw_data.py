@@ -6,7 +6,7 @@ IMU Raw Data Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-04-09
 Description : This script performs analysis on raw IMU data, computes basic statistics,
               visualizes sample distributions, and segments gestures for further inspection.
 ===============================================================================
