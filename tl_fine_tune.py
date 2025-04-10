@@ -26,8 +26,6 @@ from datetime import datetime
 from tqdm import tqdm
 
 from components.datasets import IMUDataset
-
-# For this example, we use the SimCLR pre-trained encoder with TCN.
 from components.model_tcn import TCN
 
 
