@@ -13,14 +13,24 @@ Description : This script loads training and validation statistics from saved
 ===============================================================================
 """
 
+import os
+import sys
+import glob
 import numpy as np
 import matplotlib.pyplot as plt
-import os
-import glob
 
 from dl_validate import THRESHOLD_LIST
 
-FLAG_DATASET_MIRROR = False  # Toggle for mirrored dataset variant
+if len(sys.argv) >= 2:
+    result_version = sys.argv[1]
+else:
+    raise ValueError("Usage: python dl_validate.py <result_version> [mirror|no_mirror]")
+
+if len(sys.argv) >= 3 and sys.argv[2].lower() == "mirror":
+    FLAG_DATASET_MIRROR = True
+else:
+    FLAG_DATASET_MIRROR = False
+
 PLOT_LOSS_CURVE = True  # Toggle for plotting training loss curves
 
 
@@ -128,10 +138,6 @@ def main():
             sample_metrics[class_label]["tp"].append(metrics["tp"])
             sample_metrics[class_label]["fp"].append(metrics["fp"])
             sample_metrics[class_label]["fn"].append(metrics["fn"])
-
-    # ==============================================================================
-    #                      METRIC CALCULATIONS & VISUALIZATION
-    # ==============================================================================
 
     # Create analysis directory
     analysis_dir = os.path.join(result_dir, "analysis")

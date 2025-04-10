@@ -15,6 +15,8 @@
     "num_folds": 7,
     "num_epochs": 100,
     "augmentation_hand_mirroring": true,
+    "augmentation_hand_mirroring_probability": 0.5,
+    "augmentation_hand_mirroring_is_additive": false,
     "augmentation_axis_permutation": false,
     "augmentation_planar_rotation": false,
     "augmentation_spatial_orientation": false,
