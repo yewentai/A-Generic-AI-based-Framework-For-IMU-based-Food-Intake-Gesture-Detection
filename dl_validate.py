@@ -16,6 +16,7 @@ Usage       : Execute the script in your terminal:
 """
 
 import os
+import sys
 import json
 import pickle
 import numpy as np
@@ -39,8 +40,18 @@ from components.pre_processing import hand_mirroring
 #                   Configuration and Parameters
 # -----------------------------------------------------------------------------
 
+if len(sys.argv) >= 2:
+    result_version = sys.argv[1]
+else:
+    raise ValueError("Usage: python dl_validate.py <result_version> [mirror|no_mirror]")
+
+if len(sys.argv) >= 3 and sys.argv[2].lower() == "mirror":
+    FLAG_DATASET_MIRROR = True
+else:
+    FLAG_DATASET_MIRROR = False
+
 # result_version = max(glob.glob(os.path.join(result_root, "*")), key=os.path.getmtime).split(os.sep)[-1]
-result_version = "202503281533"  # <- Manually set version
+# result_version = "202503281533"  # <- Manually set version
 
 result_dir = os.path.join("result", result_version)
 config_file = os.path.join(result_dir, "config.json")
@@ -60,7 +71,7 @@ BATCH_SIZE = config_info["batch_size"]
 NUM_WORKERS = 4
 THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
-FLAG_DATASET_MIRROR = False
+# FLAG_DATASET_MIRROR = False
 
 validating_stats_file = os.path.join(
     result_dir,
