@@ -82,3 +82,11 @@ s16g21:349420:349575 [1] NCCL INFO ncclCommInitRank comm 0xa6e69640 rank 1 nrank
 s16g21:349419:349572 [0] NCCL INFO TUNER/Plugin: Plugin load returned 11 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
 s16g21:349419:349572 [0] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
 s16g21:349419:349572 [0] NCCL INFO ncclCommInitRank comm 0x795ef940 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 46000 commId 0x7c2819b60e397606 - Init COMPLETE
+s16g21:349420:349580 [1] NCCL INFO [Service thread] Connection closed by localRank 1
+Training statistics saved to result/202504101054/train_stats.npy
+Configuration saved to result/202504101054/config.json
+Training ended at: 2025-04-10 12:58:38.430598
+Total training time: 2:04:24.354040
+s16g21:349419:349578 [0] NCCL INFO [Service thread] Connection closed by localRank 0
+s16g21:349420:502391 [1] NCCL INFO comm 0xa6e69640 rank 1 nranks 2 cudaDev 1 busId a6000 - Abort COMPLETE
+s16g21:349419:502392 [0] NCCL INFO comm 0x795ef940 rank 0 nranks 2 cudaDev 0 busId 46000 - Abort COMPLETE

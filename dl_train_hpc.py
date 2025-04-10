@@ -95,9 +95,9 @@ NUM_FOLDS = 7
 NUM_EPOCHS = 100
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
-FLAG_AUGMENT_PLANAR_ROTATION = False
+FLAG_AUGMENT_PLANAR_ROTATION = True
 FLAG_AUGMENT_SPATIAL_ORIENTATION = False
-FLAG_DATASET_MIRROR = True
+FLAG_DATASET_MIRROR = False
 
 # =============================================================================
 #                             Main Training Function
