@@ -4,9 +4,9 @@
 ===============================================================================
 IMU SimCLR Pre-Training Script (Using TCN as Encoder)
 -------------------------------------------------------------------------------
-Author      : Your Name
-Email       : your.email@example.com
-Edited      : 2025-04-03
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-10
 Description : This script pre-trains a SimCLR model on IMU (Inertial Measurement
               Unit) data in an unsupervised manner. It uses a Temporal Convolutional
               Network (TCN) as the encoder and a simple MLP as the projection head.

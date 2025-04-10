@@ -4,9 +4,9 @@
 ===============================================================================
 IMU VAE Pre-Training Script
 -------------------------------------------------------------------------------
-Author      : Your Name
-Email       : your.email@example.com
-Edited      : 2025-04-03
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-10
 Description : This script pre-trains a Variational Autoencoder (VAE) on IMU (Inertial
               Measurement Unit) data in an unsupervised manner to extract latent features.
               The trained model weights and configuration are saved in a timestamped directory

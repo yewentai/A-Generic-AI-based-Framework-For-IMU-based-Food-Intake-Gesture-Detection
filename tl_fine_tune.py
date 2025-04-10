@@ -2,15 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Fine-Tuning Script Using Pre-Trained Encoder
+IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with MLP
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Edited      : 2025-04-10
-Description : This script loads a pre-trained encoder (obtained via SimCLR or VAE pre-training)
-              and attaches a classifier head to fine-tune on a downstream classification task.
-              You can choose whether to freeze the encoder weights. The fine-tuned model and its
-              configuration are saved in a timestamped directory.
+Description : This script loads a pre-trained ResNet encoder (via the harnet10
+              framework and load_weights function) and attaches a classifier
+              head (MLP) for fine-tuning on a downstream classification task.
+              The entire ResNet-MLP network is then fine-tuned and saved.
 ===============================================================================
 """
 
@@ -25,50 +25,107 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 from tqdm import tqdm
 
-from components.datasets import IMUDataset
-from components.model_tcn import TCN
+from components.model_resnet import Resnet, load_weights
+from components.datasets import IMUDatasetN21
 
 
-# Define a wrapper to get encoder output from TCN via global average pooling
-class TCN_EncoderWrapper(nn.Module):
-    def __init__(self, tcn):
-        super(TCN_EncoderWrapper, self).__init__()
-        self.tcn = tcn
-        self.pool = nn.AdaptiveAvgPool1d(1)
+# ------------------------------------------------------------------------------
+# Define a wrapper to use the pre-trained ResNet as an encoder
+# ------------------------------------------------------------------------------
+class ResNetEncoder(nn.Module):
+    def __init__(self, weight_path, n_channels=3, class_num=2, my_device="cpu", freeze_encoder=False):
+        """
+        Loads the pre-trained ResNet model, removes its classifier head, and
+        outputs flattened features from the feature extractor.
+
+        Parameters:
+            weight_path (str): Path to the pre-trained weights.
+            n_channels (int): Number of input channels.
+            class_num (int): Number of classes used during pre-training (for model instantiation).
+            my_device (str): Device for loading the weights.
+            freeze_encoder (bool): If True, freeze encoder weights.
+        """
+        super(ResNetEncoder, self).__init__()
+        # Create the ResNet model with is_eva=True to use the two-layer FC head in pre-training.
+        # (The classifier head will be discarded.)
+        self.resnet = Resnet(
+            output_size=class_num,
+            n_channels=n_channels,
+            is_eva=True,
+            resnet_version=1,
+        )
+        # Load pre-trained weights. The load_weights function adapts the parameter names if needed.
+        load_weights(weight_path, self.resnet, my_device=my_device, is_dist=True, name_start_idx=1)
+        print("Pre-trained ResNet weights loaded.")
+
+        # Freeze encoder parameters if requested.
+        if freeze_encoder:
+            for param in self.resnet.parameters():
+                param.requires_grad = False
+
+        # Save the feature extractor, which is all layers before the classifier.
+        self.feature_extractor = self.resnet.feature_extractor
+
+        # Infer the feature dimension from the last layer output channels.
+        # (Assumes the classifier head was created with in_features equal to the last out_channels.)
+        # For example, for epoch_len=10 using your configuration, the last layer defined in
+        # cgf is (1024, 5, 0, 5, 3, 1) so feature dimension is 1024.
+        self.out_features = 1024
 
     def forward(self, x):
-        out = self.tcn(x)  # [B, num_filters, seq_len]
-        out = self.pool(out)  # [B, num_filters, 1]
-        out = out.squeeze(-1)  # [B, num_filters]
-        return out
+        # x is expected to be of shape [B, channels, seq_len]
+        feats = self.feature_extractor(x)
+        feats = feats.view(x.shape[0], -1)  # flatten
+        return feats
 
 
-# Define the classifier that attaches to the pre-trained encoder
-class Classifier(nn.Module):
-    def __init__(self, encoder, feature_dim, num_classes, freeze_encoder=True):
+# ------------------------------------------------------------------------------
+# Define the MLP classifier head
+# ------------------------------------------------------------------------------
+class MLPClassifier(nn.Module):
+    def __init__(self, feature_dim, num_classes):
         """
+        A simple MLP head with one hidden layer.
+
         Parameters:
-            encoder: Pre-trained encoder model.
-            feature_dim: Dimensionality of encoder output.
-            num_classes: Number of target classes.
-            freeze_encoder: If True, encoder weights are frozen.
+            feature_dim (int): Dimensionality of the input feature vector.
+            num_classes (int): Number of target classes.
         """
-        super(Classifier, self).__init__()
-        self.encoder = encoder
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
+        super(MLPClassifier, self).__init__()
         self.fc = nn.Sequential(nn.Linear(feature_dim, 64), nn.ReLU(), nn.Linear(64, num_classes))
 
     def forward(self, x):
-        features = self.encoder(x)  # [B, feature_dim]
-        logits = self.fc(features)
+        logits = self.fc(x)
         return logits
 
 
+# ------------------------------------------------------------------------------
+# Combine the ResNet encoder and the MLP classifier into one fine-tuning model
+# ------------------------------------------------------------------------------
+class ResNetMLP(nn.Module):
+    def __init__(self, encoder, classifier):
+        """
+        Parameters:
+            encoder (nn.Module): Pre-trained ResNet encoder.
+            classifier (nn.Module): MLP classifier head.
+        """
+        super(ResNetMLP, self).__init__()
+        self.encoder = encoder
+        self.classifier = classifier
+
+    def forward(self, x):
+        features = self.encoder(x)
+        logits = self.classifier(features)
+        return logits
+
+
+# ------------------------------------------------------------------------------
+# Main fine-tuning pipeline
+# ------------------------------------------------------------------------------
 def main():
     # ---------------------- Configuration ----------------------
-    data_dir = "./dataset/your_dataset"  # Modify to your dataset directory
+    # Dataset paths (modify these to suit your environment)
+    data_dir = "./dataset/FD/FD-I"
     X_L_PATH = os.path.join(data_dir, "X_L.pkl")
     Y_L_PATH = os.path.join(data_dir, "Y_L.pkl")
     X_R_PATH = os.path.join(data_dir, "X_R.pkl")
@@ -87,40 +144,33 @@ def main():
     Y = np.concatenate([Y_L, Y_R], axis=0)
 
     sequence_length = 300  # Adjust as needed
-    dataset = IMUDataset(X, Y, sequence_length=sequence_length)
+    dataset = IMUDatasetN21(X, Y, sequence_length=sequence_length)
     batch_size = 64
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # ---------------------- Load Pre-Trained Encoder ----------------------
-    # In this example, we use the SimCLR pre-trained model based on TCN.
-    pretrained_dir = "result/202503271341"  # Modify to your pre-trained model directory
-    simclr_ckpt = os.path.join(pretrained_dir, "pretrained_simclr_tcn.pth")
-
-    # Construct the TCN encoder as in pre-training
-    tcn_encoder = TCN(
-        num_layers=6,
-        input_dim=6,
-        num_classes=128,  # Must match the pre-training configuration
-        num_filters=128,
-        kernel_size=3,
-        dropout=0.3,
-    )
-    encoder = TCN_EncoderWrapper(tcn_encoder).to(device)
-    state_dict = torch.load(simclr_ckpt, map_location=device)
-    # Assume the saved state dict has keys prefixed with "encoder."; adjust if necessary
-    encoder.load_state_dict({k.replace("encoder.", ""): v for k, v in state_dict.items() if k.startswith("encoder.")})
-    encoder.eval()
-    feature_dim = 128  # The output dimension of the encoder
+    # ---------------------- Load Pre-Trained ResNet Encoder ----------------------
+    # Path to the pre-trained ResNet weights (adjust as necessary)
+    pretrained_ckpt = "mtl_best.mdl"
+    # Create the encoder with desired parameters.
+    # For example, using 3 input channels and a pre-training classification head with 2 classes.
+    encoder = ResNetEncoder(
+        weight_path=pretrained_ckpt, n_channels=3, class_num=2, my_device=device, freeze_encoder=False
+    ).to(device)
+    feature_dim = encoder.out_features
 
     num_classes = 3  # Modify to match your downstream task
 
-    # ---------------------- Build Classifier Model ----------------------
-    model = Classifier(encoder, feature_dim, num_classes, freeze_encoder=False).to(device)
+    # ---------------------- Build Fine-Tuning Model (ResNet + MLP) ----------------------
+    classifier = MLPClassifier(feature_dim=feature_dim, num_classes=num_classes)
+    model = ResNetMLP(encoder, classifier).to(device)
+
+    # Set up optimizer and loss function
     optimizer = optim.Adam(model.parameters(), lr=5e-4)
     criterion = nn.CrossEntropyLoss()
 
+    # ---------------------- Fine-Tuning Loop ----------------------
     num_epochs_ft = 50
     model.train()
     for epoch in range(num_epochs_ft):
@@ -128,6 +178,7 @@ def main():
         correct = 0
         total = 0
         for batch_x, batch_y in tqdm(dataloader, desc=f"Fine-tune Epoch {epoch+1}/{num_epochs_ft}"):
+            # batch_x shape: [B, sequence_length, channels] --> need to permute to [B, channels, seq_len]
             batch_x = batch_x.to(device).permute(0, 2, 1)
             # Use the first label of each sequence as the sample label
             labels = batch_y[:, 0].long().to(device)
@@ -136,26 +187,27 @@ def main():
             loss = criterion(logits, labels)
             loss.backward()
             optimizer.step()
+
             epoch_loss += loss.item()
             preds = logits.argmax(dim=1)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
+
         avg_loss = epoch_loss / len(dataloader)
         acc = correct / total
         print(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}, Accuracy = {acc:.4f}")
 
-    # ---------------------- Save Fine-Tuned Model ----------------------
+    # ---------------------- Save Fine-Tuned Model and Configuration ----------------------
     version_prefix = datetime.now().strftime("%Y%m%d%H%M")
-    ft_save_dir = os.path.join("result", version_prefix, "finetune")
+    ft_save_dir = os.path.join("result", version_prefix)
     os.makedirs(ft_save_dir, exist_ok=True)
-    ckpt_path = os.path.join(ft_save_dir, "fine_tuned_classifier.pth")
+    ckpt_path = os.path.join(ft_save_dir, "fine_tuned_resnet_mlp.pth")
     torch.save(model.state_dict(), ckpt_path)
-    print(f"Fine-tuned classifier saved to {ckpt_path}")
+    print(f"Fine-tuned model saved to {ckpt_path}")
 
     ft_config = {
-        "pretrained_dir": pretrained_dir,
-        "simclr_checkpoint": simclr_ckpt,
-        "model": "Classifier_Finetune_SimCLR_TCN",
+        "pretrained_ckpt": pretrained_ckpt,
+        "model": "ResNetMLP",
         "feature_dim": feature_dim,
         "num_classes": num_classes,
         "sequence_length": sequence_length,

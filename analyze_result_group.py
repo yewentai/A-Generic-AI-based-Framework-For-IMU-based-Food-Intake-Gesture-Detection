@@ -4,12 +4,12 @@
 ===============================================================================
 IMU Experiment Comparison Script
 -------------------------------------------------------------------------------
-Author      : Based on work by Joseph Yep
-Last Edited : 2025-04-10
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-10
 Description : This script compares results across multiple experiment versions,
               analyzing both mirrored and non-mirrored data conditions. It
               generates comparative visualizations and statistical analyses.
-Usage       : python compare_results.py
 ===============================================================================
 """
 

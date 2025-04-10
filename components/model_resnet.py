@@ -15,10 +15,40 @@ Description : This module defines various components of a ResNet-based model
 ===============================================================================
 """
 
+import copy
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+def load_weights(weight_path, model, my_device="cpu", name_start_idx=2, is_dist=False):
+    # only need to change weights name when the
+    # model is trained in a distributed manner
+
+    pretrained_dict = torch.load(weight_path, map_location=my_device)
+    pretrained_dict_v2 = copy.deepcopy(pretrained_dict)  # v2 has the right para names
+
+    if is_dist:
+        for key in pretrained_dict:
+            para_names = key.split(".")
+            new_key = ".".join(para_names[name_start_idx:])
+            pretrained_dict_v2[new_key] = pretrained_dict_v2.pop(key)
+
+    model_dict = model.state_dict()
+
+    # 1. filter out unnecessary keys such as the final linear layers
+    #    we don't want linear layer weights either
+    pretrained_dict = {
+        k: v for k, v in pretrained_dict_v2.items() if k in model_dict and k.split(".")[0] != "classifier"
+    }
+
+    # 2. overwrite entries in the existing state dict
+    model_dict.update(pretrained_dict)
+
+    # 3. load the new state dict
+    model.load_state_dict(model_dict)
+    print("%d Weights loaded" % len(pretrained_dict))
 
 
 class Classifier(nn.Module):
