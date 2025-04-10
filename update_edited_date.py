@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+Update Script for Edited Date in Python Files
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-10
+Description : This script automatically updates the "Edited" date in the header
+              of Python files staged for commit in a Git repository. It scans
+              for Python files, identifies the header, and modifies the date.
+===============================================================================
+"""
+
 import subprocess
 from datetime import date
 

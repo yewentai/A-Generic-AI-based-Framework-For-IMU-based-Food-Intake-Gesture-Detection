@@ -1,3 +1,20 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU ResNet Model Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-10
+Description : This module defines various components of a ResNet-based model
+              architecture, including classifiers, projection heads, residual
+              blocks, and downsampling layers. These components are designed
+              for tasks such as classification, feature extraction, and
+              representation learning on IMU data.
+===============================================================================
+"""
+
 import numpy as np
 import torch
 import torch.nn as nn

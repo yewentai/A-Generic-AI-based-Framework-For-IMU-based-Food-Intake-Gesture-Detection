@@ -4,9 +4,9 @@
 ===============================================================================
 IMU Fine-Tuning Script Using Pre-Trained Encoder
 -------------------------------------------------------------------------------
-Author      : Your Name
-Email       : your.email@example.com
-Edited      : 2025-04-03
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-10
 Description : This script loads a pre-trained encoder (obtained via SimCLR or VAE pre-training)
               and attaches a classifier head to fine-tune on a downstream classification task.
               You can choose whether to freeze the encoder weights. The fine-tuned model and its

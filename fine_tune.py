@@ -1,4 +1,19 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+===============================================================================
+Fine-Tuning Script for IMU ResNet Model
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-04-10
+Description : This script defines the fine-tuning process for a ResNet-based
+              model architecture designed for IMU data. It includes functions
+              for loading pretrained weights, defining the model, and testing
+              its functionality with sample input data.
+===============================================================================
+"""
+
 import copy
 import numpy as np
 import torch
