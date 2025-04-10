@@ -28,3 +28,4 @@ if __name__ == "__main__":
             print(f"Updated: {file}")
         except Exception as e:
             print(f"Error updating {file}: {e}")
+    print("Changed files:", py_files)
