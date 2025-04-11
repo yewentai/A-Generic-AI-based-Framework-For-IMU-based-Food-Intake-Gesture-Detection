@@ -35,7 +35,7 @@ def remove_empty_subdirs(root):
 
 def main():
     # List the top-level directories to scan
-    parent_dirs = ["checkpoints", "result"]
+    parent_dirs = ["result"]
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
