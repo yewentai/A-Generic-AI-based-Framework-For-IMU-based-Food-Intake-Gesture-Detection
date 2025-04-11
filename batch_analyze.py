@@ -8,7 +8,7 @@ versions.sort()
 
 for version in versions:
     print(f"\n=== Analyzing Version: {version} (Mirror=False) ===\n")
-    subprocess.run(["python", "analyze_result.py", version, "no_mirror"])
+    subprocess.run(["python", "analyze_result_lr.py", version, "no_mirror"])
 
     print(f"\n=== Analyzing Version: {version} (Mirror=True) ===\n")
-    subprocess.run(["python", "analyze_result.py", version, "mirror"])
+    subprocess.run(["python", "analyze_result_lr.py", version, "mirror"])

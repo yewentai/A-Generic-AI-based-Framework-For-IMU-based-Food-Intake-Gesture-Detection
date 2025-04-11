@@ -17,7 +17,7 @@ for version in versions:
         print(f"\n[SKIP] {version} (no_mirror) already validated.")
     else:
         print(f"\n=== Validating Version: {version} (Mirror=False) ===\n")
-        subprocess.run(["python", "dl_validate.py", version, "no_mirror"])
+        subprocess.run(["python", "dl_validate_lr.py", version, "no_mirror"])
 
     # --------------------------
     # Validate with mirror
@@ -27,4 +27,4 @@ for version in versions:
         print(f"\n[SKIP] {version} (mirror) already validated.")
     else:
         print(f"\n=== Validating Version: {version} (Mirror=True) ===\n")
-        subprocess.run(["python", "dl_validate.py", version, "mirror"])
+        subprocess.run(["python", "dl_validate_lr.py", version, "mirror"])
