@@ -50,7 +50,7 @@ def remove_specified_files(root):
     for dirpath, dirnames, filenames in os.walk(root):
         # Check if the specified files exist and delete them
         for filename in filenames:
-            if filename in ["validate_stats_mirrored.npy", "validate_stats_separate.npy"]:
+            if filename in ["validate_stats_mirrored.npy", "validate_stats_separate.npy", "validation.log"]:
                 file_path = os.path.join(dirpath, filename)
                 try:
                     os.remove(file_path)

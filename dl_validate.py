@@ -48,12 +48,23 @@ if __name__ == "__main__":
 
         # Set up logging
         log_file = os.path.join(result_dir, "validation.log")
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s | %(levelname)s | %(message)s",
-            handlers=[logging.FileHandler(log_file, mode="w"), logging.StreamHandler()],
-        )
-        logger = logging.getLogger(__name__)
+        logger = logging.getLogger(f"validate_{version}")
+        logger.setLevel(logging.INFO)
+
+        # Remove existing handlers if any (to avoid duplicate logs)
+        if logger.hasHandlers():
+            logger.handlers.clear()
+
+        # Add file handler and stream handler
+        file_handler = logging.FileHandler(log_file, mode="w")
+        file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+
+        logger.addHandler(file_handler)
+        logger.addHandler(stream_handler)
+
         logger.info(f"\n=== Validating Version: {version} ===")
 
         config_file = os.path.join(result_dir, "config.json")
