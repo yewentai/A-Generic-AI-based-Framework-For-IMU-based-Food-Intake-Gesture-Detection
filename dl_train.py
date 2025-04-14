@@ -2,16 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================================
-MSTCN IMU Training Script
+MSTCN IMU Training Script (Single and Distributed Combined, Minimal Functions)
 ------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-09
-Description : This script trains an MSTCN model on IMU (Inertial Measurement Unit) data
-              using cross-validation. It supports multiple datasets (DXI/DXII or FDI/FDII/FDIII)
-              and dynamically generates result and checkpoint directories based on the
-              current datetime. The script includes configurable parameters for model
-              architecture, training hyperparameters, and data augmentation options.
+Edited      : 2025-04-14
+Description : This script trains an MSTCN model on IMU data using cross-validation. It supports
+              both normal and distributed modes with most code kept inline (minimal helper functions).
+              Use the command-line flag --distributed when running in distributed mode.
 ================================================================================================
 """
 
@@ -20,11 +18,14 @@ import json
 import pickle
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Subset, ConcatDataset
+import torch.distributed as dist
+from torch.utils.data import DataLoader, Subset, ConcatDataset, DistributedSampler
 from datetime import datetime
+import argparse
 from tqdm import tqdm
+import logging
 
-# Import custom modules from components package
+# Import custom modules from the components package
 from components.augmentation import (
     augment_hand_mirroring,
     augment_axis_permutation,
@@ -42,37 +43,43 @@ from components.model_cnnlstm import CNNLSTM, CNNLSTM_Loss
 from components.model_tcn import TCN, TCN_Loss
 from components.model_mstcn import MSTCN, MSTCN_Loss
 
-# ===============================================================================================
-#                                   Configuration Parameters
-# ===============================================================================================
+# ==============================================================================================
+#                             Configuration Parameters
+# ==============================================================================================
 
-# Dataset
-DATASET = "FDI"  # Options: DXI/DXII or FDI/FDII/FDIII
+# Setup logger
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)s: %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+# Dataset Settings
+DATASET = "FDI"
 SAMPLING_FREQ_ORIGINAL = 64
 DOWNSAMPLE_FACTOR = 4
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
-    dataset_type = "DX"
-    sub_version = DATASET.replace("DX", "").upper() or "I"  # Handles formats like DX/DXII
+    sub_version = DATASET.replace("DX", "").upper() or "I"
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
 elif DATASET.startswith("FD"):
     NUM_CLASSES = 3
-    dataset_type = "FD"
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
     TASK = "multiclass"
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
-# Dataloader
+# Dataloader Settings
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 
-# Model
+# Model Settings
 MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
 INPUT_DIM = 6
 LAMBDA_COEF = 0.15
@@ -89,66 +96,62 @@ elif MODEL == "CNN_LSTM":
 else:
     raise ValueError(f"Invalid model: {MODEL}")
 
-# Training
+# Training Settings
 LEARNING_RATE = 5e-4
 NUM_FOLDS = 7
 NUM_EPOCHS = 100
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
 FLAG_AUGMENT_PLANAR_ROTATION = False
-FLAG_AUGMENT_SPATIAL_ORIENTATION = False
+FLAG_AUGMENT_SPATIAL_ORIENTATION = True
 FLAG_DATASET_MIRROR = False
-FLAG_SKIP = False
 
-# Check if CUDA is available and set the device accordingly
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+# ==============================================================================================
+#                            Main Training Code (Inline)
+# ==============================================================================================
 
-# ===============================================================================================
-#                                  Directory and File Management
-# ===============================================================================================
+parser = argparse.ArgumentParser(description="MSTCN IMU Training Script (Combined Mode)")
+parser.add_argument("--distributed", action="store_true", help="Run in distributed mode")
+args = parser.parse_args()
 
-# Generate version prefix from current datetime (first 12 characters)
-version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+if args.distributed:
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
+    torch.cuda.set_device(local_rank)
+    device = torch.device("cuda", local_rank)
+else:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    local_rank = 0
 
-# Create result directories using version_prefix
-result_dir = os.path.join("result", version_prefix)
-os.makedirs(result_dir, exist_ok=True)
+if local_rank == 0:
+    logger.info(f"[Rank {local_rank}] Using device: {device}")
+    overall_start = datetime.now()
+    logger.info(f"Training started at: {overall_start}")
+    # Generate version prefix from current datetime (first 12 characters)
+    version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+    result_dir = os.path.join("result", version_prefix)
+    os.makedirs(result_dir, exist_ok=True)
+    checkpoint_dir = os.path.join(result_dir, "checkpoint")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    training_stats_file = os.path.join(result_dir, "train_stats.npy")
+else:
+    checkpoint_dir = None
 
-# Define file paths for saving statistics and configuration
-training_stas_file = os.path.join(result_dir, f"train_stats.npy")
-config_file = os.path.join(result_dir, "config.json")
-checkpoint_dir = os.path.join(result_dir, "checkpoints")
-os.makedirs(checkpoint_dir, exist_ok=True)
-
-# ===============================================================================================
-#                                Data Loading and Pre-processing
-# ===============================================================================================
-# Define file paths for the dataset
-X_L_PATH = os.path.join(DATA_DIR, "X_L.pkl")
-Y_L_PATH = os.path.join(DATA_DIR, "Y_L.pkl")
-X_R_PATH = os.path.join(DATA_DIR, "X_R.pkl")
-Y_R_PATH = os.path.join(DATA_DIR, "Y_R.pkl")
-
-# Load left-hand and right-hand data from pickle files
-with open(X_L_PATH, "rb") as f:
+with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
     X_L = np.array(pickle.load(f), dtype=object)
-with open(Y_L_PATH, "rb") as f:
+with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
     Y_L = np.array(pickle.load(f), dtype=object)
-with open(X_R_PATH, "rb") as f:
+with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
     X_R = np.array(pickle.load(f), dtype=object)
-with open(Y_R_PATH, "rb") as f:
+with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
 
-# Apply hand mirroring if flag is set
 if FLAG_DATASET_MIRROR:
     X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-# Merge left-hand and right-hand data
 X = np.concatenate([X_L, X_R], axis=0)
 Y = np.concatenate([Y_L, Y_R], axis=0)
-
-# Create the full dataset using the defined window size
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 
 # Augment Dataset with FDIII (if using FDII/FDI)
@@ -174,107 +177,103 @@ if DATASET in ["FDII", "FDI"]:
         downsample_factor=DOWNSAMPLE_FACTOR,
     )
 
-# ===============================================================================================
-#                                   Main Cross-Validation Loop
-# ===============================================================================================
-
 # Create validation folds based on the dataset type
 if DATASET == "FDI":
     validate_folds = load_predefined_validate_folds()
 else:
     validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
-
 training_statistics = []
 
-for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", leave=True)):
-    # Process only the first fold for demonstration; remove the condition to run all folds.
-    if FLAG_SKIP:
-        FLAG_SKIP = False
-        continue
+loss_fn = {"TCN": TCN_Loss, "MSTCN": MSTCN_Loss, "CNN_LSTM": CNNLSTM_Loss}[MODEL]
 
-    # Split training indices based on subject IDs
-    train_indices = [i for i, subject in enumerate(full_dataset.subject_indices) if subject not in validate_subjects]
-
-    # Augment training data with FDIII if applicable
+for fold, validate_subjects in enumerate(validate_folds):
+    train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
     if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
-        train_dataset = ConcatDataset([Subset(full_dataset, train_indices), fdiii_dataset])
+        base_train_dataset = Subset(full_dataset, train_indices)
+        train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset])
     else:
         train_dataset = Subset(full_dataset, train_indices)
 
-    # Create DataLoaders for training
+    train_sampler = (
+        DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True)
+        if args.distributed
+        else None
+    )
     train_loader = DataLoader(
-        dataset=train_dataset,
+        train_dataset,
         batch_size=BATCH_SIZE,
-        shuffle=True,
+        shuffle=not args.distributed,
+        sampler=train_sampler,
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
 
-    # Create Model and Optimizer
-    if MODEL == "TCN":
-        model = TCN(
-            num_layers=NUM_LAYERS,
-            num_classes=NUM_CLASSES,
-            input_dim=INPUT_DIM,
-            num_filters=NUM_FILTERS,
-            kernel_size=KERNEL_SIZE,
-            dropout=DROPOUT,
-        ).to(device)
-    elif MODEL == "MSTCN":
-        model = MSTCN(
-            num_stages=NUM_STAGES,
-            num_layers=NUM_LAYERS,
-            num_classes=NUM_CLASSES,
-            input_dim=INPUT_DIM,
-            num_filters=NUM_FILTERS,
-            kernel_size=KERNEL_SIZE,
-            dropout=DROPOUT,
-        ).to(device)
-    elif MODEL == "CNN_LSTM":
-        model = CNNLSTM(
-            input_channels=INPUT_DIM,
-            conv_filters=CONV_FILTERS,
-            lstm_hidden=LSTM_HIDDEN,
-            num_classes=NUM_CLASSES,
-        ).to(device)
-    else:
-        raise ValueError(f"Invalid model: {MODEL}")
+    model = {"TCN": TCN, "MSTCN": MSTCN, "CNN_LSTM": CNNLSTM}[MODEL](
+        **(
+            {
+                "num_stages": NUM_STAGES,
+                "num_layers": NUM_LAYERS,
+                "num_classes": NUM_CLASSES,
+                "input_dim": INPUT_DIM,
+                "num_filters": NUM_FILTERS,
+                "kernel_size": KERNEL_SIZE,
+                "dropout": DROPOUT,
+            }
+            if MODEL == "MSTCN"
+            else (
+                {
+                    "num_layers": NUM_LAYERS,
+                    "num_classes": NUM_CLASSES,
+                    "input_dim": INPUT_DIM,
+                    "num_filters": NUM_FILTERS,
+                    "kernel_size": KERNEL_SIZE,
+                    "dropout": DROPOUT,
+                }
+                if MODEL == "TCN"
+                else {
+                    "input_channels": INPUT_DIM,
+                    "conv_filters": CONV_FILTERS,
+                    "lstm_hidden": LSTM_HIDDEN,
+                    "num_classes": NUM_CLASSES,
+                }
+            )
+        )
+    ).to(device)
+
+    if args.distributed:
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank])
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
-    # Initialize best loss for saving the best model (lower loss is better)
     best_loss = float("inf")
 
-    # Training Loop
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         model.train()
-        training_loss = 0.0
-        training_loss_ce = 0.0
-        training_loss_mse = 0.0
+        if args.distributed:
+            train_sampler.set_epoch(epoch)
+
+        training_loss = 0
+        training_loss_ce = 0
+        training_loss_mse = 0
 
         for batch_x, batch_y in train_loader:
             # Shape of batch_x: [batch_size, seq_len, channels]
             # Shape of batch_y: [batch_size, seq_len]
             # Optionally apply data augmentation
             if FLAG_AUGMENT_HAND_MIRRORING:
-                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y, probability=1, is_additive=True)
+                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y, 1, True)
             if FLAG_AUGMENT_AXIS_PERMUTATION:
-                batch_x, batch_y = augment_axis_permutation(batch_x, batch_y, probability=0.5, is_additive=True)
+                batch_x, batch_y = augment_axis_permutation(batch_x, batch_y, 0.5, True)
             if FLAG_AUGMENT_PLANAR_ROTATION:
-                batch_x, batch_y = augment_planar_rotation(batch_x, batch_y, probability=0.5, is_additive=True)
+                batch_x, batch_y = augment_planar_rotation(batch_x, batch_y, 0.5, True)
             if FLAG_AUGMENT_SPATIAL_ORIENTATION:
-                batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y, probability=0.5, is_additive=True)
+                batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y, 0.5, True)
             # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
             # Shape of batch_x: [batch_size, channels, seq_len]
             batch_x = batch_x.permute(0, 2, 1).to(device)
             batch_y = batch_y.to(device)
+
             optimizer.zero_grad()
             outputs = model(batch_x)
-            loss_fn = {
-                "MSTCN": MSTCN_Loss,
-                "TCN": TCN_Loss,
-                "CNN_LSTM": CNNLSTM_Loss,
-            }[MODEL]
             ce_loss, mse_loss = loss_fn(outputs, batch_y)
             loss = ce_loss + LAMBDA_COEF * mse_loss
             loss.backward()
@@ -284,62 +283,31 @@ for fold, validate_subjects in enumerate(tqdm(validate_folds, desc="K-Fold", lea
             training_loss_ce += ce_loss.item()
             training_loss_mse += mse_loss.item()
 
-        # Save the Best Model Based on Loss
-        best_loss = save_best_model(
-            model,
-            fold=fold + 1,
-            current_metric=loss.item(),
-            best_metric=best_loss,
-            checkpoint_dir=checkpoint_dir,
-            mode="min",
-        )
+        if local_rank == 0:
+            avg_loss = training_loss / len(train_loader)
+            best_loss = save_best_model(model, fold + 1, avg_loss, best_loss, checkpoint_dir, "min")
+            stats = {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "fold": fold + 1,
+                "epoch": epoch + 1,
+                "train_loss": avg_loss,
+                "train_loss_ce": training_loss_ce / len(train_loader),
+                "train_loss_mse": training_loss_mse / len(train_loader),
+            }
+            training_statistics.append(stats)
 
-        # Record training statistics for the current epoch
-        stats = {
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "fold": fold + 1,
-            "epoch": epoch + 1,
-            "train_loss": training_loss / len(train_loader),
-            "train_loss_ce": training_loss_ce / len(train_loader),
-            "train_loss_mse": training_loss_mse / len(train_loader),
-        }
-        training_statistics.append(stats)
+if local_rank == 0:
+    np.save(training_stats_file, training_statistics)
+    logger.info(f"Training statistics saved to {training_stats_file}")
 
-# ===============================================================================================
-#                                  Save Results and Configuration
-# ===============================================================================================
-
-np.save(training_stas_file, training_statistics)
-print(f"Training statistics saved to {training_stas_file}")
-
-# Build the initial part of the config with keys up to "model"
-config_info = {
-    "dataset": DATASET,
-    "num_classes": NUM_CLASSES,
-    "sampling_freq": SAMPLING_FREQ,
-    "window_size": WINDOW_SIZE,
-    "model": MODEL,
-    "input_dim": INPUT_DIM,
-}
-
-# Insert model-specific parameters right after the "model" key
-if MODEL == "CNN_LSTM":
-    config_info["conv_filters"] = CONV_FILTERS
-    config_info["lstm_hidden"] = LSTM_HIDDEN
-elif MODEL in ["TCN", "MSTCN"]:
-    config_info["num_layers"] = NUM_LAYERS
-    config_info["num_filters"] = NUM_FILTERS
-    config_info["kernel_size"] = KERNEL_SIZE
-    config_info["dropout"] = DROPOUT
-    if MODEL == "MSTCN":
-        config_info["num_stages"] = NUM_STAGES
-else:
-    raise ValueError(f"Invalid model: {MODEL}")
-
-# Add the remaining configuration parameters after the model-specific ones
-config_info.update(
-    {
+    config_info = {
+        "dataset": DATASET,
+        "num_classes": NUM_CLASSES,
+        "sampling_freq": SAMPLING_FREQ,
+        "window_size": WINDOW_SIZE,
+        "model": MODEL,
+        "input_dim": INPUT_DIM,
         "learning_rate": LEARNING_RATE,
         "batch_size": BATCH_SIZE,
         "num_folds": NUM_FOLDS,
@@ -351,10 +319,20 @@ config_info.update(
         "dataset_mirroring": FLAG_DATASET_MIRROR,
         "validate_folds": validate_folds,
     }
-)
 
+    if MODEL == "CNN_LSTM":
+        config_info.update({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN})
+    elif MODEL in ["TCN", "MSTCN"]:
+        config_info.update(
+            {"num_layers": NUM_LAYERS, "num_filters": NUM_FILTERS, "kernel_size": KERNEL_SIZE, "dropout": DROPOUT}
+        )
+        if MODEL == "MSTCN":
+            config_info["num_stages"] = NUM_STAGES
 
-# Save the configuration as JSON
-with open(config_file, "w") as f:
-    json.dump(config_info, f, indent=4)
-print(f"Configuration saved to {config_file}")
+    config_file = os.path.join(result_dir, "config.json")
+    with open(config_file, "w") as f:
+        json.dump(config_info, f, indent=4)
+    logger.info(f"Configuration saved to {config_file}")
+
+if args.distributed:
+    dist.destroy_process_group()

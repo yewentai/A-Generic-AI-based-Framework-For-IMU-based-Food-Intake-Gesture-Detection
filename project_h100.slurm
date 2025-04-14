@@ -3,13 +3,12 @@
 #SBATCH --cluster=wice                        # Name of the cluster to submit the job to
 #SBATCH --mail-type=BEGIN,END,FAIL            # Send email notifications when job begins, ends, or fails
 #SBATCH --mail-user=yewentai126@gmail.com     # Email address to receive notifications
-#SBATCH --nodes=1                             # Number of compute nodes to allocate (1 node)
-#SBATCH --ntasks-per-node=16                  # Number of CPU tasks (or processes) to run on the node (max: 72)
-#SBATCH --gpus-per-node=2                     # Request 2 GPUs per node (for parallel GPU training)
-#SBATCH --partition=gpu_h100                  # Use the 'gpu_h100' partition (nodes with H100 GPUs)
-#SBATCH --time=3:00:00                        # Maximum allowed runtime: 3 days
+#SBATCH --nodes=1                             # Number of compute nodes to allocate (Maximum 4 nodes)
+#SBATCH --ntasks-per-node=16                  # Number of CPU tasks (or processes) to run per node (Maximum 72 cores)
+#SBATCH --gpus-per-node=2                     # Number of GPUs to request per node (Maximum 4 GPUs)
+#SBATCH --partition=gpu_h100                  # Partition to use (H100 GPUs)
+#SBATCH --time=3:00:00                        # Maximum wall time (Maximum 3 days)
 #SBATCH --output=logs/ddp_train_%j.out        # Standard output and error log file (%j is the job ID)
-
 
 # Load Miniconda
 export PATH=$VSC_DATA/miniconda3/bin:$PATH
@@ -21,9 +20,9 @@ conda activate torch
 export MASTER_ADDR=$(hostname)
 export MASTER_PORT=29500
 
-# Optional debugging flags
+# (Optional) Debugging flags
 export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1
 
 # Launch the training script with torchrun for DDP support
-torchrun --nnodes=1 --nproc_per_node=2 dl_train_hpc.py
+torchrun dl_train.py --distributed

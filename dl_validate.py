@@ -39,6 +39,7 @@ DEBUG_PLOT = False
 
 if __name__ == "__main__":
     result_root = "result"
+    # versions = [] # Uncomment this line to manually specify versions
     versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
