@@ -130,3 +130,59 @@ if __name__ == "__main__":
         # ==========================================================================
         #                          COMPARATIVE VISUALIZATIONS
         # ==========================================================================
+
+        plt.figure(figsize=(14, 8))
+
+        mode_names = list(mode_metrics.keys())
+        x = np.arange(len(THRESHOLD_LIST))
+        width = 0.8 / len(mode_names)
+
+        for i, mode in enumerate(mode_names):
+            # Calculate mean F1 for each threshold
+            means = [np.mean(mode_metrics[mode]["segment_wise"][t]) for t in THRESHOLD_LIST]
+            # Calculate standard deviation
+            stds = [np.std(mode_metrics[mode]["segment_wise"][t]) for t in THRESHOLD_LIST]
+
+            positions = x + (i - len(mode_names) / 2 + 0.5) * width
+            plt.bar(positions, means, width, label=f"{mode}", color=COLOR_PALETTE[i], alpha=0.7)
+
+            # Add error bars
+            plt.errorbar(positions, means, yerr=stds, fmt="none", ecolor="black", capsize=5, alpha=0.5)
+
+        # Add sample-wise data as a bar
+        for i, mode in enumerate(mode_names):
+            sample_mean = np.mean(mode_metrics[mode]["sample_wise"])
+            sample_std = np.std(mode_metrics[mode]["sample_wise"])
+
+            # Position for sample-wise bar
+            sample_position = len(THRESHOLD_LIST) + (i - len(mode_names) / 2 + 0.5) * width
+            plt.bar(
+                sample_position,
+                sample_mean,
+                width,
+                color=COLOR_PALETTE[i],
+                alpha=0.7,
+            )
+
+            # Add error bars
+            plt.errorbar(
+                sample_position,
+                sample_mean,
+                yerr=sample_std,
+                fmt="none",
+                ecolor="black",
+                capsize=5,
+                alpha=0.5,
+            )
+
+        plt.xlabel("Segmentation Threshold")
+        plt.ylabel("Mean Weighted F1 Score")
+        plt.title(f"Segment-wise and Sample-wise F1 Scores (Version: {version})")
+        plt.xticks(list(x) + [len(THRESHOLD_LIST)], [str(t) for t in THRESHOLD_LIST] + ["Sample"])
+        plt.grid(True, axis="y", linestyle="--", alpha=0.6)
+        plt.legend()
+        plt.tight_layout()
+
+        # Save figure
+        plt.savefig(os.path.join(analysis_dir, f"threshold_impact_{version}.png"), dpi=300)
+        plt.close()
