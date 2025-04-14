@@ -26,13 +26,13 @@ def remove_empty_subdirs(root):
         if os.path.abspath(dirpath) == os.path.abspath(root):
             continue
 
-        # Remove 'analysis' folders, even if they are not empty
-        if os.path.basename(dirpath) == "analysis":
-            try:
-                shutil.rmtree(dirpath)
-                print(f"Deleted 'analysis' folder: {dirpath}")
-            except Exception as e:
-                print(f"Failed to delete 'analysis' folder {dirpath}: {e}")
+        # # Remove 'analysis' folders, even if they are not empty
+        # if os.path.basename(dirpath) == "analysis":
+        #     try:
+        #         shutil.rmtree(dirpath)
+        #         print(f"Deleted 'analysis' folder: {dirpath}")
+        #     except Exception as e:
+        #         print(f"Failed to delete 'analysis' folder {dirpath}: {e}")
 
         # If no subdirectories and no files, delete the folder
         if not dirnames and not filenames:
@@ -50,7 +50,12 @@ def remove_specified_files(root):
     for dirpath, dirnames, filenames in os.walk(root):
         # Check if the specified files exist and delete them
         for filename in filenames:
-            if filename in ["validate_stats.npy", "validate_stats.json"] or filename.endswith(".log"):
+            if filename in [
+                "validate_stats.npy",
+                "validate_stats.json",
+                "validation_mirroring.json",
+                "validation_rotation.json",
+            ]:
                 file_path = os.path.join(dirpath, filename)
                 try:
                     os.remove(file_path)
@@ -66,17 +71,9 @@ def rename_files(root):
     for dirpath, dirnames, filenames in os.walk(root):
         for filename in filenames:
             # Rename validate_rotation.json and .npy
-            if filename == "validate_rotation.json":
+            if filename == "validation_rotation.npy":
                 old_file_path = os.path.join(dirpath, filename)
-                new_file_path = os.path.join(dirpath, "validation_rotation.json")
-                try:
-                    os.rename(old_file_path, new_file_path)
-                    print(f"Renamed file: {old_file_path} to {new_file_path}")
-                except Exception as e:
-                    print(f"Failed to rename file {old_file_path}: {e}")
-            elif filename == "validate_rotation.npy":
-                old_file_path = os.path.join(dirpath, filename)
-                new_file_path = os.path.join(dirpath, "validation_rotation.npy")
+                new_file_path = os.path.join(dirpath, "validation_stats_rotation.npy")
                 try:
                     os.rename(old_file_path, new_file_path)
                     print(f"Renamed file: {old_file_path} to {new_file_path}")
@@ -84,17 +81,9 @@ def rename_files(root):
                     print(f"Failed to rename file {old_file_path}: {e}")
 
             # Rename validate_mirror.json and .npy
-            elif filename == "validate_mirror.json":
+            elif filename == "validation_mirroring.npy":
                 old_file_path = os.path.join(dirpath, filename)
-                new_file_path = os.path.join(dirpath, "validation_mirroring.json")
-                try:
-                    os.rename(old_file_path, new_file_path)
-                    print(f"Renamed file: {old_file_path} to {new_file_path}")
-                except Exception as e:
-                    print(f"Failed to rename file {old_file_path}: {e}")
-            elif filename == "validate_mirror.npy":
-                old_file_path = os.path.join(dirpath, filename)
-                new_file_path = os.path.join(dirpath, "validation_mirroring.npy")
+                new_file_path = os.path.join(dirpath, "validation_stats_mirroring.npy")
                 try:
                     os.rename(old_file_path, new_file_path)
                     print(f"Renamed file: {old_file_path} to {new_file_path}")

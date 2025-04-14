@@ -17,7 +17,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from dl_validate_mirror import THRESHOLD_LIST
+from dl_validate import THRESHOLD_LIST
 
 # --- Configurations ---
 PLOT_LOSS_CURVE = False  # Toggle for plotting training loss curves
@@ -25,8 +25,8 @@ COLOR_PALETTE = sns.color_palette("husl", len(THRESHOLD_LIST) + 1)  # Color pale
 
 # Define validation file priority order
 VALIDATION_FILES = [
-    "validation_mirroring.npy",  # Mirror augmentation validation
-    "validation_rotation.npy",  # Rotation augmentation validation
+    "validation_stats_mirroring.npy",  # Mirror augmentation validation
+    "validation_stats_rotation.npy",  # Rotation augmentation validation
 ]
 
 if __name__ == "__main__":
