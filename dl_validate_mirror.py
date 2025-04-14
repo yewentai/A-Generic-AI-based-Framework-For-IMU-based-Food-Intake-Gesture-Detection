@@ -6,10 +6,10 @@ MSTCN IMU Validation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Edited      : 2025-04-14
-Description : This script validates MSTCN models on IMU datasets with:
-              1. Original left/right hand validation
-              2. Hand mirroring (if enabled in config)
-              3. Planar rotation (if enabled in config)
+Description : This script validates MSTCN models on IMU datasets for:
+              1. Original left hand
+              2. Original right hand
+              3. Mirrored left + original right
 ===============================================================================
 """
 
@@ -29,7 +29,7 @@ from components.model_cnnlstm import CNNLSTM
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
-from components.pre_processing import hand_mirroring, planar_rotation
+from components.pre_processing import hand_mirroring
 
 # --- Configurations ---
 NUM_WORKERS = 4
@@ -39,8 +39,10 @@ DEBUG_PLOT = False
 
 if __name__ == "__main__":
     result_root = "result"
-    # versions = ["202504102241"]  # Uncomment to manually specify versions
-    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    # versions = ["202504102241"]  # Uncomment this line to manually specify versions
+    versions = [
+        d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d)) and d not in {"202504102241"}
+    ]
     versions.sort()
 
     for version in versions:
@@ -48,8 +50,8 @@ if __name__ == "__main__":
         os.makedirs(result_dir, exist_ok=True)
 
         # Set up logging
-        log_file = os.path.join(result_dir, "validation.log")
-        logger = logging.getLogger(f"validation_{version}")
+        log_file = os.path.join(result_dir, "validation_mirror.log")
+        logger = logging.getLogger(f"validate_{version}")
         logger.setLevel(logging.INFO)
 
         # Remove existing handlers if any (to avoid duplicate logs)
@@ -80,10 +82,6 @@ if __name__ == "__main__":
         WINDOW_SIZE = config_info["window_size"]
         BATCH_SIZE = config_info["batch_size"]
         validate_folds = config_info.get("validate_folds")
-        mirror_enabled = config_info.get("augmentation_hand_mirroring", False) or config_info.get(
-            "dataset_mirroring", False
-        )
-        rotation_enabled = config_info.get("augmentation_planar_rotation", False)
 
         if validate_folds is None:
             logger.error("No 'validate_folds' found in the configuration file.")
@@ -102,54 +100,21 @@ if __name__ == "__main__":
             logger.error(f"Invalid dataset: {DATASET}")
             continue
 
-        # Load original data
         X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
         Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
         X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
         Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
+        X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-        # Prepare validation modes based on config
         validation_modes = [
             {"name": "original_left", "X": X_L, "Y": Y_L},
             {"name": "original_right", "X": X_R, "Y": Y_R},
+            {
+                "name": "mirrored_left_original_right",
+                "X": np.concatenate((X_L_mirrored, X_R), axis=0),
+                "Y": np.concatenate((Y_L, Y_R), axis=0),
+            },
         ]
-
-        if mirror_enabled:
-            X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-            validation_modes.append(
-                {
-                    "name": "mirrored_left_original_right",
-                    "X": np.concatenate((X_L_mirrored, X_R), axis=0),
-                    "Y": np.concatenate((Y_L, Y_R), axis=0),
-                }
-            )
-
-        if rotation_enabled:
-            # Apply rotation to 50% of samples
-            random_indices = np.random.choice(len(X_L), size=int(len(X_L) * 0.5), replace=False)
-            X_L_rotated = np.copy(X_L)
-            X_R_rotated = np.copy(X_R)
-            for i in random_indices:
-                X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
-                X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
-
-            if mirror_enabled:
-                X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
-                validation_modes.append(
-                    {
-                        "name": "rotated_mirrored_left_original_right",
-                        "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
-                        "Y": np.concatenate((Y_L, Y_R), axis=0),
-                    }
-                )
-            else:
-                validation_modes.append(
-                    {
-                        "name": "rotated_left_right",
-                        "X": np.concatenate((X_L_rotated, X_R_rotated), axis=0),
-                        "Y": np.concatenate((Y_L, Y_R), axis=0),
-                    }
-                )
 
         all_stats = {}
 
@@ -275,10 +240,10 @@ if __name__ == "__main__":
 
             all_stats[mode["name"]] = mode_stats
 
-        # Save all statistics
-        stats_file_npy = os.path.join(result_dir, "validation_stats.npy")
-        stats_file_json = os.path.join(result_dir, "validation_stats.json")
-        np.save(stats_file_npy, all_stats)
-        with open(stats_file_json, "w") as f_json:
-            json.dump(all_stats, f_json, indent=4)
-        logger.info(f"\nAll validation statistics saved to {stats_file_npy} and {stats_file_json}")
+            # Save all statistics
+            stats_file_npy = os.path.join(result_dir, "validate_mirror.npy")
+            stats_file_json = os.path.join(result_dir, "validate_mirror.json")
+            np.save(stats_file_npy, all_stats)
+            with open(stats_file_json, "w") as f_json:
+                json.dump(all_stats, f_json, indent=4)
+            logger.info(f"\nAll validation statistics saved to {stats_file_npy} and {stats_file_json}")

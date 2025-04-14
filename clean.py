@@ -50,13 +50,56 @@ def remove_specified_files(root):
     for dirpath, dirnames, filenames in os.walk(root):
         # Check if the specified files exist and delete them
         for filename in filenames:
-            if filename in ["validate_stats_mirrored.npy", "validate_stats_separate.npy", "validation.log"]:
+            if filename in ["validate_stats.npy", "validate_stats.json"] or filename.endswith(".log"):
                 file_path = os.path.join(dirpath, filename)
                 try:
                     os.remove(file_path)
                     print(f"Deleted file: {file_path}")
                 except Exception as e:
                     print(f"Failed to delete file {file_path}: {e}")
+
+
+def rename_files(root):
+    """
+    Traverse the directory tree under `root` and rename specific files based on patterns.
+    """
+    for dirpath, dirnames, filenames in os.walk(root):
+        for filename in filenames:
+            # Rename validate_rotation.json and .npy
+            if filename == "validate_rotation.json":
+                old_file_path = os.path.join(dirpath, filename)
+                new_file_path = os.path.join(dirpath, "validation_rotation.json")
+                try:
+                    os.rename(old_file_path, new_file_path)
+                    print(f"Renamed file: {old_file_path} to {new_file_path}")
+                except Exception as e:
+                    print(f"Failed to rename file {old_file_path}: {e}")
+            elif filename == "validate_rotation.npy":
+                old_file_path = os.path.join(dirpath, filename)
+                new_file_path = os.path.join(dirpath, "validation_rotation.npy")
+                try:
+                    os.rename(old_file_path, new_file_path)
+                    print(f"Renamed file: {old_file_path} to {new_file_path}")
+                except Exception as e:
+                    print(f"Failed to rename file {old_file_path}: {e}")
+
+            # Rename validate_mirror.json and .npy
+            elif filename == "validate_mirror.json":
+                old_file_path = os.path.join(dirpath, filename)
+                new_file_path = os.path.join(dirpath, "validation_mirroring.json")
+                try:
+                    os.rename(old_file_path, new_file_path)
+                    print(f"Renamed file: {old_file_path} to {new_file_path}")
+                except Exception as e:
+                    print(f"Failed to rename file {old_file_path}: {e}")
+            elif filename == "validate_mirror.npy":
+                old_file_path = os.path.join(dirpath, filename)
+                new_file_path = os.path.join(dirpath, "validation_mirroring.npy")
+                try:
+                    os.rename(old_file_path, new_file_path)
+                    print(f"Renamed file: {old_file_path} to {new_file_path}")
+                except Exception as e:
+                    print(f"Failed to rename file {old_file_path}: {e}")
 
 
 def main():
@@ -67,6 +110,7 @@ def main():
             print(f"Scanning directory: {parent}")
             remove_empty_subdirs(parent)
             remove_specified_files(parent)
+            rename_files(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
 

@@ -6,7 +6,7 @@ IMU Data Augmentation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-04-14
 Description : This script provides functions for augmenting IMU data, including
               hand mirroring, axis permutation, planar rotation, and spatial orientation
               transformations.
@@ -55,7 +55,7 @@ def rotation_matrix_z(angle_rad):
     )
 
 
-def augment_hand_mirroring(batch_x, batch_y, probability=0.5, is_additive=True):
+def augment_hand_mirroring(batch_x, batch_y, probability=0.5, is_additive=False):
     """
     Augment data by mirroring IMU data to simulate wearing the device on the opposite hand.
 
@@ -114,7 +114,7 @@ def augment_hand_mirroring(batch_x, batch_y, probability=0.5, is_additive=True):
     return augmented_batch_x, augmented_batch_y
 
 
-def augment_axis_permutation(batch_x, batch_y, probability=0.5, is_additive=True):
+def augment_axis_permutation(batch_x, batch_y, probability=0.5, is_additive=False):
     """
     Augments IMU data by permuting sensor axes to improve model robustness against device variability.
 
@@ -229,7 +229,7 @@ def augment_axis_permutation(batch_x, batch_y, probability=0.5, is_additive=True
     return augmented_batch_x, augmented_batch_y
 
 
-def augment_planar_rotation(batch_x, batch_y, probability=0.5, is_additive=True):
+def augment_planar_rotation(batch_x, batch_y, probability=0.5, is_additive=False):
     """
     Augments IMU data by simulating different planar rotations of the sensor device on the wrist.
 
@@ -330,7 +330,7 @@ def augment_planar_rotation(batch_x, batch_y, probability=0.5, is_additive=True)
     return augmented_batch_x, augmented_batch_y
 
 
-def augment_spatial_orientation(batch_x, batch_y, probability=0.5, is_additive=True):
+def augment_spatial_orientation(batch_x, batch_y, probability=0.5, is_additive=False):
     """
     Augments IMU data by simulating subtle variations in sensor placement and orientation.
 
