@@ -6,13 +6,14 @@ Project Directory Cleanup Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-04-14
 Description : This script recursively traverses specified directories to find and
-              remove empty subdirectories, keeping the project workspace tidy.
+              remove empty subdirectories, 'analysis' folders, and specific files.
 ===============================================================================
 """
 
 import os
+import shutil
 
 
 def remove_empty_subdirs(root):
@@ -24,6 +25,15 @@ def remove_empty_subdirs(root):
         # Skip the root folder itself
         if os.path.abspath(dirpath) == os.path.abspath(root):
             continue
+
+        # Remove 'analysis' folders, even if they are not empty
+        if os.path.basename(dirpath) == "analysis":
+            try:
+                shutil.rmtree(dirpath)
+                print(f"Deleted 'analysis' folder: {dirpath}")
+            except Exception as e:
+                print(f"Failed to delete 'analysis' folder {dirpath}: {e}")
+
         # If no subdirectories and no files, delete the folder
         if not dirnames and not filenames:
             try:
@@ -33,6 +43,22 @@ def remove_empty_subdirs(root):
                 print(f"Failed to delete {dirpath}: {e}")
 
 
+def remove_specified_files(root):
+    """
+    Traverse the directory tree under `root` and remove the specific files.
+    """
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Check if the specified files exist and delete them
+        for filename in filenames:
+            if filename in ["validate_stats_mirrored.npy", "validate_stats_separate.npy"]:
+                file_path = os.path.join(dirpath, filename)
+                try:
+                    os.remove(file_path)
+                    print(f"Deleted file: {file_path}")
+                except Exception as e:
+                    print(f"Failed to delete file {file_path}: {e}")
+
+
 def main():
     # List the top-level directories to scan
     parent_dirs = ["result"]
@@ -40,6 +66,7 @@ def main():
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
             remove_empty_subdirs(parent)
+            remove_specified_files(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
 
