@@ -26,12 +26,13 @@ COLOR_PALETTE = sns.color_palette("husl", len(THRESHOLD_LIST) + 1)  # Color pale
 # Define validation file priority order
 VALIDATION_FILES = [
     "validation_stats_mirroring.npy",  # Mirror augmentation validation
-    "validation_stats_rotation.npy",  # Rotation augmentation validation
+    # "validation_stats_rotation.npy",  # Rotation augmentation validation
 ]
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    versions = ["202504100555"]  # Specify the version to analyze
+    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
@@ -165,25 +166,48 @@ if __name__ == "__main__":
                 stds = [np.std(mode_metrics[mode]["segment_wise"][t]) for t in THRESHOLD_LIST]
 
                 positions = x + (i - len(mode_names) / 2 + 0.5) * width
-                plt.bar(positions, means, width, label=f"{mode}", color=COLOR_PALETTE[i], alpha=0.7)
+                bars = plt.bar(positions, means, width, label=f"{mode}", color=COLOR_PALETTE[i], alpha=0.7)
                 plt.errorbar(positions, means, yerr=stds, fmt="none", ecolor="black", capsize=5, alpha=0.5)
+
+                # Add value on top of each bar
+                for bar, mean in zip(bars, means):
+                    plt.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height(),
+                        f"{mean:.2f}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=9,
+                        rotation=0,
+                    )
 
             for i, mode in enumerate(mode_names):
                 sample_mean = np.mean(mode_metrics[mode]["sample_wise"])
                 sample_std = np.std(mode_metrics[mode]["sample_wise"])
 
                 sample_position = len(THRESHOLD_LIST) + (i - len(mode_names) / 2 + 0.5) * width
-                plt.bar(sample_position, sample_mean, width, color=COLOR_PALETTE[i], alpha=0.7)
+                bar = plt.bar(sample_position, sample_mean, width, color=COLOR_PALETTE[i], alpha=0.7)
                 plt.errorbar(
                     sample_position, sample_mean, yerr=sample_std, fmt="none", ecolor="black", capsize=5, alpha=0.5
                 )
 
+                # Add value on top of the sample-wise bar
+                plt.text(
+                    sample_position,
+                    sample_mean,
+                    f"{sample_mean:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                    rotation=0,
+                )
+
             plt.xlabel("Segmentation Threshold")
             plt.ylabel("Mean Weighted F1 Score")
-            plt.title(f"Segment-wise and Sample-wise F1 Scores ({analysis_type})")
+            plt.title(f"Segment-wise and Sample-wise F1 Scores (mirroring augmentation/addictive/100%)")
             plt.xticks(list(x) + [len(THRESHOLD_LIST)], [str(t) for t in THRESHOLD_LIST] + ["Sample"])
             plt.grid(True, axis="y", linestyle="--", alpha=0.6)
-            plt.legend()
+            plt.legend(loc="lower right")
             plt.tight_layout()
 
             plt.savefig(os.path.join(analysis_dir, f"segment_sample_f1_{analysis_type.lower()}.png"), dpi=300)
@@ -197,14 +221,28 @@ if __name__ == "__main__":
             for i, mode in enumerate(mode_names):
                 fold_f1_scores = mode_metrics[mode]["sample_wise"]
                 positions = [fold + (i - len(mode_names) / 2 + 0.5) * bar_width for fold in folds]
-                plt.bar(positions, fold_f1_scores, width=bar_width, label=f"{mode}", color=COLOR_PALETTE[i], alpha=0.7)
+                bars = plt.bar(
+                    positions, fold_f1_scores, width=bar_width, label=f"{mode}", color=COLOR_PALETTE[i], alpha=0.7
+                )
+
+                # Add value on top of each bar
+                for bar, score in zip(bars, fold_f1_scores):
+                    plt.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height(),
+                        f"{score:.2f}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=9,
+                        rotation=0,
+                    )
 
             plt.xticks(folds, [f"Fold {fold}" for fold in folds])
             plt.xlabel("Fold")
             plt.ylabel("Weighted F1 Score")
-            plt.title(f"Sample-wise F1 Scores per Fold ({analysis_type})")
+            plt.title(f"Sample-wise F1 Scores per Fold (mirroring augmentation/addictive/100%)")
             plt.grid(True, axis="y", linestyle="--", alpha=0.6)
-            plt.legend()
+            plt.legend(loc="lower right")
             plt.tight_layout()
 
             plt.savefig(os.path.join(analysis_dir, f"sample_f1_per_fold_{analysis_type.lower()}.png"), dpi=300)

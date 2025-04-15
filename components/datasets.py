@@ -6,7 +6,7 @@ IMU Dataset Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-10
+Edited      : 2025-04-15
 Description : This script defines the IMUDataset class for loading and preprocessing
               IMU data, as well as functions for creating balanced cross-validation folds.
 ===============================================================================
@@ -128,7 +128,14 @@ class IMUDataset(Dataset):
 
 class IMUDatasetN21(Dataset):
     def __init__(
-        self, X, Y, sequence_length=128, downsample_factor=4, apply_antialias=True, selected_channels=[0, 1, 2]
+        self,
+        X,
+        Y,
+        sequence_length=128,
+        stride=None,
+        downsample_factor=4,
+        apply_antialias=True,
+        selected_channels=[0, 1, 2],
     ):
         """
         Initialize the IMUDataset.
@@ -137,14 +144,15 @@ class IMUDatasetN21(Dataset):
             X (list of np.ndarray): IMU data for each subject, each array has shape (N, 6)
             Y (list of np.ndarray): Label arrays for each subject, each array has shape (N,)
             sequence_length (int): Length of each sequence segment.
+            stride (int): Step size for the sliding window. Defaults to sequence_length (non-overlapping).
             downsample_factor (int): Downsampling factor.
             apply_antialias (bool): Whether to apply anti-aliasing filter before downsampling.
             selected_channels (list): Indices of channels to select from the 6 available.
-                                       Default selects the first three channels.
         """
         self.data = []
         self.labels = []
         self.sequence_length = sequence_length
+        self.stride = stride if stride is not None else sequence_length
         self.subject_indices = []
         self.downsample_factor = downsample_factor
         self.selected_channels = selected_channels
@@ -166,8 +174,8 @@ class IMUDatasetN21(Dataset):
 
             num_samples = len(labels)
 
-            # Create complete sequence segments of fixed length
-            for i in range(0, num_samples - sequence_length + 1, sequence_length):
+            # Create sequence segments with specified stride
+            for i in range(0, num_samples - sequence_length + 1, self.stride):
                 imu_segment = imu_data[i : i + sequence_length]
                 label_segment = labels[i : i + sequence_length]
                 self.data.append(imu_segment)
@@ -175,21 +183,19 @@ class IMUDatasetN21(Dataset):
                 self.subject_indices.append(subject_idx)
 
             # For samples that do not fill a complete segment, pad with zeros.
-            remainder = num_samples % sequence_length
-            if remainder > 0:
+            remainder = (num_samples - sequence_length) % self.stride
+            if remainder > 0 and num_samples >= sequence_length:
                 start = num_samples - remainder
                 imu_segment = imu_data[start:]
                 label_segment = labels[start:]
-                pad_length = sequence_length - remainder
+                pad_length = sequence_length - imu_segment.shape[0]
 
-                # Zero-pad the IMU segment along the time dimension (rows)
                 imu_segment_padded = np.pad(
                     imu_segment,
                     pad_width=((0, pad_length), (0, 0)),
                     mode="constant",
                     constant_values=0,
                 )
-                # Zero-pad the label segment as a 1D array
                 label_segment_padded = np.pad(
                     label_segment,
                     pad_width=(0, pad_length),
@@ -202,37 +208,14 @@ class IMUDatasetN21(Dataset):
                 self.subject_indices.append(subject_idx)
 
     def downsample(self, data, factor, apply_antialias=True):
-        """
-        Apply anti-aliasing filter and downsample the IMU data.
-
-        Parameters:
-            data (np.ndarray): IMU data.
-            factor (int): Downsampling factor.
-            apply_antialias (bool): Whether to apply a low-pass filter before downsampling.
-
-        Returns:
-            np.ndarray: Downsampled IMU data.
-        """
         if apply_antialias:
-            # Compute the Nyquist frequency based on the number of samples
             nyquist = 0.5 * data.shape[0]
-            # Set a cutoff frequency (e.g. 80% of the new Nyquist frequency)
             cutoff = (0.5 / factor) * nyquist
             b, a = signal.butter(4, cutoff / nyquist, btype="low", analog=False)
             data = signal.filtfilt(b, a, data, axis=0)
-
         return data[::factor, :]
 
     def normalize(self, data):
-        """
-        Apply z-score normalization to the data.
-
-        Parameters:
-            data (np.ndarray): IMU data.
-
-        Returns:
-            np.ndarray: Normalized IMU data.
-        """
         mean = np.mean(data, axis=0, keepdims=True)
         std = np.std(data, axis=0, keepdims=True)
         return (data - mean) / (std + 1e-5)
@@ -241,8 +224,109 @@ class IMUDatasetN21(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # Return x and y as torch tensors.
-        # x will have shape (sequence_length, len(selected_channels))
+        x = torch.tensor(self.data[idx], dtype=torch.float32)
+        y = torch.tensor(self.labels[idx], dtype=torch.float32)
+        return x, y
+
+
+class IMUDatasetN21(Dataset):
+    def __init__(
+        self,
+        X,
+        Y,
+        sequence_length=128,
+        stride=None,
+        downsample_factor=4,
+        apply_antialias=True,
+        selected_channels=[0, 1, 2],
+    ):
+        """
+        Initialize the IMUDataset.
+
+        Parameters:
+            X (list of np.ndarray): IMU data for each subject, each array has shape (N, 6)
+            Y (list of np.ndarray): Label arrays for each subject, each array has shape (N,)
+            sequence_length (int): Length of each sequence segment.
+            stride (int): Step size for the sliding window. Defaults to sequence_length (non-overlapping).
+            downsample_factor (int): Downsampling factor.
+            apply_antialias (bool): Whether to apply anti-aliasing filter before downsampling.
+            selected_channels (list): Indices of channels to select from the 6 available.
+        """
+        self.data = []
+        self.labels = []
+        self.sequence_length = sequence_length
+        self.stride = stride if stride is not None else sequence_length
+        self.subject_indices = []
+        self.downsample_factor = downsample_factor
+        self.selected_channels = selected_channels
+
+        if downsample_factor < 1:
+            raise ValueError("downsample_factor must be >= 1.")
+
+        for subject_idx, (imu_data, labels) in enumerate(zip(X, Y)):
+            # Downsample data if needed
+            if downsample_factor > 1:
+                imu_data = self.downsample(imu_data, downsample_factor, apply_antialias)
+                labels = labels[::downsample_factor]
+
+            # Normalize the IMU data (z-score normalization)
+            imu_data = self.normalize(imu_data)
+
+            # Select only the desired channels (e.g., accelerometer channels)
+            imu_data = imu_data[:, self.selected_channels]
+
+            num_samples = len(labels)
+
+            # Create sequence segments with specified stride
+            for i in range(0, num_samples - sequence_length + 1, self.stride):
+                imu_segment = imu_data[i : i + sequence_length]
+                label_segment = labels[i : i + sequence_length]
+                self.data.append(imu_segment)
+                self.labels.append(label_segment)
+                self.subject_indices.append(subject_idx)
+
+            # For samples that do not fill a complete segment, pad with zeros.
+            remainder = (num_samples - sequence_length) % self.stride
+            if remainder > 0 and num_samples >= sequence_length:
+                start = num_samples - remainder
+                imu_segment = imu_data[start:]
+                label_segment = labels[start:]
+                pad_length = sequence_length - imu_segment.shape[0]
+
+                imu_segment_padded = np.pad(
+                    imu_segment,
+                    pad_width=((0, pad_length), (0, 0)),
+                    mode="constant",
+                    constant_values=0,
+                )
+                label_segment_padded = np.pad(
+                    label_segment,
+                    pad_width=(0, pad_length),
+                    mode="constant",
+                    constant_values=0,
+                )
+
+                self.data.append(imu_segment_padded)
+                self.labels.append(label_segment_padded)
+                self.subject_indices.append(subject_idx)
+
+    def downsample(self, data, factor, apply_antialias=True):
+        if apply_antialias:
+            nyquist = 0.5 * data.shape[0]
+            cutoff = (0.5 / factor) * nyquist
+            b, a = signal.butter(4, cutoff / nyquist, btype="low", analog=False)
+            data = signal.filtfilt(b, a, data, axis=0)
+        return data[::factor, :]
+
+    def normalize(self, data):
+        mean = np.mean(data, axis=0, keepdims=True)
+        std = np.std(data, axis=0, keepdims=True)
+        return (data - mean) / (std + 1e-5)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
         x = torch.tensor(self.data[idx], dtype=torch.float32)
         y = torch.tensor(self.labels[idx], dtype=torch.float32)
         return x, y

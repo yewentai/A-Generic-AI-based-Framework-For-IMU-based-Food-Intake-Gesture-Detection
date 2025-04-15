@@ -2,10 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Fine-Tuned Classifier Validation Script (Fixed)
+IMU Fine-Tuned Classifier Validation Script
 -------------------------------------------------------------------------------
-Correctly recreates the exact model architecture used during fine-tuning
-to ensure proper loading of the saved state dictionary.
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Last Edited : 2025-04-10
+Description : Recreates the exact model architecture used during fine-tuning
+              to ensure proper loading of the saved state dictionary and
+              performs validation on the test dataset.
 ===============================================================================
 """
 
@@ -20,7 +24,7 @@ from tqdm import tqdm
 from sklearn.metrics import classification_report, confusion_matrix
 
 from components.datasets import IMUDatasetN21
-from components.model_resnet import Resnet, load_weights
+from components.model_resnet import Resnet
 
 
 # ------------------------------------------------------------------------------
@@ -110,7 +114,7 @@ def main():
     sequence_length = config.get("sequence_length", 300)
 
     # Create dataset with the correct sequence length
-    dataset = IMUDatasetN21(X, Y, sequence_length=sequence_length, selected_channels=[0, 1, 2])
+    dataset = IMUDatasetN21(X, Y, sequence_length=sequence_length, stride=1, selected_channels=[0, 1, 2])
     dataloader = DataLoader(dataset, batch_size=test_batch_size, shuffle=False, num_workers=4)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
