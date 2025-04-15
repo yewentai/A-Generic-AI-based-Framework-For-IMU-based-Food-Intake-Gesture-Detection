@@ -1,0 +1,13 @@
+SLURM_JOB_ID: 64338626
+SLURM_JOB_USER: vsc37097
+SLURM_JOB_ACCOUNT: lp-emedia
+SLURM_JOB_NAME: slurm_h100_2.sh
+SLURM_CLUSTER_NAME: wice
+SLURM_JOB_PARTITION: gpu_h100
+SLURM_NNODES: 1
+SLURM_NODELIST: s16g12
+SLURM_JOB_CPUS_PER_NODE: 16
+SLURM_JOB_GPUS: 0,1
+Date: Tue Apr 15 15:37:59 CEST 2025
+Walltime: 00-03:00:00
+========================================================================
