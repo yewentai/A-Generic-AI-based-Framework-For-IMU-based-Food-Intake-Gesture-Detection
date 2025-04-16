@@ -36,7 +36,7 @@ from components.pre_processing import hand_mirroring, planar_rotation
 NUM_WORKERS = 4
 THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
-SAVE_LOG = False
+SAVE_LOG = True
 
 
 if __name__ == "__main__":
@@ -62,7 +62,6 @@ if __name__ == "__main__":
         logger.addHandler(stream_handler)
 
         # Optionally add file handler
-        SAVE_LOG = False  # <-- set to True to enable file logging
         if SAVE_LOG:
             log_file = os.path.join(result_dir, "validation.log")
             file_handler = logging.FileHandler(log_file, mode="w")
@@ -122,14 +121,6 @@ if __name__ == "__main__":
         elif right_only and not left_only:
             validation_modes.append({"name": "original_right", "X": X_R, "Y": Y_R})
         else:
-            validation_modes.extend(
-                [
-                    {"name": "original_left", "X": X_L, "Y": Y_L},
-                    {"name": "original_right", "X": X_R, "Y": Y_R},
-                ]
-            )
-
-        if mirror_enabled:
             X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
             validation_modes.append(
                 {
@@ -137,6 +128,14 @@ if __name__ == "__main__":
                     "X": np.concatenate((X_L_mirrored, X_R), axis=0),
                     "Y": np.concatenate((Y_L, Y_R), axis=0),
                 }
+            )
+
+        if mirror_enabled:
+            validation_modes.extend(
+                [
+                    {"name": "original_left", "X": X_L, "Y": Y_L},
+                    {"name": "original_right", "X": X_R, "Y": Y_R},
+                ]
             )
 
         if rotation_enabled:
