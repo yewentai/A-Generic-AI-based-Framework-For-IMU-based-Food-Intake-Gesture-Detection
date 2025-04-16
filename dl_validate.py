@@ -31,6 +31,7 @@ from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
 from components.pre_processing import hand_mirroring, planar_rotation
+from components.utils import convert_for_matlab
 
 # --- Configurations ---
 NUM_WORKERS = 4
@@ -41,8 +42,8 @@ SAVE_LOG = True
 
 if __name__ == "__main__":
     result_root = "result"
-    # versions = ["202504102241"]  # Uncomment to manually specify versions
-    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    versions = ["202504151704"]  # Uncomment to manually specify versions
+    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
@@ -291,20 +292,9 @@ if __name__ == "__main__":
         logger.info(f"\nAll validation statistics saved to {stats_file_npy} and {stats_file_json}")
 
         # Save as .mat
-        # Convert to savemat-friendly structure (recursively handle dicts/lists)
         matlab_stats = {}
         for mode, stats in all_stats.items():
-            matlab_stats[mode] = np.array(
-                [
-                    {
-                        "fold": s["fold"],
-                        "metrics_sample": s["metrics_sample"],
-                        "metrics_segment": s["metrics_segment"],
-                        "label_distribution": s["label_distribution"],
-                    }
-                    for s in stats
-                ]
-            )
+            matlab_stats[mode] = convert_for_matlab(stats)
 
-        savemat(stats_file_mat, {"validation_stats": matlab_stats})
+        savemat(stats_file_mat, matlab_stats)
         logger.info(f"Validation statistics also saved to {stats_file_mat}")
