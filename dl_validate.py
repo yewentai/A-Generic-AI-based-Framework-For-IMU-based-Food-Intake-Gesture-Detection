@@ -22,6 +22,7 @@ import torch.nn.functional as F
 import logging
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
+from scipy.io import savemat
 
 from components.model_mstcn import MSTCN
 from components.model_tcn import TCN
@@ -35,6 +36,7 @@ from components.pre_processing import hand_mirroring, planar_rotation
 NUM_WORKERS = 4
 THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
+SAVE_LOG = False
 
 
 if __name__ == "__main__":
@@ -48,23 +50,24 @@ if __name__ == "__main__":
         os.makedirs(result_dir, exist_ok=True)
 
         # Set up logging
-        log_file = os.path.join(result_dir, "validation.log")
         logger = logging.getLogger(f"validation_{version}")
         logger.setLevel(logging.INFO)
 
-        # Remove existing handlers if any (to avoid duplicate logs)
         if logger.hasHandlers():
             logger.handlers.clear()
 
-        # Add file handler and stream handler
-        file_handler = logging.FileHandler(log_file, mode="w")
-        file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-
+        # Always add stream handler (console)
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-
-        logger.addHandler(file_handler)
         logger.addHandler(stream_handler)
+
+        # Optionally add file handler
+        SAVE_LOG = False  # <-- set to True to enable file logging
+        if SAVE_LOG:
+            log_file = os.path.join(result_dir, "validation.log")
+            file_handler = logging.FileHandler(log_file, mode="w")
+            file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+            logger.addHandler(file_handler)
 
         logger.info(f"\n=== Validating Version: {version} ===")
 
@@ -84,6 +87,8 @@ if __name__ == "__main__":
             "dataset_mirroring", False
         )
         rotation_enabled = config_info.get("augmentation_planar_rotation", False)
+        left_only = config_info.get("left_only", False)
+        right_only = config_info.get("right_only", False)
 
         if validate_folds is None:
             logger.error("No 'validate_folds' found in the configuration file.")
@@ -109,10 +114,20 @@ if __name__ == "__main__":
         Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
 
         # Prepare validation modes based on config
-        validation_modes = [
-            {"name": "original_left", "X": X_L, "Y": Y_L},
-            {"name": "original_right", "X": X_R, "Y": Y_R},
-        ]
+        validation_modes = []
+
+        # Determine base validation modes
+        if left_only and not right_only:
+            validation_modes.append({"name": "original_left", "X": X_L, "Y": Y_L})
+        elif right_only and not left_only:
+            validation_modes.append({"name": "original_right", "X": X_R, "Y": Y_R})
+        else:
+            validation_modes.extend(
+                [
+                    {"name": "original_left", "X": X_L, "Y": Y_L},
+                    {"name": "original_right", "X": X_R, "Y": Y_R},
+                ]
+            )
 
         if mirror_enabled:
             X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
@@ -133,23 +148,14 @@ if __name__ == "__main__":
                 X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
                 X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
 
-            if mirror_enabled:
-                X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
-                validation_modes.append(
-                    {
-                        "name": "rotated_mirrored_left_original_right",
-                        "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
-                        "Y": np.concatenate((Y_L, Y_R), axis=0),
-                    }
-                )
-            else:
-                validation_modes.append(
-                    {
-                        "name": "rotated_left_right",
-                        "X": np.concatenate((X_L_rotated, X_R_rotated), axis=0),
-                        "Y": np.concatenate((Y_L, Y_R), axis=0),
-                    }
-                )
+            X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
+            validation_modes.append(
+                {
+                    "name": "rotated_mirrored_left_original_right",
+                    "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
+                    "Y": np.concatenate((Y_L, Y_R), axis=0),
+                }
+            )
 
         all_stats = {}
 
@@ -278,7 +284,28 @@ if __name__ == "__main__":
         # Save all statistics
         stats_file_npy = os.path.join(result_dir, "validation_stats.npy")
         stats_file_json = os.path.join(result_dir, "validation_stats.json")
+        stats_file_mat = os.path.join(result_dir, "validation_stats.mat")
+
         np.save(stats_file_npy, all_stats)
         with open(stats_file_json, "w") as f_json:
             json.dump(all_stats, f_json, indent=4)
         logger.info(f"\nAll validation statistics saved to {stats_file_npy} and {stats_file_json}")
+
+        # Save as .mat
+        # Convert to savemat-friendly structure (recursively handle dicts/lists)
+        matlab_stats = {}
+        for mode, stats in all_stats.items():
+            matlab_stats[mode] = np.array(
+                [
+                    {
+                        "fold": s["fold"],
+                        "metrics_sample": s["metrics_sample"],
+                        "metrics_segment": s["metrics_segment"],
+                        "label_distribution": s["label_distribution"],
+                    }
+                    for s in stats
+                ]
+            )
+
+        savemat(stats_file_mat, {"validation_stats": matlab_stats})
+        logger.info(f"Validation statistics also saved to {stats_file_mat}")

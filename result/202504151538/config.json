@@ -14,6 +14,7 @@
     "augmentation_planar_rotation": false,
     "augmentation_spatial_orientation": false,
     "dataset_mirroring": false,
+    "right_only": true,
     "validate_folds": [
         [
             1,

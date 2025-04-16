@@ -14,40 +14,44 @@ Description : This script recursively converts .npy training result files into
 ===============================================================================
 """
 
-
 import os
 import numpy as np
 import scipy.io as sio
 
 
-def convert_list_of_dicts_to_struct_array(data_list):
-    keys = data_list[0].keys()
-    mat_struct = {}
-    for key in keys:
-        mat_struct[key] = [d[key] for d in data_list]
-    return mat_struct
+def convert_list_of_dicts_to_struct_array(list_of_dicts):
+    """Convert a list of dicts to a NumPy structured array that MATLAB can understand."""
+    keys = list_of_dicts[0].keys()
+    structured_data = {k: [d[k] for d in list_of_dicts] for k in keys}
+    return structured_data
 
 
-def convert_npy_to_mat(root_dir):
-    for dirpath, _, filenames in os.walk(root_dir):
-        for filename in filenames:
-            if filename.endswith(".npy"):
-                npy_path = os.path.join(dirpath, filename)
-                mat_path = os.path.join(dirpath, filename.replace(".npy", ".mat"))
+def convert_npy_to_mat(filepath):
+    try:
+        data = np.load(filepath, allow_pickle=True)
 
-                print(f"Converting: {npy_path} -> {mat_path}")
+        if isinstance(data, np.ndarray) and data.dtype == object:
+            # Might be a list of dicts
+            data_list = data.tolist()
+            if isinstance(data_list, list) and isinstance(data_list[0], dict):
+                mat_data = convert_list_of_dicts_to_struct_array(data_list)
+            else:
+                mat_data = {"data": data}
+        else:
+            mat_data = {"data": data}
 
-                try:
-                    data = np.load(npy_path, allow_pickle=True)
+        mat_filepath = filepath.replace(".npy", ".mat")
+        sio.savemat(mat_filepath, mat_data)
+        print(f"Converted: {filepath} -> {mat_filepath}")
+    except Exception as e:
+        print(f"Failed to convert {filepath}: {e}")
 
-                    # Handle list of dicts
-                    if isinstance(data, np.ndarray) and isinstance(data[0], dict):
-                        struct_array = convert_list_of_dicts_to_struct_array(data)
-                        sio.savemat(mat_path, {"data": struct_array})
-                    else:
-                        sio.savemat(mat_path, {"data": data})
-                except Exception as e:
-                    print(f"Failed to convert {npy_path}: {e}")
+
+def convert_all_npys_to_mat(root_dir):
+    for root, _, files in os.walk(root_dir):
+        for file in files:
+            if file.endswith(".npy"):
+                convert_npy_to_mat(os.path.join(root, file))
 
 
 result_root = "result"
@@ -57,4 +61,4 @@ versions.sort()
 
 for version in versions:
     result_dir = os.path.join("result", version)
-    convert_npy_to_mat(result_dir)
+    convert_all_npys_to_mat(result_dir)

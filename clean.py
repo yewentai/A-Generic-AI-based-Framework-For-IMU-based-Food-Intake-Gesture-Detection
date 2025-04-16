@@ -44,17 +44,13 @@ def remove_empty_subdirs(root):
 
 def remove_specified_files(root):
     """
-    Traverse the directory tree under `root` and remove the specific files.
+    Traverse the directory tree under `root` and remove all .mat, .npy, and .json files
+    except 'config.json' and 'train_stats.npy'.
     """
     for dirpath, dirnames, filenames in os.walk(root):
         # Check if the specified files exist and delete them
         for filename in filenames:
-            if filename in [
-                "validate_stats.npy",
-                "validate_stats.json",
-                "validation_mirroring.json",
-                "validation_rotation.json",
-            ]:
+            if filename.endswith((".mat", ".npy", ".json")) and filename not in ["config.json", "train_stats.npy"]:
                 file_path = os.path.join(dirpath, filename)
                 try:
                     os.remove(file_path)
@@ -96,9 +92,9 @@ def main():
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
-            remove_empty_subdirs(parent)
+            # remove_empty_subdirs(parent)
             remove_specified_files(parent)
-            rename_files(parent)
+            # rename_files(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
 
