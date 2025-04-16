@@ -20,7 +20,6 @@ import seaborn as sns
 from dl_validate import THRESHOLD_LIST
 
 # --- Configurations ---
-PLOT_LOSS_CURVE = False  # Toggle for plotting training loss curves
 COLOR_PALETTE = sns.color_palette("husl", len(THRESHOLD_LIST) + 1)  # Color palette for plots
 
 # Define validation file priority order
@@ -71,57 +70,6 @@ if __name__ == "__main__":
                 analysis_type = "Rotation"
             else:
                 analysis_type = "Standard"
-
-            # ======================================================================
-            #                    TRAINING LOSS CURVE: ONE PLOT PER FOLD
-            # ======================================================================
-            if PLOT_LOSS_CURVE:
-                loss_curve_plot_dir = os.path.join(result_dir, "loss_curve")
-                os.makedirs(loss_curve_plot_dir, exist_ok=True)
-
-                # Find corresponding training stats file
-                train_file = validation_file.replace("validate", "train")
-                train_stats_file = os.path.join(result_dir, train_file)
-
-                if os.path.exists(train_stats_file):
-                    train_stats = np.load(train_stats_file, allow_pickle=True).tolist()
-                    folds = sorted(set(entry["fold"] for entry in train_stats))
-
-                    for fold in folds:
-                        stats_fold = [entry for entry in train_stats if entry["fold"] == fold]
-                        epochs = sorted(set(entry["epoch"] for entry in stats_fold))
-
-                        loss_per_epoch = {epoch: [] for epoch in epochs}
-                        loss_ce_per_epoch = {epoch: [] for epoch in epochs}
-                        loss_mse_per_epoch = {epoch: [] for epoch in epochs}
-
-                        for entry in stats_fold:
-                            epoch = entry["epoch"]
-                            loss_per_epoch[epoch].append(entry["train_loss"])
-                            loss_ce_per_epoch[epoch].append(entry["train_loss_ce"])
-                            loss_mse_per_epoch[epoch].append(entry["train_loss_mse"])
-
-                        mean_loss = [np.mean(loss_per_epoch[e]) for e in epochs]
-                        mean_ce = [np.mean(loss_ce_per_epoch[e]) for e in epochs]
-                        mean_mse = [np.mean(loss_mse_per_epoch[e]) for e in epochs]
-
-                        plt.figure(figsize=(10, 6))
-                        plt.plot(epochs, mean_loss, label="Total Loss", color="blue")
-                        plt.plot(epochs, mean_ce, label="Cross Entropy Loss", linestyle="--", color="red")
-                        plt.plot(epochs, mean_mse, label="MSE Loss", linestyle=":", color="green")
-                        plt.yscale("log")
-
-                        plt.title(f"Training Loss Over Epochs (Fold {fold}) - {analysis_type}")
-                        plt.xlabel("Epoch")
-                        plt.ylabel("Loss (Log Scale)")
-                        plt.grid(True, which="both", linestyle="--", alpha=0.6)
-                        plt.legend()
-                        plt.tight_layout()
-                        plt.savefig(
-                            os.path.join(loss_curve_plot_dir, f"train_loss_fold{fold}_{analysis_type.lower()}.png"),
-                            dpi=300,
-                        )
-                        plt.close()
 
             # ==================================================================
             #                      CROSS-MODE COMPARISON ANALYSIS

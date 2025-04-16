@@ -1,0 +1,8 @@
+2025-04-16 15:20:55,915 | INFO | 
+=== Validating Right Hand Version: 202504151538_RIGHT ===
+2025-04-16 15:20:56,198 | INFO | 
+Using device: cuda
+2025-04-16 15:20:58,690 | INFO | 
+--- Validating original_right ---
+2025-04-16 15:21:53,476 | INFO | 
+Right hand validation statistics saved to result/202504151538_RIGHT/validation_right_stats.npy and result/202504151538_RIGHT/validation_right_stats.json
