@@ -50,7 +50,10 @@ def remove_specified_files(root):
     for dirpath, dirnames, filenames in os.walk(root):
         # Check if the specified files exist and delete them
         for filename in filenames:
-            if filename.endswith((".mat", ".npy", ".json")) and filename not in ["config.json", "train_stats.npy"]:
+            if filename.endswith((".mat", ".npy", ".json", ".log")) and filename not in [
+                "config.json",
+                "train_stats.npy",
+            ]:
                 file_path = os.path.join(dirpath, filename)
                 try:
                     os.remove(file_path)

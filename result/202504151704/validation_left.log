@@ -1,8 +1,0 @@
-2025-04-16 15:19:41,505 | INFO | 
-=== Validating Left Hand Version: 202504151704_LEFT ===
-2025-04-16 15:19:41,702 | INFO | 
-Using device: cuda
-2025-04-16 15:19:44,198 | INFO | 
---- Validating original_left ---
-2025-04-16 15:20:36,727 | INFO | 
-Left hand validation statistics saved to result/202504151704_LEFT/validation_left_stats.npy and result/202504151704_LEFT/validation_left_stats.json
