@@ -13,7 +13,6 @@ Description : This script recursively traverses specified directories to find an
 """
 
 import os
-import shutil
 
 
 def remove_empty_subdirs(root):
