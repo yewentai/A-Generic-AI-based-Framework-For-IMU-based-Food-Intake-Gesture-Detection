@@ -298,4 +298,5 @@ if __name__ == "__main__":
         matlab_stats = {}
         for mode, stats in all_stats.items():
             matlab_stats[mode] = convert_for_matlab(stats)
-        logger.info(f"\nAll validation statistics saved to {stats_file_npy}, {stats_file_json}, and {stats_file_mat}")
+        savemat(stats_file_mat, {f"{version}": matlab_stats})
+        logger.info(f"\nAll validation statistics saved to {stats_file_npy}, {stats_file_json}, {stats_file_mat}")

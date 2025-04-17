@@ -229,92 +229,64 @@ class IMUDatasetN21(Dataset):
         return x, y
 
 
-class IMUDatasetN21(Dataset):
-    def __init__(
-        self,
-        X,
-        Y,
-        sequence_length=128,
-        stride=None,
-        downsample_factor=4,
-        apply_antialias=True,
-        selected_channels=[0, 1, 2],
-    ):
+class IMUDatasetSegment(Dataset):
+    def __init__(self, X, Y, downsample_factor=1, apply_antialias=True, min_length=5):
         """
-        Initialize the IMUDataset.
+        Dataset that splits IMU data into variable-length segments where the class label is constant.
 
         Parameters:
-            X (list of np.ndarray): IMU data for each subject, each array has shape (N, 6)
-            Y (list of np.ndarray): Label arrays for each subject, each array has shape (N,)
-            sequence_length (int): Length of each sequence segment.
-            stride (int): Step size for the sliding window. Defaults to sequence_length (non-overlapping).
-            downsample_factor (int): Downsampling factor.
+            X (list of np.ndarray): IMU data for each subject, each of shape (N, 6)
+            Y (list of np.ndarray): Label arrays for each subject, each of shape (N,)
+            downsample_factor (int): Downsampling factor (default 1 = no downsampling)
             apply_antialias (bool): Whether to apply anti-aliasing filter before downsampling.
-            selected_channels (list): Indices of channels to select from the 6 available.
+            min_length (int): Minimum segment length to keep.
         """
         self.data = []
         self.labels = []
-        self.sequence_length = sequence_length
-        self.stride = stride if stride is not None else sequence_length
         self.subject_indices = []
-        self.downsample_factor = downsample_factor
-        self.selected_channels = selected_channels
 
-        if downsample_factor < 1:
-            raise ValueError("downsample_factor must be >= 1.")
-
-        for subject_idx, (imu_data, labels) in enumerate(zip(X, Y)):
-            # Downsample data if needed
+        for subject_idx, (imu_data, label_seq) in enumerate(zip(X, Y)):
             if downsample_factor > 1:
                 imu_data = self.downsample(imu_data, downsample_factor, apply_antialias)
-                labels = labels[::downsample_factor]
+                label_seq = label_seq[::downsample_factor]
 
-            # Normalize the IMU data (z-score normalization)
             imu_data = self.normalize(imu_data)
+            segments = self.segment_by_class(imu_data, label_seq, min_length)
 
-            # Select only the desired channels (e.g., accelerometer channels)
-            imu_data = imu_data[:, self.selected_channels]
-
-            num_samples = len(labels)
-
-            # Create sequence segments with specified stride
-            for i in range(0, num_samples - sequence_length + 1, self.stride):
-                imu_segment = imu_data[i : i + sequence_length]
-                label_segment = labels[i : i + sequence_length]
+            for imu_segment, label in segments:
                 self.data.append(imu_segment)
-                self.labels.append(label_segment)
+                self.labels.append(label)
                 self.subject_indices.append(subject_idx)
 
-            # For samples that do not fill a complete segment, pad with zeros.
-            remainder = (num_samples - sequence_length) % self.stride
-            if remainder > 0 and num_samples >= sequence_length:
-                start = num_samples - remainder
-                imu_segment = imu_data[start:]
-                label_segment = labels[start:]
-                pad_length = sequence_length - imu_segment.shape[0]
+    def segment_by_class(self, imu_data, label_seq, min_length):
+        """
+        Cut sequences into segments where label is constant.
 
-                imu_segment_padded = np.pad(
-                    imu_segment,
-                    pad_width=((0, pad_length), (0, 0)),
-                    mode="constant",
-                    constant_values=0,
-                )
-                label_segment_padded = np.pad(
-                    label_segment,
-                    pad_width=(0, pad_length),
-                    mode="constant",
-                    constant_values=0,
-                )
+        Returns:
+            List of tuples: [(imu_segment, label), ...]
+        """
+        segments = []
+        current_label = label_seq[0]
+        start = 0
 
-                self.data.append(imu_segment_padded)
-                self.labels.append(label_segment_padded)
-                self.subject_indices.append(subject_idx)
+        for i in range(1, len(label_seq)):
+            if label_seq[i] != current_label:
+                if i - start >= min_length:
+                    segments.append((imu_data[start:i], current_label))
+                start = i
+                current_label = label_seq[i]
+
+        # Add last segment
+        if len(label_seq) - start >= min_length:
+            segments.append((imu_data[start:], current_label))
+
+        return segments
 
     def downsample(self, data, factor, apply_antialias=True):
         if apply_antialias:
             nyquist = 0.5 * data.shape[0]
             cutoff = (0.5 / factor) * nyquist
-            b, a = signal.butter(4, cutoff / nyquist, btype="low", analog=False)
+            b, a = signal.butter(4, cutoff / nyquist, btype="low")
             data = signal.filtfilt(b, a, data, axis=0)
         return data[::factor, :]
 
@@ -327,9 +299,9 @@ class IMUDatasetN21(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        x = torch.tensor(self.data[idx], dtype=torch.float32)
-        y = torch.tensor(self.labels[idx], dtype=torch.float32)
-        return x, y
+        imu = torch.tensor(self.data[idx], dtype=torch.float32)  # Shape: (T, 6)
+        label = torch.tensor(self.labels[idx], dtype=torch.long)  # Single class label
+        return imu, label
 
 
 def create_balanced_subject_folds(dataset, num_folds=7):

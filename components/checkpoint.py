@@ -69,3 +69,45 @@ def load_checkpoint(model, optimizer, checkpoint_path):
 
     print(f"Loaded checkpoint from fold {fold}, epoch {epoch} with F1 score: {f1_score:.4f}")
     return model, optimizer, epoch, f1_score
+
+
+def save_generator(generator, optimizer_G, epoch, save_dir):
+    """
+    Save the generator model and optimizer state.
+
+    Args:
+        generator (nn.Module): The generator model.
+        optimizer_G (torch.optim.Optimizer): Optimizer for the generator.
+        epoch (int): Current epoch number.
+        save_dir (str): Directory to save the checkpoint.
+    """
+    gen_path = os.path.join(save_dir, f"generator_epoch_{epoch+1}.pth")
+    torch.save(
+        {
+            "epoch": epoch + 1,
+            "model_state_dict": generator.state_dict(),
+            "optimizer_state_dict": optimizer_G.state_dict(),
+        },
+        gen_path,
+    )
+
+
+def save_discriminator(discriminator, optimizer_D, epoch, save_dir):
+    """
+    Save the discriminator model and optimizer state.
+
+    Args:
+        discriminator (nn.Module): The discriminator model.
+        optimizer_D (torch.optim.Optimizer): Optimizer for the discriminator.
+        epoch (int): Current epoch number.
+        save_dir (str): Directory to save the checkpoint.
+    """
+    disc_path = os.path.join(save_dir, f"discriminator_epoch_{epoch+1}.pth")
+    torch.save(
+        {
+            "epoch": epoch + 1,
+            "model_state_dict": discriminator.state_dict(),
+            "optimizer_state_dict": optimizer_D.state_dict(),
+        },
+        disc_path,
+    )

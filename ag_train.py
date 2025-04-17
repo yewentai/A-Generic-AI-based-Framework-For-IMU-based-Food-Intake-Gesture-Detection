@@ -20,158 +20,264 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
+import torch.distributed as dist
+from torch.utils.data import DataLoader
 from datetime import datetime
-import argparse
-import logging
 from tqdm import tqdm
+import logging
+import argparse
+
+from components.datasets import IMUDatasetSegment
+from components.checkpoint import save_generator, save_discriminator
+from components.model_gan import Generator, Discriminator
 
 # ==============================================================================================
 #                             Configuration Parameters
 # ==============================================================================================
 
-logging.basicConfig(format="[%(asctime)s] %(levelname)s: %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S")
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)s: %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
+# Dataset Settings
 DATASET = "FDI"
-DATA_DIR = f"./dataset/{DATASET}"
-BATCH_SIZE = 32
-SEQ_LEN = 60
+SAMPLING_FREQ_ORIGINAL = 64
+DOWNSAMPLE_FACTOR = 4
+SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+if DATASET.startswith("DX"):
+    NUM_CLASSES = 2
+    sub_version = DATASET.replace("DX", "").upper() or "I"
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
+elif DATASET.startswith("FD"):
+    NUM_CLASSES = 3
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
+
+# Dataloader Settings
+WINDOW_LENGTH = 60
+WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+BATCH_SIZE = 64
+NUM_WORKERS = 16
 INPUT_DIM = 6
-NUM_CLASSES = 3
-NOISE_DIM = 100
-EPOCHS = 100
-LEARNING_RATE = 1e-4
-LAMBDA_GP = 10
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+LATENT_DIM = 100
+LAMBDA_COEF = 0.15
+
+# Training Settings
+LEARNING_RATE = 5e-4
+NUM_EPOCHS = 100
 
 # ==============================================================================================
-#                             Dataset Loader
+#                            Custom Collate Function
 # ==============================================================================================
 
 
-class IMUGANDataset(Dataset):
-    def __init__(self, X, Y):
-        self.X = X
-        self.Y = Y
+def fixed_length_collate(batch, target_len=240):
+    """
+    Collate function that ensures all sequences have the same predefined length
+    by either truncating or padding.
 
-    def __len__(self):
-        return len(self.X)
+    Args:
+        batch: List of (data, label) tuples
+        target_len: Target sequence length
 
-    def __getitem__(self, idx):
-        return torch.tensor(self.X[idx], dtype=torch.float32), torch.tensor(self.Y[idx], dtype=torch.long)
+    Returns:
+        Batched tensors with fixed length
+    """
+    data = [item[0] for item in batch]  # Get all IMU sequences
+    labels = [item[1] for item in batch]  # Get all labels
+
+    # Truncate or pad each sequence to target_len
+    processed_data = []
+    for d in data:
+        curr_len = d.size(0)
+        if curr_len > target_len:
+            # Truncate to target_len
+            processed_d = d[:target_len]
+        elif curr_len < target_len:
+            # Pad to target_len
+            padding = torch.zeros((target_len - curr_len, d.size(1)), dtype=d.dtype)
+            processed_d = torch.cat([d, padding], dim=0)
+        else:
+            processed_d = d
+        processed_data.append(processed_d)
+
+    # Stack into batch tensors
+    data_batch = torch.stack(processed_data)
+    labels_batch = torch.stack(labels)
+
+    return data_batch, labels_batch
 
 
+# ==============================================================================================
+#                            Main Training Code (Inline)
+# ==============================================================================================
+
+parser = argparse.ArgumentParser(description="Event-based GAN IMU Training Script (Combined Mode)")
+parser.add_argument("--distributed", action="store_true", help="Run in distributed mode")
+args = parser.parse_args()
+
+if args.distributed:
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
+    torch.cuda.set_device(local_rank)
+    device = torch.device("cuda", local_rank)
+else:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    local_rank = 0
+
+if local_rank == 0:
+    logger.info(f"[Rank {local_rank}] Using device: {device}")
+    overall_start = datetime.now()
+    logger.info(f"Training started at: {overall_start}")
+    version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+    result_dir = os.path.join("result", version_prefix)
+    os.makedirs(result_dir, exist_ok=True)
+    checkpoint_dir = os.path.join(result_dir, "checkpoint")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    training_stats_file = os.path.join(result_dir, "train_stats.npy")
+    config_path = os.path.join(result_dir, "config.json")
+else:
+    checkpoint_dir = None
+    training_stats_file = None
+    config_path = None
+
+# Save config to JSON
+if local_rank == 0:
+    config_dict = {
+        "DATASET": DATASET,
+        "SAMPLING_FREQ": SAMPLING_FREQ,
+        "WINDOW_LENGTH": WINDOW_LENGTH,
+        "BATCH_SIZE": BATCH_SIZE,
+        "NUM_EPOCHS": NUM_EPOCHS,
+        "LEARNING_RATE": LEARNING_RATE,
+        "LATENT_DIM": LATENT_DIM,
+        "INPUT_DIM": INPUT_DIM,
+        "LAMBDA_COEF": LAMBDA_COEF,
+        "DOWNSAMPLE_FACTOR": DOWNSAMPLE_FACTOR,
+    }
+    with open(config_path, "w") as f:
+        json.dump(config_dict, f, indent=4)
+
+# Load data
 with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
     X_L = np.array(pickle.load(f), dtype=object)
 with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
     Y_L = np.array(pickle.load(f), dtype=object)
+with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
 
-X = np.concatenate(X_L, axis=0)
-Y = np.concatenate(Y_L, axis=0)
-dataset = IMUGANDataset(X, Y)
-data_loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+X = np.concatenate([X_L, X_R], axis=0)
+Y = np.concatenate([Y_L, Y_R], axis=0)
 
-# ==============================================================================================
-#                             GAN Model Definitions
-# ==============================================================================================
+dataset = IMUDatasetSegment(X, Y, downsample_factor=DOWNSAMPLE_FACTOR)
 
+# Use the custom collate function to handle variable-length segments
+dataloader = DataLoader(
+    dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    num_workers=NUM_WORKERS,
+    pin_memory=True,
+    collate_fn=fixed_length_collate,  # Add this line to use the custom collate function
+)
 
-class Generator(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.net = nn.Sequential(nn.Linear(NOISE_DIM, 256), nn.ReLU(), nn.Linear(256, SEQ_LEN * INPUT_DIM), nn.Tanh())
+# Define models
+generator = Generator(latent_dim=LATENT_DIM, output_channels=INPUT_DIM).to(device)
+discriminator = Discriminator(input_channels=INPUT_DIM).to(device)  # Make sure to match INPUT_DIM
 
-    def forward(self, z):
-        return self.net(z).view(-1, SEQ_LEN, INPUT_DIM)
+# Loss and optimizers
+criterion = nn.BCELoss()
+optimizer_G = optim.Adam(generator.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
+optimizer_D = optim.Adam(discriminator.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
 
+real_label = 0.9
+fake_label = 0.0
 
-class Discriminator(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Flatten(), nn.Linear(SEQ_LEN * INPUT_DIM, 256), nn.LeakyReLU(0.2), nn.Linear(256, 1)
-        )
+training_stats = []
 
-    def forward(self, x):
-        return self.net(x)
+for epoch in range(NUM_EPOCHS):
+    generator.train()
+    discriminator.train()
+    g_loss_total = 0.0
+    d_loss_total = 0.0
 
+    for i, (real_data, _) in enumerate(tqdm(dataloader, desc=f"Epoch {epoch+1}/{NUM_EPOCHS}")):
+        batch_size = real_data.size(0)
 
-# ==============================================================================================
-#                             Gradient Penalty (WGAN-GP)
-# ==============================================================================================
+        # Reshape data for 1D convolution: (batch, time, channels) -> (batch, channels, time)
+        real_data = real_data.permute(0, 2, 1).to(device)  # Shape: [B, 6, T]
+        real_data += 0.05 * torch.randn_like(real_data)
 
+        # Train Discriminator
+        discriminator.zero_grad()
+        label_real = torch.full((batch_size,), real_label, dtype=torch.float, device=device)
+        output_real = discriminator(real_data)
+        loss_real = criterion(output_real, label_real)
 
-def compute_gradient_penalty(D, real_samples, fake_samples):
-    alpha = torch.rand(real_samples.size(0), 1, 1).to(DEVICE)
-    interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
-    d_interpolates = D(interpolates)
-    fake = torch.ones(d_interpolates.size()).to(DEVICE)
-    gradients = torch.autograd.grad(
-        outputs=d_interpolates,
-        inputs=interpolates,
-        grad_outputs=fake,
-        create_graph=True,
-        retain_graph=True,
-        only_inputs=True,
-    )[0]
-    gradients = gradients.view(gradients.size(0), -1)
-    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-    return gradient_penalty
+        noise = torch.randn(batch_size, LATENT_DIM, device=device)
+        fake_data = generator(noise)
+        label_fake = torch.full((batch_size,), fake_label, dtype=torch.float, device=device)
+        output_fake = discriminator(fake_data.detach())
+        loss_fake = criterion(output_fake, label_fake)
 
+        loss_D = loss_real + loss_fake
+        loss_D.backward()
+        optimizer_D.step()
 
-# ==============================================================================================
-#                             Training Loop
-# ==============================================================================================
+        # Train Generator
+        generator.zero_grad()
+        label_gen = torch.full((batch_size,), real_label, dtype=torch.float, device=device)
+        output_gen = discriminator(fake_data)
+        loss_G = criterion(output_gen, label_gen)
+        loss_G.backward()
+        optimizer_G.step()
 
+        g_loss_total += loss_G.item()
+        d_loss_total += loss_D.item()
 
-def train():
-    G = Generator().to(DEVICE)
-    D = Discriminator().to(DEVICE)
-    optimizer_G = optim.Adam(G.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.9))
-    optimizer_D = optim.Adam(D.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.9))
+    avg_d_loss = d_loss_total / len(dataloader)
+    avg_g_loss = g_loss_total / len(dataloader)
+    training_stats.append({"epoch": epoch + 1, "d_loss": avg_d_loss, "g_loss": avg_g_loss})
 
-    result_dir = os.path.join("result", datetime.now().strftime("%Y%m%d%H%M")[:12])
-    os.makedirs(result_dir, exist_ok=True)
-
-    for epoch in range(EPOCHS):
-        for i, (real_data, _) in enumerate(tqdm(data_loader, desc=f"Epoch {epoch+1}")):
-            real_data = real_data.to(DEVICE)
-            batch_size = real_data.size(0)
-
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
-            z = torch.randn(batch_size, NOISE_DIM).to(DEVICE)
-            fake_data = G(z).detach()
-            d_real = D(real_data).mean()
-            d_fake = D(fake_data).mean()
-            gp = compute_gradient_penalty(D, real_data, fake_data)
-            d_loss = -d_real + d_fake + LAMBDA_GP * gp
-
-            optimizer_D.zero_grad()
-            d_loss.backward()
-            optimizer_D.step()
-
-            # -----------------
-            #  Train Generator
-            # -----------------
-            if i % 5 == 0:
-                z = torch.randn(batch_size, NOISE_DIM).to(DEVICE)
-                gen_data = G(z)
-                g_loss = -D(gen_data).mean()
-                optimizer_G.zero_grad()
-                g_loss.backward()
-                optimizer_G.step()
-
-        logger.info(f"Epoch [{epoch+1}/{EPOCHS}] | D Loss: {d_loss.item():.4f} | G Loss: {g_loss.item():.4f}")
-
-        # Save model checkpoints
-        torch.save(G.state_dict(), os.path.join(result_dir, f"generator_epoch_{epoch+1}.pt"))
-        torch.save(D.state_dict(), os.path.join(result_dir, f"discriminator_epoch_{epoch+1}.pt"))
-
-    logger.info("Training completed.")
+    if local_rank == 0:
+        logger.info(f"[Epoch {epoch+1}/{NUM_EPOCHS}] " f"D Loss: {avg_d_loss:.4f} | " f"G Loss: {avg_g_loss:.4f}")
+        # Save the best generator based on G Loss
+        if epoch == 0 or avg_g_loss < min(training_stats, key=lambda x: x["g_loss"])["g_loss"]:
+            save_generator(generator, optimizer_G, epoch, checkpoint_dir)
+            logger.info(f"Best generator saved at epoch {epoch+1}")
 
 
-if __name__ == "__main__":
-    train()
+# Save training statistics
+if local_rank == 0:
+    np.save(training_stats_file, training_stats)
+
+    config_info = {
+        "dataset": DATASET,
+        "num_classes": NUM_CLASSES,
+        "sampling_freq": SAMPLING_FREQ,
+        "window_size": WINDOW_SIZE,
+        "input_dim": INPUT_DIM,
+        "learning_rate": LEARNING_RATE,
+        "batch_size": BATCH_SIZE,
+        "num_epochs": NUM_EPOCHS,
+        "latent_dim": LATENT_DIM,
+        "lambda_coef": LAMBDA_COEF,
+    }
+
+    config_file = os.path.join(result_dir, "config.json")
+    with open(config_file, "w") as f:
+        json.dump(config_info, f, indent=4)
+    logger.info(f"Configuration saved to {config_file}")
+
+if args.distributed:
+    dist.destroy_process_group()
