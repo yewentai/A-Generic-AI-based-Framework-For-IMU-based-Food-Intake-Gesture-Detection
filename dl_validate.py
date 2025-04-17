@@ -42,7 +42,7 @@ SAVE_LOG = True
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["202504151704"]  # Uncomment to manually specify versions
+    versions = ["202504151538", "202504151704"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -72,6 +72,9 @@ if __name__ == "__main__":
         logger.info(f"\n=== Validating Version: {version} ===")
 
         config_file = os.path.join(result_dir, "config.json")
+        if not os.path.exists(config_file):
+            logger.warning(f"Configuration file not found for version {version}, skipping...")
+            continue
         with open(config_file, "r") as f:
             config_info = json.load(f)
 
@@ -89,6 +92,9 @@ if __name__ == "__main__":
         rotation_enabled = config_info.get("augmentation_planar_rotation", False)
         left_only = config_info.get("left_only", False)
         right_only = config_info.get("right_only", False)
+        if version == "202503281533":
+            mirror_enabled = True
+            rotation_enabled = True
 
         if validate_folds is None:
             logger.error("No 'validate_folds' found in the configuration file.")
@@ -289,12 +295,7 @@ if __name__ == "__main__":
         np.save(stats_file_npy, all_stats)
         with open(stats_file_json, "w") as f_json:
             json.dump(all_stats, f_json, indent=4)
-        logger.info(f"\nAll validation statistics saved to {stats_file_npy} and {stats_file_json}")
-
-        # Save as .mat
         matlab_stats = {}
         for mode, stats in all_stats.items():
             matlab_stats[mode] = convert_for_matlab(stats)
-
-        savemat(stats_file_mat, matlab_stats)
-        logger.info(f"Validation statistics also saved to {stats_file_mat}")
+        logger.info(f"\nAll validation statistics saved to {stats_file_npy}, {stats_file_json}, and {stats_file_mat}")

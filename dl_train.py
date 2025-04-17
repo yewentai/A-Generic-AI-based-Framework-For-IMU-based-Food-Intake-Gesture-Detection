@@ -155,27 +155,27 @@ Y = np.concatenate([Y_L, Y_R], axis=0)
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 
 # Augment Dataset with FDIII (if using FDII/FDI)
-fdiii_dataset = None
-if DATASET in ["FDII", "FDI"]:
-    fdiii_dir = "./dataset/FD/FD-III"
-    with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
-        X_L_fdiii = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
-        Y_L_fdiii = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
-        X_R_fdiii = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
-        Y_R_fdiii = np.array(pickle.load(f), dtype=object)
-    if FLAG_DATASET_MIRROR:
-        X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
-    X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
-    Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-    fdiii_dataset = IMUDataset(
-        X_fdiii,
-        Y_fdiii,
-        sequence_length=WINDOW_SIZE,
-        downsample_factor=DOWNSAMPLE_FACTOR,
-    )
+# fdiii_dataset = None
+# if DATASET in ["FDII", "FDI"]:
+#     fdiii_dir = "./dataset/FD/FD-III"
+#     with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
+#         X_L_fdiii = np.array(pickle.load(f), dtype=object)
+#     with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
+#         Y_L_fdiii = np.array(pickle.load(f), dtype=object)
+#     with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
+#         X_R_fdiii = np.array(pickle.load(f), dtype=object)
+#     with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
+#         Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+#     if FLAG_DATASET_MIRROR:
+#         X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
+#     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
+#     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
+#     fdiii_dataset = IMUDataset(
+#         X_fdiii,
+#         Y_fdiii,
+#         sequence_length=WINDOW_SIZE,
+#         downsample_factor=DOWNSAMPLE_FACTOR,
+#     )
 
 # Create validation folds based on the dataset type
 if DATASET == "FDI":
@@ -188,11 +188,11 @@ loss_fn = {"TCN": TCN_Loss, "MSTCN": MSTCN_Loss, "CNN_LSTM": CNNLSTM_Loss}[MODEL
 
 for fold, validate_subjects in enumerate(validate_folds):
     train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
-    if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
-        base_train_dataset = Subset(full_dataset, train_indices)
-        train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset])
-    else:
-        train_dataset = Subset(full_dataset, train_indices)
+    # if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
+    #     base_train_dataset = Subset(full_dataset, train_indices)
+    #     train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset])
+    # else:
+    train_dataset = Subset(full_dataset, train_indices)
 
     train_sampler = (
         DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True)
