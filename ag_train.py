@@ -200,8 +200,35 @@ criterion = nn.BCELoss()
 optimizer_G = optim.Adam(generator.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
 optimizer_D = optim.Adam(discriminator.parameters(), lr=LEARNING_RATE, betas=(0.5, 0.999))
 
+# Label smoothing parameters
 real_label = 0.9
-fake_label = 0.0
+fake_label = 0.1  # Changed from 0.0 to 0.1 for better label smoothing
+lambda_gp = 10.0  # Gradient penalty coefficient
+
+
+def compute_gradient_penalty(discriminator, real_samples, fake_samples):
+    """Calculates the gradient penalty loss for WGAN-GP"""
+    batch_size = real_samples.size(0)
+    # Random weight term for interpolation between real and fake samples
+    alpha = torch.rand(batch_size, 1, 1, device=real_samples.device)
+    # Get random interpolation between real and fake samples
+    interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+    d_interpolates = discriminator(interpolates)
+    # Create a tensor of ones with the same shape as d_interpolates
+    fake = torch.ones_like(d_interpolates, device=real_samples.device, requires_grad=False)
+    # Get gradient w.r.t. interpolates
+    gradients = torch.autograd.grad(
+        outputs=d_interpolates,
+        inputs=interpolates,
+        grad_outputs=fake,
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True,
+    )[0]
+    gradients = gradients.view(gradients.size(0), -1)
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+    return gradient_penalty
+
 
 training_stats = []
 
@@ -220,17 +247,30 @@ for epoch in range(NUM_EPOCHS):
 
         # Train Discriminator
         discriminator.zero_grad()
+
+        # Real data loss
         label_real = torch.full((batch_size,), real_label, dtype=torch.float, device=device)
         output_real = discriminator(real_data)
+        # Ensure output is 1D
+        if len(output_real.shape) > 1:
+            output_real = output_real.mean(dim=1)  # Shape: [B]
         loss_real = criterion(output_real, label_real)
 
+        # Fake data loss
         noise = torch.randn(batch_size, LATENT_DIM, device=device)
         fake_data = generator(noise)
         label_fake = torch.full((batch_size,), fake_label, dtype=torch.float, device=device)
         output_fake = discriminator(fake_data.detach())
+        # Ensure output is 1D
+        if len(output_fake.shape) > 1:
+            output_fake = output_fake.mean(dim=1)  # Shape: [B]
         loss_fake = criterion(output_fake, label_fake)
 
-        loss_D = loss_real + loss_fake
+        # Gradient penalty
+        gradient_penalty = compute_gradient_penalty(discriminator, real_data.data, fake_data.data)
+
+        # Total discriminator loss
+        loss_D = loss_real + loss_fake + lambda_gp * gradient_penalty
         loss_D.backward()
         optimizer_D.step()
 
@@ -238,7 +278,17 @@ for epoch in range(NUM_EPOCHS):
         generator.zero_grad()
         label_gen = torch.full((batch_size,), real_label, dtype=torch.float, device=device)
         output_gen = discriminator(fake_data)
+        # Ensure output is 1D
+        if len(output_gen.shape) > 1:
+            output_gen = output_gen.mean(dim=1)  # Shape: [B]
+
+        # Generator loss with additional regularization
         loss_G = criterion(output_gen, label_gen)
+
+        # Add L1 regularization to encourage smoothness in generated sequences
+        l1_reg = torch.mean(torch.abs(fake_data[:, :, 1:] - fake_data[:, :, :-1]))
+        loss_G += 0.1 * l1_reg  # Small weight for L1 regularization
+
         loss_G.backward()
         optimizer_G.step()
 

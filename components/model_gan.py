@@ -80,8 +80,10 @@ class Discriminator(nn.Module):
             nn.Conv1d(256, 512, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm1d(512),
             nn.LeakyReLU(0.2, inplace=True),
-            # Layer 5 - Output layer
-            nn.Conv1d(512, 1, kernel_size=4, stride=1, padding=0),
+            # Global average pooling to get a single value per sample
+            nn.AdaptiveAvgPool1d(1),
+            # Final layer to get a single prediction
+            nn.Conv1d(512, 1, kernel_size=1),
             nn.Sigmoid(),
         )
 
