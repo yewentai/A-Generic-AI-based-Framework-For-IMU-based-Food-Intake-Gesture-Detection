@@ -26,18 +26,12 @@ from tqdm import tqdm
 import logging
 
 # Import custom modules from the components package
-from components.augmentation import (
-    augment_hand_mirroring,
-    augment_axis_permutation,
-    augment_planar_rotation,
-    augment_spatial_orientation,
-)
 from components.datasets import (
     IMUDataset,
     create_balanced_subject_folds,
     load_predefined_validate_folds,
 )
-from components.pre_processing import hand_mirroring
+from components.pre_processing import left_hand_mirroring
 from components.checkpoint import save_best_model
 from components.model_cnnlstm import CNNLSTM, CNNLSTM_Loss
 from components.model_tcn import TCN, TCN_Loss
@@ -150,17 +144,30 @@ with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
     Y_R = np.array(pickle.load(f), dtype=object)
 
 if FLAG_DATASET_MIRROR:
-    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+    X_L = np.array([left_hand_mirroring(sample) for sample in X_L], dtype=object)
+
+augment_config = {
+    "hand_mirroring": {"probability": 1.0, "is_additive": True},
+    "planar_rotation": {"probability": 0.5, "is_additive": False},
+    "axis_permutation": {"probability": 0.5, "is_additive": False},
+    "spatial_orientation": {"probability": 0.5, "is_additive": False},
+}
 
 if DATASET_HAND == "LEFT":
-    full_dataset = IMUDataset(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(
+        X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR, augmentations=augment_config
+    )
 elif DATASET_HAND == "RIGHT":
-    full_dataset = IMUDataset(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(
+        X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR, augmentations=augment_config
+    )
 elif DATASET_HAND == "BOTH":
     # Combine left and right data into a unified dataset
     X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
     Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(
+        X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR, augmentations=augment_config
+    )
 else:
     raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
 
@@ -177,7 +184,7 @@ if DATASET in ["FDII", "FDI"] and FLAG_DATASET_AUGMENTATION:
     with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
         Y_R_fdiii = np.array(pickle.load(f), dtype=object)
     if FLAG_DATASET_MIRROR:
-        X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
+        X_L_fdiii = np.array([left_hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
     fdiii_dataset = IMUDataset(
@@ -266,19 +273,10 @@ for fold, validate_subjects in enumerate(validate_folds):
         training_loss_mse = 0
 
         for batch_x, batch_y in train_loader:
-            # Shape of batch_x: [batch_size, seq_len, channels]
-            # Shape of batch_y: [batch_size, seq_len]
-            # Optionally apply data augmentation
-            if FLAG_AUGMENT_HAND_MIRRORING:
-                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y, 1, True)
-            if FLAG_AUGMENT_AXIS_PERMUTATION:
-                batch_x, batch_y = augment_axis_permutation(batch_x, batch_y, 0.5, True)
-            if FLAG_AUGMENT_PLANAR_ROTATION:
-                batch_x, batch_y = augment_planar_rotation(batch_x, batch_y, 0.5, True)
-            if FLAG_AUGMENT_SPATIAL_ORIENTATION:
-                batch_x, batch_y = augment_spatial_orientation(batch_x, batch_y, 0.5, True)
-            # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
-            # Shape of batch_x: [batch_size, channels, seq_len]
+            # The input tensor `batch_x` has the shape [batch_size, seq_len, channels].
+            # However, PyTorch's CNN layers expect the channel dimension to be at index 1.
+            # Therefore, we need to permute the dimensions of `batch_x` to match the expected shape.
+            # After permutation, the shape of `batch_x` becomes [batch_size, channels, seq_len].
             batch_x = batch_x.permute(0, 2, 1).to(device)
             batch_y = batch_y.to(device)
 

@@ -18,29 +18,47 @@ import scipy.signal as signal
 from torch.utils.data import Dataset
 import os
 
+from components.pre_processing import (
+    hand_mirroring,
+    planar_rotation,
+    axis_permutation,
+    spatial_orientation,
+)
+
 
 class IMUDataset(Dataset):
-    def __init__(self, X, Y, sequence_length=128, downsample_factor=4, apply_antialias=True):
+    def __init__(self, X, Y, sequence_length=128, downsample_factor=4, apply_antialias=True, augmentations=None):
         """
-        Initialize the IMUDataset.
+        Initialize the IMUDataset with optional augmentations.
 
         Parameters:
-            X (list of np.ndarray): IMU data for each subject, each array has shape (N, 6)
-            Y (list of np.ndarray): Label arrays for each subject, each array has shape (N,)
-            sequence_length (int): Length of each sequence segment.
-            downsample_factor (int): Downsampling factor.
-            apply_antialias (bool): Whether to apply anti-aliasing filter before downsampling.
+            X (list of np.ndarray): IMU data for each subject
+            Y (list of np.ndarray): Label arrays for each subject
+            sequence_length (int): Length of each sequence segment
+            downsample_factor (int): Downsampling factor
+            apply_antialias (bool): Whether to apply anti-aliasing before downsampling
+            augmentations (dict): Dictionary of augmentation configurations:
+                {
+                    'hand_mirroring': {'probability': float, 'is_additive': bool},
+                    'planar_rotation': {'probability': float, 'is_additive': bool},
+                    'axis_permutation': {'probability': float, 'is_additive': bool},
+                    'spatial_orientation': {'probability': float, 'is_additive': bool}
+                }
         """
         self.data = []
         self.labels = []
         self.sequence_length = sequence_length
         self.subject_indices = []
         self.downsample_factor = downsample_factor
+        self.augmentations = augmentations if augmentations else {}
 
         if downsample_factor < 1:
             raise ValueError("downsample_factor must be >= 1.")
 
-        for subject_idx, (imu_data, labels) in enumerate(zip(X, Y)):
+        # Apply augmentations at the subject level before segmentation
+        augmented_X, augmented_Y = self._apply_augmentations(X, Y)
+
+        for subject_idx, (imu_data, labels) in enumerate(zip(augmented_X, augmented_Y)):
             if downsample_factor > 1:
                 imu_data = self.downsample(imu_data, downsample_factor, apply_antialias)
                 labels = labels[::downsample_factor]
@@ -56,7 +74,7 @@ class IMUDataset(Dataset):
                 self.labels.append(label_segment)
                 self.subject_indices.append(subject_idx)
 
-            # Process remaining segments that are less than sequence_length, zero-padding
+            # Process remaining segments with zero-padding
             remainder = num_samples % sequence_length
             if remainder > 0:
                 start = num_samples - remainder
@@ -64,14 +82,12 @@ class IMUDataset(Dataset):
                 label_segment = labels[start:]
                 pad_length = sequence_length - remainder
 
-                # Zero-pad imu_segment in 2D (pad rows, keep 6 features unchanged)
                 imu_segment_padded = np.pad(
                     imu_segment,
                     pad_width=((0, pad_length), (0, 0)),
                     mode="constant",
                     constant_values=0,
                 )
-                # Zero-pad label_segment in 1D
                 label_segment_padded = np.pad(
                     label_segment,
                     pad_width=(0, pad_length),
@@ -83,36 +99,75 @@ class IMUDataset(Dataset):
                 self.labels.append(label_segment_padded)
                 self.subject_indices.append(subject_idx)
 
+    def _apply_augmentations(self, X, Y):
+        """Apply configured augmentations at the subject level."""
+        if not self.augmentations:
+            return X, Y
+
+        augmented_X = []
+        augmented_Y = []
+
+        for subject_x, subject_y in zip(X, Y):
+            current_x = subject_x.copy()
+            current_y = subject_y.copy()
+
+            # Apply each augmentation in sequence
+            if "hand_mirroring" in self.augmentations:
+                cfg = self.augmentations["hand_mirroring"]
+                current_x, current_y = hand_mirroring(
+                    np.array([current_x], dtype=object),
+                    np.array([current_y], dtype=object),
+                    probability=cfg["probability"],
+                    is_additive=cfg["is_additive"],
+                )
+                current_x, current_y = current_x[0], current_y[0]
+
+            if "planar_rotation" in self.augmentations:
+                cfg = self.augmentations["planar_rotation"]
+                current_x, current_y = planar_rotation(
+                    np.array([current_x], dtype=object),
+                    np.array([current_y], dtype=object),
+                    probability=cfg["probability"],
+                    is_additive=cfg["is_additive"],
+                )
+                current_x, current_y = current_x[0], current_y[0]
+
+            if "axis_permutation" in self.augmentations:
+                cfg = self.augmentations["axis_permutation"]
+                current_x, current_y = axis_permutation(
+                    np.array([current_x], dtype=object),
+                    np.array([current_y], dtype=object),
+                    probability=cfg["probability"],
+                    is_additive=cfg["is_additive"],
+                )
+                current_x, current_y = current_x[0], current_y[0]
+
+            if "spatial_orientation" in self.augmentations:
+                cfg = self.augmentations["spatial_orientation"]
+                current_x, current_y = spatial_orientation(
+                    np.array([current_x], dtype=object),
+                    np.array([current_y], dtype=object),
+                    probability=cfg["probability"],
+                    is_additive=cfg["is_additive"],
+                )
+                current_x, current_y = current_x[0], current_y[0]
+
+            augmented_X.append(current_x)
+            augmented_Y.append(current_y)
+
+        return augmented_X, augmented_Y
+
     def downsample(self, data, factor, apply_antialias=True):
-        """
-        Apply anti-aliasing filter and downsample the IMU data.
-
-        Parameters:
-            data (np.ndarray): IMU data.
-            factor (int): Downsampling factor.
-            apply_antialias (bool): Whether to apply a low-pass filter before downsampling.
-
-        Returns:
-            np.ndarray: Downsampled IMU data.
-        """
+        """Downsample with optional anti-aliasing filter."""
         if apply_antialias:
-            nyquist = 0.5 * data.shape[0]  # Original Nyquist frequency
-            cutoff = (0.5 / factor) * nyquist  # Limit to 80% of the new Nyquist frequency
+            nyquist = 0.5 * data.shape[0]
+            cutoff = (0.5 / factor) * nyquist
             b, a = signal.butter(4, cutoff / nyquist, btype="low", analog=False)
             data = signal.filtfilt(b, a, data, axis=0)
-
         return data[::factor, :]
 
     def normalize(self, data):
-        """
-        Z-score normalization.
-
-        Parameters:
-            data (np.ndarray): IMU data.
-
-        Returns:
-            np.ndarray: Normalized IMU data.
-        """
+        """Z-score normalization."""
         mean = np.mean(data, axis=0, keepdims=True)
         std = np.std(data, axis=0, keepdims=True)
         return (data - mean) / (std + 1e-5)
