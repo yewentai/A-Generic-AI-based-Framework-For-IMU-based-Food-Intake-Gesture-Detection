@@ -103,7 +103,8 @@ NUM_EPOCHS = 100
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
 FLAG_AUGMENT_PLANAR_ROTATION = False
-FLAG_AUGMENT_SPATIAL_ORIENTATION = True
+FLAG_AUGMENT_SPATIAL_ORIENTATION = False
+FLAG_DATASET_AUGMENTATION = False
 FLAG_DATASET_MIRROR = False
 
 # ==============================================================================================
@@ -150,32 +151,33 @@ with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
 if FLAG_DATASET_MIRROR:
     X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-X = np.concatenate([X_L, X_R], axis=0)
-Y = np.concatenate([Y_L, Y_R], axis=0)
+# Combine left and right data into a unified dataset
+X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
 full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 
 # Augment Dataset with FDIII (if using FDII/FDI)
-# fdiii_dataset = None
-# if DATASET in ["FDII", "FDI"]:
-#     fdiii_dir = "./dataset/FD/FD-III"
-#     with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
-#         X_L_fdiii = np.array(pickle.load(f), dtype=object)
-#     with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
-#         Y_L_fdiii = np.array(pickle.load(f), dtype=object)
-#     with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
-#         X_R_fdiii = np.array(pickle.load(f), dtype=object)
-#     with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
-#         Y_R_fdiii = np.array(pickle.load(f), dtype=object)
-#     if FLAG_DATASET_MIRROR:
-#         X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
-#     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
-#     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-#     fdiii_dataset = IMUDataset(
-#         X_fdiii,
-#         Y_fdiii,
-#         sequence_length=WINDOW_SIZE,
-#         downsample_factor=DOWNSAMPLE_FACTOR,
-#     )
+fdiii_dataset = None
+if DATASET in ["FDII", "FDI"] and FLAG_DATASET_AUGMENTATION:
+    fdiii_dir = "./dataset/FD/FD-III"
+    with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
+        X_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
+        Y_L_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
+        X_R_fdiii = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
+        Y_R_fdiii = np.array(pickle.load(f), dtype=object)
+    if FLAG_DATASET_MIRROR:
+        X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
+    X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
+    Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
+    fdiii_dataset = IMUDataset(
+        X_fdiii,
+        Y_fdiii,
+        sequence_length=WINDOW_SIZE,
+        downsample_factor=DOWNSAMPLE_FACTOR,
+    )
 
 # Create validation folds based on the dataset type
 if DATASET == "FDI":
@@ -188,11 +190,11 @@ loss_fn = {"TCN": TCN_Loss, "MSTCN": MSTCN_Loss, "CNN_LSTM": CNNLSTM_Loss}[MODEL
 
 for fold, validate_subjects in enumerate(validate_folds):
     train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
-    # if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None:
-    #     base_train_dataset = Subset(full_dataset, train_indices)
-    #     train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset])
-    # else:
-    train_dataset = Subset(full_dataset, train_indices)
+    if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None and FLAG_DATASET_AUGMENTATION:
+        base_train_dataset = Subset(full_dataset, train_indices)
+        train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset])
+    else:
+        train_dataset = Subset(full_dataset, train_indices)
 
     train_sampler = (
         DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True)
@@ -306,17 +308,30 @@ if local_rank == 0:
         "num_classes": NUM_CLASSES,
         "sampling_freq": SAMPLING_FREQ,
         "window_size": WINDOW_SIZE,
-        "model": MODEL,
         "input_dim": INPUT_DIM,
+        # Model information grouped together
+        "model": MODEL,
         "learning_rate": LEARNING_RATE,
         "batch_size": BATCH_SIZE,
+        # Training configuration
         "num_folds": NUM_FOLDS,
         "num_epochs": NUM_EPOCHS,
+        # Augmentation flags
         "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
         "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
         "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
         "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
+        "dataset_augmentation": FLAG_DATASET_AUGMENTATION,
         "dataset_mirroring": FLAG_DATASET_MIRROR,
+        # Model-specific parameters
+        **({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN} if MODEL == "CNN_LSTM" else {}),
+        **(
+            {"num_layers": NUM_LAYERS, "num_filters": NUM_FILTERS, "kernel_size": KERNEL_SIZE, "dropout": DROPOUT}
+            if MODEL in ["TCN", "MSTCN"]
+            else {}
+        ),
+        **({"num_stages": NUM_STAGES} if MODEL == "MSTCN" else {}),
+        # Validation configuration at the end
         "validate_folds": validate_folds,
     }
 

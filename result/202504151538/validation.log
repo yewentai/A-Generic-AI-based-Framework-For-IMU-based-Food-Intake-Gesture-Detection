@@ -1,8 +1,0 @@
-2025-04-17 15:47:43,741 | INFO | 
-=== Validating Version: 202504151538 ===
-2025-04-17 15:47:44,096 | INFO | 
-Using device: cuda
-2025-04-17 15:47:47,687 | INFO | 
---- Validating original_right ---
-2025-04-17 15:48:42,545 | INFO | 
-All validation statistics saved to result/202504151538/validation_stats.npy, result/202504151538/validation_stats.json, result/202504151538/validation_stats.mat
