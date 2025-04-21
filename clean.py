@@ -25,14 +25,6 @@ def remove_empty_subdirs(root):
         if os.path.abspath(dirpath) == os.path.abspath(root):
             continue
 
-        # # Remove 'analysis' folders, even if they are not empty
-        # if os.path.basename(dirpath) == "analysis":
-        #     try:
-        #         shutil.rmtree(dirpath)
-        #         print(f"Deleted 'analysis' folder: {dirpath}")
-        #     except Exception as e:
-        #         print(f"Failed to delete 'analysis' folder {dirpath}: {e}")
-
         # If no subdirectories and no files, delete the folder
         if not dirnames and not filenames:
             try:
@@ -91,12 +83,12 @@ def rename_files(root):
 
 def main():
     # List the top-level directories to scan
-    parent_dirs = ["result"]
+    parent_dirs = ["."]
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
-            # remove_empty_subdirs(parent)
-            remove_specified_files(parent)
+            remove_empty_subdirs(parent)
+            # remove_specified_files(parent)
             # rename_files(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
