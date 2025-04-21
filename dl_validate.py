@@ -132,8 +132,10 @@ if __name__ == "__main__":
             validation_modes.append(
                 {
                     "name": "mirrored_left_original_right",
-                    "X": np.concatenate((X_L_mirrored, X_R), axis=0),
-                    "Y": np.concatenate((Y_L, Y_R), axis=0),
+                    "X": np.array(
+                        [np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L_mirrored, X_R)], dtype=object
+                    ),
+                    "Y": np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object),
                 }
             )
 
@@ -158,8 +160,11 @@ if __name__ == "__main__":
             validation_modes.append(
                 {
                     "name": "rotated_mirrored_left_original_right",
-                    "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
-                    "Y": np.concatenate((Y_L, Y_R), axis=0),
+                    "X": np.array(
+                        [np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L_rotated_mirrored, X_R_rotated)],
+                        dtype=object,
+                    ),
+                    "Y": np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object),
                 }
             )
 

@@ -106,6 +106,7 @@ FLAG_AUGMENT_PLANAR_ROTATION = False
 FLAG_AUGMENT_SPATIAL_ORIENTATION = False
 FLAG_DATASET_AUGMENTATION = False
 FLAG_DATASET_MIRROR = False
+DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
 
 # ==============================================================================================
 #                            Main Training Code (Inline)
@@ -151,10 +152,17 @@ with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
 if FLAG_DATASET_MIRROR:
     X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-# Combine left and right data into a unified dataset
-X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
-Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+if DATASET_HAND == "LEFT":
+    full_dataset = IMUDataset(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+elif DATASET_HAND == "RIGHT":
+    full_dataset = IMUDataset(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+elif DATASET_HAND == "BOTH":
+    # Combine left and right data into a unified dataset
+    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
+    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+else:
+    raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
 
 # Augment Dataset with FDIII (if using FDII/FDI)
 fdiii_dataset = None
@@ -305,6 +313,7 @@ if local_rank == 0:
 
     config_info = {
         "dataset": DATASET,
+        "hand": DATASET_HAND,
         "num_classes": NUM_CLASSES,
         "sampling_freq": SAMPLING_FREQ,
         "window_size": WINDOW_SIZE,
