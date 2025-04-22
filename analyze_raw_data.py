@@ -6,14 +6,14 @@ IMU Raw Data Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-P25-04-22
+Edited      : 2025-04-22
 Description : This script performs comprehensive analysis on raw IMU data with:
               1. Dataset statistics and label distribution analysis
               2. Subject-wise sample distribution visualization
               3. Gesture segmentation and time-domain analysis
               4. Support for multiple datasets (DX/FD, Oreba/Clemson)
               5. Combined left/right hand data analysis
-              
+
               Outputs include statistical reports and visualization plots.
 ===============================================================================
 """
