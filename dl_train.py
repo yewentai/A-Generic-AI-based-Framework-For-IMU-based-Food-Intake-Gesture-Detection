@@ -1,16 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-================================================================================================
-MSTCN IMU Training Script (Single and Distributed Combined, Minimal Functions)
-------------------------------------------------------------------------------------------------
+===============================================================================
+MSTCN IMU Training Script (Single and Distributed Combined)
+-------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Edited      : 2025-04-14
-Description : This script trains an MSTCN model on IMU data using cross-validation. It supports
-              both normal and distributed modes with most code kept inline (minimal helper functions).
-              Use the command-line flag --distributed when running in distributed mode.
-================================================================================================
+Description : This script trains MSTCN models on IMU data with:
+              1. Support for both single-GPU and distributed multi-GPU training
+              2. Cross-validation across subject folds
+              3. Configurable model architectures (MSTCN, TCN, CNN-LSTM)
+              4. Flexible dataset handling (DX/FD, Oreba/Clemson)
+              5. Comprehensive logging and checkpointing
+              
+              Use --distributed flag for distributed training mode.
+===============================================================================
 """
 
 import os

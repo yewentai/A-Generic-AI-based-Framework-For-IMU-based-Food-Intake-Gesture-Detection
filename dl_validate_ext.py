@@ -2,11 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-MSTCN IMU Validation Script
+MSTCN IMU Validation Script (Oreba/Clemson Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Edited      : 2025-04-14
-Description : This script validates MSTCN models on IMU datasets
+Description : This script validates MSTCN models on Oreba/Clemson IMU datasets with:
+              1. Support for both Oreba and Clemson dataset formats
+              2. Simplified validation without hand mirroring/rotation
+              3. Direct validation on combined left/right data
+              4. Cross-validation across subject folds
 ===============================================================================
 """
 

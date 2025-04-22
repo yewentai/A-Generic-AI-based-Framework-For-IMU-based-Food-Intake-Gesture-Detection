@@ -2,14 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Training Result Analysis Script (Extended)
+IMU Training Result Analysis Script (Oreba/Clemson Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Last Edited : 2025-04-22
-Description : This script analyzes training results for Oreba/Clemson datasets
-              produced by the extended validation script, with comparative
-              visualizations of segment-wise and sample-wise metrics.
+Description : This script analyzes training results for Oreba/Clemson datasets with:
+              1. Comparative analysis of segment-wise and sample-wise metrics
+              2. Support for both Oreba and Clemson dataset formats
+              3. Per-class performance analysis
+              4. Cross-validation fold analysis
 ===============================================================================
 """
 
