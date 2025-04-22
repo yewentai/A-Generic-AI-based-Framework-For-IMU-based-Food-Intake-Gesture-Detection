@@ -1,79 +1,43 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 """
-update_edited_date.py
-
-When run in a pre-commit hook, this script will:
- 1. Use `git diff --cached --name-only` to list staged files.
- 2. Filter for `.py` files.
- 3. Update the 'Edited' or 'Last Edited' header date to today.
- 4. git-add any files that changed.
-
-Usage (in pre-commit hook):
-    python3 ./update_edited_date.py
+===============================================================================
+Git Pre-Commit Hook: Auto Update 'Edited' Date in Python File Headers
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+P25-04-22
+Description : This script is intended to be used as a Git pre-commit hook.
+              It scans all staged Python files, finds the 'Edited' date field
+              in the header, and updates it to the current date if present.
+              It re-adds the modified files to the staging area to ensure the
+              changes are included in the commit.
+===============================================================================
 """
 
-import subprocess
+import os
 import re
-import sys
+import subprocess
 from datetime import datetime
 
-# Today’s date in YYYY-MM-DD
-TODAY = datetime.now().strftime("%Y-%m-%d")
+# Get the list of staged files
+staged_files = subprocess.check_output(["git", "diff", "--cached", "--name-only"], text=True).splitlines()
 
-# Match lines like:
-#   # Edited      : 2025-04-14
-#   # Last Edited : 2025-04-14
-PAT = re.compile(r"^(?P<prefix>\s*#\s*(?:Edited|Last Edited)\s*:\s*)(\d{4}-\d{2}-\d{2})(\s*)$")
+# Regex pattern to match the Edited date line
+edit_date_pattern = re.compile(r"(Edited\s+: )(20\d{2}-\d{2}-\d{2})")
 
+# Files to update
+py_files = [f for f in staged_files if f.endswith(".py") and os.path.isfile(f)]
 
-def get_staged_py_files():
-    """Return a list of staged .py files."""
-    result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"], stdout=subprocess.PIPE, check=True, text=True
-    )
-    return [f for f in result.stdout.splitlines() if f.endswith(".py")]
+today = datetime.now().strftime("%Y-%m-%d")
 
+for filepath in py_files:
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
 
-def update_file(path):
-    """Update the Edited date in the given file. Return True if modified."""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except FileNotFoundError:
-        return False
-
-    changed = False
-    for i, line in enumerate(lines):
-        m = PAT.match(line)
-        if m:
-            new_line = f"{m.group('prefix')}{TODAY}{m.group(3)}\n"
-            if new_line != line:
-                lines[i] = new_line
-                changed = True
-
-    if changed:
-        with open(path, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-    return changed
-
-
-def main():
-    files = get_staged_py_files()
-    if not files:
-        return
-
-    modified = []
-    for path in files:
-        if update_file(path):
-            modified.append(path)
-
-    if modified:
-        # Re-stage the updated files
-        subprocess.run(["git", "add"] + modified, check=True)
-        print(f"Updated Edited date in: {', '.join(modified)}")
-
-
-if __name__ == "__main__":
-    main()
+    if "Edited" in content:
+        new_content, count = edit_date_pattern.subn(rf"\1{today}", content)
+        if count > 0:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(new_content)
+            subprocess.run(["git", "add", filepath])
