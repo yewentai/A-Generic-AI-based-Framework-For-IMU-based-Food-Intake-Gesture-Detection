@@ -1,0 +1,52 @@
+
+Basic Statistics (L side):
+Number of subjects: 13
+Input features: 6
+Total samples: 2,053,723
+Unique labels: [0 1]
+Samples with label 0: 1,992,753
+Samples with label 1: 60,970
+Samples with label 2: 0
+
+Subject-wise Sample Distribution:
+Subject_ID | Label_0 | Label_1 | Label_2
+------------------------------------
+1          | 411802  | 1448    | 0      
+2          | 325797  | 1355    | 0      
+3          | 147908  | 0       | 0      
+4          | 56706   | 1971    | 0      
+5          | 18439   | 6789    | 0      
+6          | 94341   | 4273    | 0      
+7          | 36276   | 4699    | 0      
+8          | 166169  | 7410    | 0      
+9          | 132078  | 9329    | 0      
+10         | 104945  | 11540   | 0      
+11         | 140521  | 8400    | 0      
+12         | 280452  | 0       | 0      
+13         | 77319   | 3756    | 0      
+
+Basic Statistics (R side):
+Number of subjects: 13
+Input features: 6
+Total samples: 2,051,981
+Unique labels: [0 1]
+Samples with label 0: 1,960,189
+Samples with label 1: 91,792
+Samples with label 2: 0
+
+Subject-wise Sample Distribution:
+Subject_ID | Label_0 | Label_1 | Label_2
+------------------------------------
+1          | 410105  | 3888    | 0      
+2          | 321047  | 6033    | 0      
+3          | 142863  | 4010    | 0      
+4          | 54382   | 4834    | 0      
+5          | 24462   | 0       | 0      
+6          | 93502   | 5526    | 0      
+7          | 33193   | 7513    | 0      
+8          | 162720  | 9840    | 0      
+9          | 131868  | 9889    | 0      
+10         | 108282  | 8747    | 0      
+11         | 142129  | 7251    | 0      
+12         | 260403  | 18719   | 0      
+13         | 75233   | 5542    | 0      

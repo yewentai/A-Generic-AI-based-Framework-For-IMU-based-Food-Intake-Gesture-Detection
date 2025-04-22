@@ -2,196 +2,176 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Training Result Analysis Script
+IMU Training Result Analysis Script (Updated)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Last Edited : 2025-04-14
-Description : This script analyzes training results across validation modes
-              with enhanced comparative visualizations and per-class metrics.
+Last Edited : 2025-04-22
+Description : This script analyzes training results across all validation modes
+              produced by the updated validation script, with comparative
+              visualizations of segment-wise and sample-wise metrics.
 ===============================================================================
 """
 
 import os
-import json
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from dl_validate import THRESHOLD_LIST
-
-# --- Configurations ---
-COLOR_PALETTE = sns.color_palette("husl", len(THRESHOLD_LIST) + 1)  # Color palette for plots
-
-# Define validation file priority order
-VALIDATION_FILES = [
-    "validation_stats_mirroring.npy",  # Mirror augmentation validation
-    # "validation_stats_rotation.npy",  # Rotation augmentation validation
-]
+from dl_validate import THRESHOLD_LIST  # [0.1, 0.25, 0.5, 0.75]
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["202504100555"]  # Specify the version to analyze
-    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    # Discover all version directories
+    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
-        result_dir = os.path.join("result", version)
+        result_dir = os.path.join(result_root, version)
+        stats_file = os.path.join(result_dir, "validation_stats.npy")
+        if not os.path.exists(stats_file):
+            print(f"No validation_stats.npy found for version {version}, skipping.")
+            continue
+
+        # Create analysis output dir
         analysis_dir = os.path.join(result_dir, "analysis")
         os.makedirs(analysis_dir, exist_ok=True)
 
-        # Load configuration file
-        config_file = os.path.join(result_dir, "config.json")
-        with open(config_file, "r") as f:
-            config_info = json.load(f)
-        mirror_enabled = config_info.get("augmentation_hand_mirroring", False) or config_info.get(
-            "dataset_mirroring", False
-        )
-        rotation_enabled = config_info.get("augmentation_planar_rotation", False)
+        # Load all validation statistics
+        all_stats = np.load(stats_file, allow_pickle=True).item()
 
-        # Determine which validation files exist and should be processed
-        existing_validation_files = []
-        for vfile in VALIDATION_FILES:
-            if os.path.exists(os.path.join(result_dir, vfile)):
-                existing_validation_files.append(vfile)
+        # Prepare containers for metrics
+        mode_names = list(all_stats.keys())
+        mode_metrics = {
+            name: {"sample_wise": [], "segment_wise": {t: [] for t in THRESHOLD_LIST}} for name in mode_names
+        }
 
-        # Skip if no validation files found
-        if not existing_validation_files:
-            continue
+        # Extract per-class metrics if needed
+        # class_metrics[name]["sample" or threshold][class_label] = list of f1s
+        num_classes = None
+        class_metrics = {}
 
-        # Process each validation file
-        for validation_file in existing_validation_files:
-            validation_stats_file = os.path.join(result_dir, validation_file)
-            all_stats = np.load(validation_stats_file, allow_pickle=True).item()
+        for mode_name, stats_list in all_stats.items():
+            # Determine number of classes from first fold sample metrics
+            if num_classes is None and stats_list:
+                num_classes = len(stats_list[0]["metrics_sample"]) - 1  # exclude weighted_f1 key
 
-            # Determine analysis type based on filename
-            if "mirror" in validation_file:
-                analysis_type = "Mirroring"
-            elif "rotation" in validation_file:
-                analysis_type = "Rotation"
-            else:
-                analysis_type = "Standard"
+            # initialize class_metrics structure
+            class_metrics[mode_name] = {"sample": {str(c): [] for c in range(1, num_classes + 1)}}
+            for t in THRESHOLD_LIST:
+                class_metrics[mode_name][str(t)] = {str(c): [] for c in range(1, num_classes + 1)}
 
-            # ==================================================================
-            #                      CROSS-MODE COMPARISON ANALYSIS
-            # ==================================================================
-            mode_metrics = {}
-            class_metrics = {}
+            # Populate metrics
+            for fold_stat in stats_list:
+                # sample-wise weighted F1
+                sample_f1 = fold_stat["metrics_sample"]["weighted_f1"]
+                mode_metrics[mode_name]["sample_wise"].append(sample_f1)
 
-            for mode_name, mode_stats in all_stats.items():
-                mode_metrics[mode_name] = {"sample_wise": [], "segment_wise": {t: [] for t in THRESHOLD_LIST}}
-                class_metrics[mode_name] = {
-                    str(t): {str(c): [] for c in range(1, len(mode_stats[0]["metrics_sample"]) - 1)}
-                    for t in ["sample"] + THRESHOLD_LIST
-                }
+                # segment-wise weighted F1 per threshold
+                for t in THRESHOLD_LIST:
+                    seg_f1 = fold_stat["metrics_segment"][str(t)]["weighted_f1"]
+                    mode_metrics[mode_name]["segment_wise"][t].append(seg_f1)
 
-                for fold_stat in mode_stats:
-                    sample_f1 = fold_stat["metrics_sample"]["weighted_f1"]
-                    mode_metrics[mode_name]["sample_wise"].append(sample_f1)
+                # per-class sample and segment f1s
+                for c in range(1, num_classes + 1):
+                    class_metrics[mode_name]["sample"][str(c)].append(fold_stat["metrics_sample"][str(c)]["f1"])
+                    for t in THRESHOLD_LIST:
+                        class_metrics[mode_name][str(t)][str(c)].append(
+                            fold_stat["metrics_segment"][str(t)][str(c)]["f1"]
+                        )
 
-                    for threshold in THRESHOLD_LIST:
-                        seg_f1 = fold_stat["metrics_segment"][str(threshold)]["weighted_f1"]
-                        mode_metrics[mode_name]["segment_wise"][threshold].append(seg_f1)
+        # Dynamic color palette based on number of modes
+        from seaborn import color_palette
 
-                    for c in range(1, len(fold_stat["metrics_sample"]) - 1):
-                        class_metrics[mode_name]["sample"][str(c)].append(fold_stat["metrics_sample"][str(c)]["f1"])
-                        for threshold in THRESHOLD_LIST:
-                            class_metrics[mode_name][str(threshold)][str(c)].append(
-                                fold_stat["metrics_segment"][str(threshold)][str(c)]["f1"]
-                            )
+        colors = color_palette("husl", len(mode_names))
 
-            # ==================================================================
-            #                          COMPARATIVE VISUALIZATIONS
-            # ==================================================================
-            mode_names = list(mode_metrics.keys())
+        # ======================================================================
+        # 1. Segment-wise and Sample-wise F1 Score Comparison
+        # ======================================================================
+        plt.figure(figsize=(12, 6))
+        x = np.arange(len(THRESHOLD_LIST))
+        width = 0.8 / len(mode_names)
 
-            # 1. Segment-wise and Sample-wise F1 Scores
-            plt.figure(figsize=(14, 8))
-            x = np.arange(len(THRESHOLD_LIST))
-            width = 0.8 / len(mode_names)
+        # Plot segment-wise bars
+        for i, mode_name in enumerate(mode_names):
+            means = [np.mean(mode_metrics[mode_name]["segment_wise"][t]) for t in THRESHOLD_LIST]
+            stds = [np.std(mode_metrics[mode_name]["segment_wise"][t]) for t in THRESHOLD_LIST]
+            positions = x + (i - len(mode_names) / 2 + 0.5) * width
 
-            for i, mode in enumerate(mode_names):
-                means = [np.mean(mode_metrics[mode]["segment_wise"][t]) for t in THRESHOLD_LIST]
-                stds = [np.std(mode_metrics[mode]["segment_wise"][t]) for t in THRESHOLD_LIST]
+            bars = plt.bar(
+                positions,
+                means,
+                width,
+                label=f"{mode_name} (Segment)",
+                alpha=0.8,
+                edgecolor="black",
+                linewidth=0.5,
+                color=colors[i],
+            )
+            plt.errorbar(positions, means, yerr=stds, fmt="none", ecolor="black", capsize=4, alpha=0.6)
 
-                positions = x + (i - len(mode_names) / 2 + 0.5) * width
-                bars = plt.bar(positions, means, width, label=f"{mode}", color=COLOR_PALETTE[i], alpha=0.7)
-                plt.errorbar(positions, means, yerr=stds, fmt="none", ecolor="black", capsize=5, alpha=0.5)
-
-                # Add value on top of each bar
-                for bar, mean in zip(bars, means):
-                    plt.text(
-                        bar.get_x() + bar.get_width() / 2,
-                        bar.get_height(),
-                        f"{mean:.2f}",
-                        ha="center",
-                        va="bottom",
-                        fontsize=9,
-                        rotation=0,
-                    )
-
-            for i, mode in enumerate(mode_names):
-                sample_mean = np.mean(mode_metrics[mode]["sample_wise"])
-                sample_std = np.std(mode_metrics[mode]["sample_wise"])
-
-                sample_position = len(THRESHOLD_LIST) + (i - len(mode_names) / 2 + 0.5) * width
-                bar = plt.bar(sample_position, sample_mean, width, color=COLOR_PALETTE[i], alpha=0.7)
-                plt.errorbar(
-                    sample_position, sample_mean, yerr=sample_std, fmt="none", ecolor="black", capsize=5, alpha=0.5
-                )
-
-                # Add value on top of the sample-wise bar
+            # Annotate bar values
+            for bar, m in zip(bars, means):
                 plt.text(
-                    sample_position,
-                    sample_mean,
-                    f"{sample_mean:.2f}",
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height(),
+                    f"{m:.2f}",
                     ha="center",
                     va="bottom",
-                    fontsize=9,
-                    rotation=0,
+                    fontsize=8,
                 )
 
-            plt.xlabel("Segmentation Threshold")
-            plt.ylabel("Mean Weighted F1 Score")
-            plt.title(f"Segment-wise and Sample-wise F1 Scores (mirroring augmentation/addictive/100%)")
-            plt.xticks(list(x) + [len(THRESHOLD_LIST)], [str(t) for t in THRESHOLD_LIST] + ["Sample"])
-            plt.grid(True, axis="y", linestyle="--", alpha=0.6)
-            plt.legend(loc="lower right")
-            plt.tight_layout()
+        # Plot sample-wise bars at end
+        for i, mode_name in enumerate(mode_names):
+            sample_mean = np.mean(mode_metrics[mode_name]["sample_wise"])
+            sample_std = np.std(mode_metrics[mode_name]["sample_wise"])
+            sample_pos = len(THRESHOLD_LIST) + (i - len(mode_names) / 2 + 0.5) * width
 
-            plt.savefig(os.path.join(analysis_dir, f"segment_sample_f1_{analysis_type.lower()}.png"), dpi=300)
-            plt.close()
+            bar = plt.bar(sample_pos, sample_mean, width, alpha=0.8, edgecolor="black", linewidth=0.5, color=colors[i])
+            plt.errorbar(sample_pos, sample_mean, yerr=sample_std, fmt="none", ecolor="black", capsize=4, alpha=0.6)
+            plt.text(sample_pos, sample_mean, f"{sample_mean:.2f}", ha="center", va="bottom", fontsize=8)
 
-            # 2. Sample-wise F1 scores per fold
-            plt.figure(figsize=(14, 8))
-            bar_width = 0.8 / len(mode_names)
-            folds = range(1, len(mode_metrics[mode_names[0]]["sample_wise"]) + 1)
+        plt.xlabel("Segmentation Threshold")
+        plt.ylabel("Weighted F1 Score")
+        plt.xticks(list(x) + [len(THRESHOLD_LIST)], [str(t) for t in THRESHOLD_LIST] + ["Sample"])
+        plt.title(f"Version {version}: Segment-wise vs Sample-wise F1 Scores")
+        plt.grid(axis="y", linestyle="--", alpha=0.5)
+        plt.legend(loc="lower right", fontsize=9)
+        plt.tight_layout()
+        plt.savefig(os.path.join(analysis_dir, f"f1_comparison_{version}.png"), dpi=300)
+        plt.close()
 
-            for i, mode in enumerate(mode_names):
-                fold_f1_scores = mode_metrics[mode]["sample_wise"]
-                positions = [fold + (i - len(mode_names) / 2 + 0.5) * bar_width for fold in folds]
-                bars = plt.bar(
-                    positions, fold_f1_scores, width=bar_width, label=f"{mode}", color=COLOR_PALETTE[i], alpha=0.7
+        # ======================================================================
+        # 2. Sample-wise F1 Scores per Fold
+        # ======================================================================
+        plt.figure(figsize=(12, 6))
+        bar_width = 0.8 / len(mode_names)
+        num_folds = len(next(iter(mode_metrics.values()))["sample_wise"])
+        folds = np.arange(1, num_folds + 1)
+
+        for i, mode_name in enumerate(mode_names):
+            scores = mode_metrics[mode_name]["sample_wise"]
+            positions = folds + (i - len(mode_names) / 2 + 0.5) * bar_width
+
+            bars = plt.bar(
+                positions, scores, bar_width, alpha=0.8, edgecolor="black", linewidth=0.5, label=f"{mode_name}"
+            )
+            for bar, s in zip(bars, scores):
+                plt.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height(),
+                    f"{s:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
                 )
 
-                # Add value on top of each bar
-                for bar, score in zip(bars, fold_f1_scores):
-                    plt.text(
-                        bar.get_x() + bar.get_width() / 2,
-                        bar.get_height(),
-                        f"{score:.2f}",
-                        ha="center",
-                        va="bottom",
-                        fontsize=9,
-                        rotation=0,
-                    )
+        plt.xlabel("Fold")
+        plt.ylabel("Weighted F1 Score")
+        plt.xticks(folds, [f"Fold {f}" for f in folds])
+        plt.title(f"Version {version}: Sample-wise F1 Scores per Fold")
+        plt.grid(axis="y", linestyle="--", alpha=0.5)
+        plt.legend(loc="lower right", fontsize=9)
+        plt.tight_layout()
+        plt.savefig(os.path.join(analysis_dir, f"f1_per_fold_{version}.png"), dpi=300)
+        plt.close()
 
-            plt.xticks(folds, [f"Fold {fold}" for fold in folds])
-            plt.xlabel("Fold")
-            plt.ylabel("Weighted F1 Score")
-            plt.title(f"Sample-wise F1 Scores per Fold (mirroring augmentation/addictive/100%)")
-            plt.grid(True, axis="y", linestyle="--", alpha=0.6)
-            plt.legend(loc="lower right")
-            plt.tight_layout()
-
-            plt.savefig(os.path.join(analysis_dir, f"sample_f1_per_fold_{analysis_type.lower()}.png"), dpi=300)
-            plt.close()
+        print(f"Analysis for version {version} completed. Plots saved to {analysis_dir}")

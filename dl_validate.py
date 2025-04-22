@@ -30,7 +30,7 @@ from components.model_cnnlstm import CNNLSTM
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
-from components.pre_processing import left_hand_mirroring, planar_rotation
+from components.pre_processing import hand_mirroring, planar_rotation
 from components.utils import convert_for_matlab
 
 # --- Configurations ---
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         WINDOW_SIZE = config_info["window_size"]
         BATCH_SIZE = config_info["batch_size"]
         validate_folds = config_info.get("validate_folds")
-        mirror_enabled = config_info.get("augmentation_left_hand_mirroring", False) or config_info.get(
+        mirror_enabled = config_info.get("augmentation_hand_mirroring", False) or config_info.get(
             "dataset_mirroring", False
         )
         rotation_enabled = config_info.get("augmentation_planar_rotation", False)
@@ -128,14 +128,12 @@ if __name__ == "__main__":
         elif right_only and not left_only:
             validation_modes.append({"name": "original_right", "X": X_R, "Y": Y_R})
         else:
-            X_L_mirrored = np.array([left_hand_mirroring(sample) for sample in X_L], dtype=object)
+            X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
             validation_modes.append(
                 {
                     "name": "mirrored_left_original_right",
-                    "X": np.array(
-                        [np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L_mirrored, X_R)], dtype=object
-                    ),
-                    "Y": np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object),
+                    "X": np.concatenate((X_L_mirrored, X_R), axis=0),
+                    "Y": np.concatenate((Y_L, Y_R), axis=0),
                 }
             )
 
@@ -156,15 +154,12 @@ if __name__ == "__main__":
                 X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
                 X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
 
-            X_L_rotated_mirrored = np.array([left_hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
+            X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
             validation_modes.append(
                 {
                     "name": "rotated_mirrored_left_original_right",
-                    "X": np.array(
-                        [np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L_rotated_mirrored, X_R_rotated)],
-                        dtype=object,
-                    ),
-                    "Y": np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object),
+                    "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
+                    "Y": np.concatenate((Y_L, Y_R), axis=0),
                 }
             )
 

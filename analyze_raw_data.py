@@ -13,33 +13,64 @@ Description : This script performs analysis on raw IMU data, computes basic stat
 """
 
 import os
-import sys
 import pickle
 import random
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Add project root to Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.append(project_root)
-
 # Configuration
-DATA_PATH = "./dataset/FD/FD-I/"
-SAVE_DIR = "./analysis/FD-I/"
+DATASET = "FDIII"
+
+if DATASET.startswith("DX"):
+    NUM_CLASSES = 2
+    sub_version = DATASET.replace("DX", "").upper() or "I"
+    DATA_PATH = f"./dataset/DX/DX-{sub_version}"
+    SAVE_DIR = f"./analysis/DX/DX-{sub_version}"
+    SAMPLING_FREQ = 64
+elif DATASET.startswith("FD"):
+    NUM_CLASSES = 3
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_PATH = f"./dataset/FD/FD-{sub_version}"
+    SAVE_DIR = f"./analysis/FD/FD-{sub_version}"
+    SAMPLING_FREQ = 64
+elif DATASET == "Clemson":
+    NUM_CLASSES = 3
+    DATA_PATH = "./dataset/Clemson"
+    SAVE_DIR = "./analysis/Clemson"
+    SAMPLING_FREQ = 15
+elif DATASET == "Oreba":
+    NUM_CLASSES = 3
+    DATA_PATH = "./dataset/Oreba"
+    SAVE_DIR = "./analysis/Oreba"
+    SAMPLING_FREQ = 16
+
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 
-def load_data(side="L"):
-    """Load data for specified body side"""
-    with open(os.path.join(DATA_PATH, f"X_{side}.pkl"), "rb") as f:
-        X = pickle.load(f)
-    with open(os.path.join(DATA_PATH, f"Y_{side}.pkl"), "rb") as f:
-        Y = pickle.load(f)
+def load_data():
+    try:
+        # Attempt to load combined X and Y
+        with open(os.path.join(DATA_PATH, "X.pkl"), "rb") as f:
+            X = pickle.load(f)
+        with open(os.path.join(DATA_PATH, "Y.pkl"), "rb") as f:
+            Y = pickle.load(f)
+    except FileNotFoundError:
+        # If combined data is not found, load left and right separately and merge
+        with open(os.path.join(DATA_PATH, "X_L.pkl"), "rb") as f:
+            X_L = np.array(pickle.load(f), dtype=object)
+        with open(os.path.join(DATA_PATH, "Y_L.pkl"), "rb") as f:
+            Y_L = np.array(pickle.load(f), dtype=object)
+        with open(os.path.join(DATA_PATH, "X_R.pkl"), "rb") as f:
+            X_R = np.array(pickle.load(f), dtype=object)
+        with open(os.path.join(DATA_PATH, "Y_R.pkl"), "rb") as f:
+            Y_R = np.array(pickle.load(f), dtype=object)
+        X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+        Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
     return X, Y
 
 
-def basic_statistics(X, Y, side):
+def basic_statistics(X, Y):
     """Print detailed dataset statistics and write to a txt file"""
     stats_file = os.path.join(SAVE_DIR, "basic_statistics.txt")
 
@@ -58,8 +89,7 @@ def basic_statistics(X, Y, side):
     total_counts = np.sum([[count[1], count[2], count[3]] for count in label_counts_per_subject], axis=0)
 
     # Write to file
-    with open(stats_file, "a") as f:  # Append to existing file
-        f.write(f"\nBasic Statistics ({side} side):\n")
+    with open(stats_file, "w") as f:  # Open file in write mode
         f.write(f"Number of subjects: {len(X)}\n")
         f.write(f"Input features: {X[0].shape[1]}\n")  # Assuming [time, features]
 
@@ -81,22 +111,28 @@ def basic_statistics(X, Y, side):
         for subj_idx, count_0, count_1, count_2 in label_counts_per_subject:
             f.write(f"{subj_idx:<10} | {count_0:<7} | {count_1:<7} | {count_2:<7}\n")
 
-    print(f"Basic Statistics ({side} side) are saved to:", stats_file)
 
-
-def plot_sample_distribution(Y, side):
-    """Plot distribution of samples per subject with label breakdown"""
+def plot_sample_distribution(Y):
+    """Plot distribution of samples per subject with label breakdown, sorted by total number of samples"""
     label_colors = {0: "blue", 1: "green", 2: "red"}
     label_names = {0: "Label 0", 1: "Label 1", 2: "Label 2"}
 
     num_subjects = len(Y)
     label_counts = {0: [], 1: [], 2: []}
+    total_counts = []
 
     # Count samples for each label per subject
     for y in Y:
         counts = {label: np.sum(np.array(y) == label) for label in [0, 1, 2]}
         for label in [0, 1, 2]:
             label_counts[label].append(counts[label])
+        total_counts.append(sum(counts.values()))
+
+    # Sort subjects by total number of samples
+    sorted_indices = np.argsort(total_counts)
+    for label in [0, 1, 2]:
+        label_counts[label] = np.array(label_counts[label])[sorted_indices]
+    total_counts = np.array(total_counts)[sorted_indices]
 
     # Stack plot
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -112,13 +148,13 @@ def plot_sample_distribution(Y, side):
         )
         bottom += np.array(label_counts[label])  # Update bottom for next stack
 
-    ax.set_title(f"Sample Distribution by Label ({side} side)")
-    ax.set_xlabel("Subject ID")
+    ax.set_title(f"Sample Distribution by Label (Sorted by Total Samples)")
+    ax.set_xlabel("Subject ID (Sorted)")
     ax.set_ylabel("Number of Samples")
     ax.legend()
     ax.grid(axis="y", linestyle="--", alpha=0.6)
 
-    plt.savefig(os.path.join(SAVE_DIR, f"sample_distribution_{side}.png"), dpi=150)
+    plt.savefig(os.path.join(SAVE_DIR, f"sample_distribution_sorted.png"), dpi=300)
     plt.close()
 
 
@@ -146,7 +182,7 @@ def segment_by_label(Y):
     return segments_dict
 
 
-def analyze_segments(X, Y, side="L"):
+def analyze_segments(X, Y):
     """
     1. Segment continuous 1, 2 segments based on `Y`.
     2. For each subject (subjects 5,6,7), randomly select one segment for each label (1, 2) for visualization.
@@ -155,7 +191,6 @@ def analyze_segments(X, Y, side="L"):
     save_dir = os.path.join(SAVE_DIR, "segments")
     os.makedirs(save_dir, exist_ok=True)
 
-    fs = 16  # Sampling frequency (Hz)
     subject_indices = [4, 5, 6]
 
     for subj_idx in subject_indices:
@@ -181,43 +216,58 @@ def analyze_segments(X, Y, side="L"):
 
             # Extract the combined data: before, during, and after.
             combined_data = imu_data[before_start:after_end, :]
-            time_combined = np.arange(before_start, after_end) / fs
+            time_combined = np.arange(before_start, after_end) / SAMPLING_FREQ
 
-            plt.figure(figsize=(12, 6))
-            num_features = combined_data.shape[1]
-            for feature_idx in range(num_features):
-                plt.plot(
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+
+            # Plot accelerometer data (features 1-3) on the first subplot
+            ax1.set_ylabel("Accelerometer (m/s²)", color="blue")
+            accel_colors = ["blue", "royalblue", "dodgerblue"]
+            for feature_idx in range(3):  # Features 1-3
+                ax1.plot(
                     time_combined,
                     combined_data[:, feature_idx],
-                    label=f"Feature {feature_idx+1}",
-                    alpha=0.7,
+                    label=f"Accel {['X', 'Y', 'Z'][feature_idx]}",
+                    color=accel_colors[feature_idx],
+                    alpha=0.8,
                 )
+            ax1.tick_params(axis="y", labelcolor="blue")
+            ax1.legend(loc="upper left")
+            ax1.grid(True, alpha=0.3)
+            ax1.axvspan(start / SAMPLING_FREQ, end / SAMPLING_FREQ, color="red", alpha=0.2, label="During period")
+            ax1.set_title(f"Subject {subj_idx+1} - Label {label} - Time Domain")
 
-            # Highlight the "during" period.
-            plt.axvspan(start / fs, end / fs, color="red", alpha=0.2, label="During period")
+            # Plot gyroscope data (features 4-6) on the second subplot
+            ax2.set_xlabel("Time (s)")
+            ax2.set_ylabel("Gyroscope (rad/s)", color="red")
+            gyro_colors = ["red", "tomato", "firebrick"]
+            for feature_idx in range(3, 6):  # Features 4-6
+                ax2.plot(
+                    time_combined,
+                    combined_data[:, feature_idx],
+                    label=f"Gyro {['X', 'Y', 'Z'][feature_idx - 3]}",
+                    color=gyro_colors[feature_idx - 3],
+                    alpha=0.8,
+                )
+            ax2.tick_params(axis="y", labelcolor="red")
+            ax2.legend(loc="upper left")
+            ax2.grid(True, alpha=0.3)
+            ax2.axvspan(start / SAMPLING_FREQ, end / SAMPLING_FREQ, color="red", alpha=0.2, label="During period")
 
-            plt.title(f"Subject {subj_idx+1} - Label {label} - Time Domain ({side})")
-            plt.xlabel("Time (s)")
-            plt.ylabel("Amplitude")
-            plt.legend()
-            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
             plt.savefig(
-                os.path.join(save_dir, f"subj{subj_idx+1}_label{label}_time_{side}.png"),
-                dpi=150,
+                os.path.join(save_dir, f"subj{subj_idx+1}_label{label}_time.png"),
+                dpi=300,
             )
             plt.close()
 
 
 def main():
-    # Load and analyze both sides
-    for side in ["L", "R"]:
-        print(f"\nAnalyzing {side} side data...")
-        X, Y = load_data(side)
-
-        # Basic statistics
-        basic_statistics(X, Y, side)
-        plot_sample_distribution(Y, side)
-        # analyze_segments(X, Y, side=side)
+    # Load and analyze both sides together
+    X, Y = load_data()
+    basic_statistics(X, Y)
+    plot_sample_distribution(Y)
+    analyze_segments(X, Y)
 
 
 if __name__ == "__main__":

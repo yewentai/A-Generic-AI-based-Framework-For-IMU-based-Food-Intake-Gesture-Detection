@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=16                  # Number of CPU tasks (or processes) to run per node (Maximum 72 cores)
 #SBATCH --gpus-per-node=2                     # Number of GPUs to request per node (Maximum 4 GPUs)
 #SBATCH --partition=gpu_h100                  # Partition to use (H100 GPUs)
-#SBATCH --time=3:00:00                        # Maximum wall time (Maximum 3 days)
+#SBATCH --time=03:40:00                        # Maximum wall time (Maximum 3 days)
 #SBATCH --output=logs/ddp_train_%j.out        # Standard output and error log file (%j is the job ID)
 
 # Load Miniconda
