@@ -16,7 +16,7 @@ Description : This script analyzes training results for Oreba/Clemson datasets
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from dl_validate_ext import THRESHOLD_LIST  # [0.1, 0.25, 0.5, 0.75]
+THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 
 if __name__ == "__main__":
     result_root = "result"
