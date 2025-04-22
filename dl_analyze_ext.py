@@ -6,7 +6,7 @@ IMU Training Result Analysis Script (Oreba/Clemson Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Last Edited : 2025-04-22
+Edited      : 2025-04-22
 Description : This script analyzes training results for Oreba/Clemson datasets with:
               1. Comparative analysis of segment-wise and sample-wise metrics
               2. Support for both Oreba and Clemson dataset formats
@@ -18,6 +18,7 @@ Description : This script analyzes training results for Oreba/Clemson datasets w
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+
 THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 
 if __name__ == "__main__":

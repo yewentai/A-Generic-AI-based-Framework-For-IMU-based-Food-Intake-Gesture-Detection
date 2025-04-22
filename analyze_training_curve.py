@@ -6,7 +6,7 @@ IMU Training Loss Curve Plotter
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Last Edited : 2025-04-14
+Edited      : 2025-04-14
 Description : This script plots training loss curves per fold for the specified
               experiment version and validation type.
 ===============================================================================
