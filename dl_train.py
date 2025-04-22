@@ -13,8 +13,8 @@ Description : This script trains MSTCN models on IMU data with:
               3. Configurable model architectures (MSTCN, TCN, CNN-LSTM)
               4. Flexible dataset handling (DX/FD, Oreba/Clemson)
               5. Comprehensive logging and checkpointing
-              
-              Use --distributed flag for distributed training mode.
+
+              Tip: Use --distributed flag for distributed training mode.
 ===============================================================================
 """
 
