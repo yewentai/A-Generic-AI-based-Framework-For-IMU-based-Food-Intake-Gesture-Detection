@@ -6,7 +6,7 @@ IMU Training Loss Curve Plotter
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-P25-04-22
+Edited      : 2025-04-22
 Description : This script plots training loss curves per fold for the specified
               experiment version and validation type.
 ===============================================================================
@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     result_root = "result"
-    # versions = ["202504151704"]  # Specify the version to analyze
-    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    versions = ["202504151704"]  # Specify the version to analyze
+    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
