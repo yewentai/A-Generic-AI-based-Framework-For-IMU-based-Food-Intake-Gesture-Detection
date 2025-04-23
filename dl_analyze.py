@@ -6,7 +6,7 @@ IMU Training Result Analysis Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-22
+Edited      : 2025-04-23
 Description : This script analyzes training results for DX/FD datasets with:
               1. Comparative analysis of segment-wise and sample-wise metrics
               2. Support for multiple validation modes (original, mirrored, rotated)
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         plt.grid(axis="y", linestyle="--", alpha=0.5)
         plt.legend(loc="lower right", fontsize=9)
         plt.tight_layout()
-        plt.savefig(os.path.join(analysis_dir, f"f1_comparison_{version}.png"), dpi=300)
+        plt.savefig(os.path.join(analysis_dir, f"f1_comparison.png"), dpi=300)
         plt.close()
 
         # ======================================================================
@@ -173,7 +173,7 @@ if __name__ == "__main__":
         plt.grid(axis="y", linestyle="--", alpha=0.5)
         plt.legend(loc="lower right", fontsize=9)
         plt.tight_layout()
-        plt.savefig(os.path.join(analysis_dir, f"f1_per_fold_{version}.png"), dpi=300)
+        plt.savefig(os.path.join(analysis_dir, f"f1_per_fold.png"), dpi=300)
         plt.close()
 
         print(f"Analysis for version {version} completed. Plots saved to {analysis_dir}")

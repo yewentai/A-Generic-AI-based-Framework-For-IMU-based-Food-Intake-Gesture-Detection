@@ -36,8 +36,7 @@ def remove_empty_subdirs(root):
 
 def remove_specified_files(root):
     """
-    Traverse the directory tree under `root` and remove all .mat, .npy, and .json files
-    except 'config.json' and 'train_stats.npy'. Also remove specific files like
+    Traverse the directory tree under `root` and remove only the files
     'validation_stats_Clemson.json' and 'validation_stats_Clemson.npy'.
     """
     for dirpath, dirnames, filenames in os.walk(root):
@@ -50,16 +49,27 @@ def remove_specified_files(root):
                     print(f"Deleted file: {file_path}")
                 except Exception as e:
                     print(f"Failed to delete file {file_path}: {e}")
-            elif filename.endswith((".mat", ".npy", ".json", ".log")) and filename not in [
-                "config.json",
-                "train_stats.npy",
-            ]:
-                file_path = os.path.join(dirpath, filename)
+
+
+def remove_analysis_folders(root):
+    """
+    Traverse the directory tree under `root` and remove any folder named 'analysis' along with its contents.
+    """
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+        for dirname in dirnames:
+            if dirname == "analysis":
+                folder_path = os.path.join(dirpath, dirname)
                 try:
-                    os.remove(file_path)
-                    print(f"Deleted file: {file_path}")
+                    # Remove the folder and its contents
+                    for root_dir, subdirs, files in os.walk(folder_path, topdown=False):
+                        for file in files:
+                            os.remove(os.path.join(root_dir, file))
+                        for subdir in subdirs:
+                            os.rmdir(os.path.join(root_dir, subdir))
+                    os.rmdir(folder_path)
+                    print(f"Deleted folder and its contents: {folder_path}")
                 except Exception as e:
-                    print(f"Failed to delete file {file_path}: {e}")
+                    print(f"Failed to delete folder {folder_path}: {e}")
 
 
 def rename_files(root):
@@ -91,12 +101,13 @@ def rename_files(root):
 
 def main():
     # List the top-level directories to scan
-    parent_dirs = ["."]
+    parent_dirs = ["./result"]
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
-            remove_empty_subdirs(parent)
-            remove_specified_files(parent)
+            remove_analysis_folders(parent)
+            # remove_empty_subdirs(parent)
+            # remove_specified_files(parent)
             # rename_files(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
