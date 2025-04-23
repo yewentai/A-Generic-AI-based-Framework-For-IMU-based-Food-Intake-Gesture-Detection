@@ -33,7 +33,6 @@ if __name__ == "__main__":
         # Check for both Oreba and Clemson stats files
         stats_files = {
             "Oreba": os.path.join(result_dir, "validation_stats_Oreba.npy"),
-            "Clemson": os.path.join(result_dir, "validation_stats_Clemson.npy"),
         }
 
         for dataset_name, stats_file in stats_files.items():

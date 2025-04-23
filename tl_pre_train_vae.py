@@ -6,7 +6,7 @@ IMU VAE Pre-Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-10
+Edited      : 2025-04-23
 Description : This script pre-trains a Variational Autoencoder (VAE) on IMU (Inertial
               Measurement Unit) data in an unsupervised manner to extract latent features.
               The trained model weights and configuration are saved in a timestamped directory
@@ -30,16 +30,12 @@ from components.model_vae import VAE, VAE_Loss
 
 def main():
     # ---------------------- Configuration ----------------------
-    data_dir = "./dataset/your_dataset"  # Modify to your dataset directory
-    X_L_PATH = os.path.join(data_dir, "X_L.pkl")
-    X_R_PATH = os.path.join(data_dir, "X_R.pkl")
+    data_dir = "dataset/Oreba/"  # Modify to your dataset directory
+    X_PATH = os.path.join(data_dir, "X.pkl")
 
-    with open(X_L_PATH, "rb") as f:
-        X_L = np.array(pickle.load(f), dtype=object)
-    with open(X_R_PATH, "rb") as f:
-        X_R = np.array(pickle.load(f), dtype=object)
+    with open(X_PATH, "rb") as f:
+        X = np.array(pickle.load(f), dtype=object)
 
-    X = np.concatenate([X_L, X_R], axis=0)
     sequence_length = 300  # Adjust as needed
     dataset = IMUDataset(X, Y=None, sequence_length=sequence_length)
     batch_size = 64
