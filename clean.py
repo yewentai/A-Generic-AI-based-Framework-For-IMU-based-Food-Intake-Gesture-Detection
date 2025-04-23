@@ -6,7 +6,7 @@ Project Directory Cleanup Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-14
+Edited      : 2025-04-23
 Description : This script recursively traverses specified directories to find and
               remove empty subdirectories, 'analysis' folders, and specific files.
 ===============================================================================
@@ -37,12 +37,20 @@ def remove_empty_subdirs(root):
 def remove_specified_files(root):
     """
     Traverse the directory tree under `root` and remove all .mat, .npy, and .json files
-    except 'config.json' and 'train_stats.npy'.
+    except 'config.json' and 'train_stats.npy'. Also remove specific files like
+    'validation_stats_Clemson.json' and 'validation_stats_Clemson.npy'.
     """
     for dirpath, dirnames, filenames in os.walk(root):
         # Check if the specified files exist and delete them
         for filename in filenames:
-            if filename.endswith((".mat", ".npy", ".json", ".log")) and filename not in [
+            if filename in ["validation_stats_Clemson.json", "validation_stats_Clemson.npy"]:
+                file_path = os.path.join(dirpath, filename)
+                try:
+                    os.remove(file_path)
+                    print(f"Deleted file: {file_path}")
+                except Exception as e:
+                    print(f"Failed to delete file {file_path}: {e}")
+            elif filename.endswith((".mat", ".npy", ".json", ".log")) and filename not in [
                 "config.json",
                 "train_stats.npy",
             ]:
@@ -88,7 +96,7 @@ def main():
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
             remove_empty_subdirs(parent)
-            # remove_specified_files(parent)
+            remove_specified_files(parent)
             # rename_files(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
