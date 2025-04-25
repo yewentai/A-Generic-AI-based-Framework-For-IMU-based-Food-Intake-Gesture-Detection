@@ -15,81 +15,74 @@ Description : This script defines the Variational Autoencoder (VAE) architecture
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
+import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
+
+PATIENCE = 10
 
 
 class VAE(nn.Module):
     def __init__(self, input_channels, sequence_length, latent_dim):
-        """
-        Parameters:
-            input_channels (int): Number of input channels (e.g., 6 for IMU data).
-            sequence_length (int): Length of the input sequence.
-            hidden_dim (int): Hidden dimension (for extension purposes).
-            latent_dim (int): Dimension of the latent space.
-        """
-
-        self.sequence_length = sequence_length  # Store for later use in decode()
         super(VAE, self).__init__()
-        # Encoder: 1D convolutional layers to extract temporal features.
+        self.sequence_length = sequence_length
+
+        # Encoder
         self.encoder = nn.Sequential(
             nn.Conv1d(input_channels, 32, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.Conv1d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.Conv1d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
         )
 
-        # Calculate the output length after convolutions.
-        def conv_output_size(L, kernel_size=3, stride=2, padding=1):
-            return (L + 2 * padding - kernel_size) // stride + 1
+        # Automatically calculate feature dimensions
+        with torch.no_grad():
+            dummy = torch.zeros(1, input_channels, sequence_length)
+            features = self.encoder(dummy)
+            self.feature_dim = features.view(1, -1).size(-1)  # Automatically calculate feature dimensions
 
-        l1 = conv_output_size(sequence_length, 3, 2, 1)
-        l2 = conv_output_size(l1, 3, 2, 1)
-        l3 = conv_output_size(l2, 3, 2, 1)
-        self.conv_output_length = l3  # Number of time steps after the last conv layer.
-        self.feature_dim = 128 * self.conv_output_length  # Flattened feature dimension.
-
-        # Fully connected layers to generate latent mean and log-variance.
+        # Fully connected layers
         self.fc_mu = nn.Linear(self.feature_dim, latent_dim)
         self.fc_logvar = nn.Linear(self.feature_dim, latent_dim)
 
-        # Decoder: Map the latent vector back to convolutional features and use transposed convolutions to reconstruct.
+        # Decoder
         self.decoder_input = nn.Linear(latent_dim, self.feature_dim)
+
         self.decoder = nn.Sequential(
             nn.ConvTranspose1d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.ConvTranspose1d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.ConvTranspose1d(32, input_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.Sigmoid(),  # Use Sigmoid if data is normalized to [0, 1].
+            nn.Tanh(),
         )
 
     def encode(self, x):
-        # x shape: (batch, channels, sequence_length)
-        enc = self.encoder(x)  # (batch, 128, conv_output_length)
-        enc_flat = enc.view(x.size(0), -1)  # Flatten to (batch, feature_dim)
-        mu = self.fc_mu(enc_flat)
-        logvar = self.fc_logvar(enc_flat)
-        return mu, logvar
+        h = self.encoder(x)
+        h_flat = h.view(h.size(0), -1)
+        return self.fc_mu(h_flat), self.fc_logvar(h_flat)
+
+    def decode(self, z):
+        h = self.decoder_input(z)
+        h = h.view(z.size(0), 128, -1)  # 128 corresponds to the number of channels in the last encoder layer
+        return self.decoder(h)
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def decode(self, z):
-        dec_input = self.decoder_input(z)
-        dec_input = dec_input.view(z.size(0), 128, self.conv_output_length)
-        recon = self.decoder(dec_input)
-        # Ensure output matches original sequence length
-        recon = recon[:, :, : self.sequence_length]  # Crop to input sequence length
-        return recon
-
     def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        recon = self.decode(z)
-        return recon, mu, logvar
+        return self.decode(z), mu, logvar
 
 
 def VAE_Loss(recon, x, mu, logvar):
@@ -99,4 +92,67 @@ def VAE_Loss(recon, x, mu, logvar):
     """
     recon_loss = F.mse_loss(recon, x, reduction="mean")
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return recon_loss + kl_loss
+    return recon_loss, kl_loss
+
+
+class VAEMonitor:
+    def __init__(self, save_dir):
+        self.save_dir = save_dir
+        os.makedirs(save_dir, exist_ok=True)
+        self.writer = SummaryWriter(log_dir=os.path.join(save_dir, "tensorboard"))
+
+        # Tracking variables
+        self.best_loss = float("inf")
+        self.epochs_no_improve = 0
+        self.lr_patience_counter = 0
+
+    def log_metrics(self, epoch, recon_loss, kl_loss, lr, beta):
+        """Log metrics to TensorBoard and print to console"""
+        self.writer.add_scalar("Loss/recon", recon_loss, epoch)
+        self.writer.add_scalar("Loss/kl", kl_loss, epoch)
+        self.writer.add_scalar("Params/lr", lr, epoch)
+        self.writer.add_scalar("Params/beta", beta, epoch)
+
+        print(
+            f"Epoch {epoch}: Recon Loss = {recon_loss:.4f}, KL Loss = {kl_loss:.4f}, LR = {lr:.2e}, Beta = {beta:.3f}"
+        )
+
+    def log_reconstructions(self, original, reconstructed, epoch, num_samples=5):
+        """Log sample reconstructions"""
+        with torch.no_grad():
+            # Select random samples
+            idx = torch.randperm(original.size(0))[:num_samples]
+            orig = original[idx].cpu().numpy()
+            recon = reconstructed[idx].cpu().numpy()
+
+            # Plot each channel separately
+            fig, axes = plt.subplots(6, num_samples, figsize=(15, 10))
+            for i in range(num_samples):
+                for j in range(6):  # 6 IMU channels
+                    axes[j, i].plot(orig[i, j], "b-", label="Original")
+                    axes[j, i].plot(recon[i, j], "r--", label="Recon")
+                    axes[j, i].set_title(f"Ch{j+1}")
+                    if i == 0 and j == 0:
+                        axes[j, i].legend()
+
+            plt.tight_layout()
+            self.writer.add_figure("Reconstructions", fig, epoch)
+            plt.close(fig)
+
+    def check_early_stop(self, current_loss, lr):
+        """Check if training should stop early"""
+        if current_loss < self.best_loss:
+            self.best_loss = current_loss
+            self.epochs_no_improve = 0
+            self.lr_patience_counter = 0
+            return False
+        else:
+            self.epochs_no_improve += 1
+            self.lr_patience_counter += 1
+            if self.epochs_no_improve >= PATIENCE:
+                print(f"Early stopping triggered after {PATIENCE} epochs without improvement")
+                return True
+            return False
+
+    def close(self):
+        self.writer.close()
