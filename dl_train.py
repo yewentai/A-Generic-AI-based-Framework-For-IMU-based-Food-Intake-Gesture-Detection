@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-22
+Edited      : 2025-04-25
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -211,8 +211,6 @@ training_statistics = []
 loss_fn = {"TCN": TCN_Loss, "MSTCN": MSTCN_Loss, "CNN_LSTM": CNNLSTM_Loss}[MODEL]
 
 for fold, validate_subjects in enumerate(validate_folds):
-    if fold != 5 and fold != 6:
-        continue
     train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
     if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None and FLAG_DATASET_AUGMENTATION:
         base_train_dataset = Subset(full_dataset, train_indices)

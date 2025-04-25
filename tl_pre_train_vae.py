@@ -6,7 +6,7 @@ IMU VAE Pre-Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-23
+Edited      : 2025-04-25
 Description : This script pre-trains a Variational Autoencoder (VAE) on IMU (Inertial
               Measurement Unit) data in an unsupervised manner to extract latent features.
               The trained model weights and configuration are saved in a timestamped directory
@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 from tqdm import tqdm
 
-from components.datasets import IMUDataset
+from components.datasets import IMUDatasetX
 from components.model_vae import VAE, VAE_Loss
 
 
@@ -36,8 +36,8 @@ def main():
     with open(X_PATH, "rb") as f:
         X = np.array(pickle.load(f), dtype=object)
 
-    sequence_length = 300  # Adjust as needed
-    dataset = IMUDataset(X, Y=None, sequence_length=sequence_length)
+    sequence_length = 80  # Adjust as needed
+    dataset = IMUDatasetX(X, sequence_length=sequence_length)
     batch_size = 64
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 

@@ -6,7 +6,7 @@ IMU VAE Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-04-25
 Description : This script defines the Variational Autoencoder (VAE) architecture for
               IMU data, including its encoder, decoder, and the combined VAE loss function.
 ===============================================================================
@@ -14,6 +14,7 @@ Description : This script defines the Variational Autoencoder (VAE) architecture
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class VAE(nn.Module):
@@ -25,6 +26,8 @@ class VAE(nn.Module):
             hidden_dim (int): Hidden dimension (for extension purposes).
             latent_dim (int): Dimension of the latent space.
         """
+
+        self.sequence_length = sequence_length  # Store for later use in decode()
         super(VAE, self).__init__()
         # Encoder: 1D convolutional layers to extract temporal features.
         self.encoder = nn.Sequential(
@@ -78,6 +81,8 @@ class VAE(nn.Module):
         dec_input = self.decoder_input(z)
         dec_input = dec_input.view(z.size(0), 128, self.conv_output_length)
         recon = self.decoder(dec_input)
+        # Ensure output matches original sequence length
+        recon = recon[:, :, : self.sequence_length]  # Crop to input sequence length
         return recon
 
     def forward(self, x):
@@ -92,6 +97,6 @@ def VAE_Loss(recon, x, mu, logvar):
     The VAE loss consists of the reconstruction loss and KL divergence.
     Here, Mean Squared Error (MSE) is used as the reconstruction loss.
     """
-    recon_loss = nn.functional.mse_loss(recon, x, reduction="sum")
+    recon_loss = F.mse_loss(recon, x, reduction="mean")
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss + kl_loss
