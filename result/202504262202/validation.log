@@ -1,0 +1,12 @@
+2025-04-26 22:53:55,380 | INFO | 
+=== Validating Version: 202504262202 ===
+2025-04-26 22:53:55,569 | INFO | 
+Using device: cuda
+2025-04-26 22:53:55,794 | INFO | 
+--- Validating mirrored_left_original_right ---
+2025-04-26 22:54:00,254 | INFO | 
+--- Validating original_left ---
+2025-04-26 22:54:03,897 | INFO | 
+--- Validating original_right ---
+2025-04-26 22:54:07,597 | INFO | 
+All validation statistics saved to result/202504262202/validation_stats.npy, result/202504262202/validation_stats.json, result/202504262202/validation_stats.mat

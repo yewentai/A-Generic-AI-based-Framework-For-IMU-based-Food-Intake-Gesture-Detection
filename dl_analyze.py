@@ -23,7 +23,8 @@ from dl_validate import THRESHOLD_LIST  # [0.1, 0.25, 0.5, 0.75]
 if __name__ == "__main__":
     result_root = "result"
     # Discover all version directories
-    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    versions = ["202504262202", "202504262230"]  # Uncomment to manually specify versions
+    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:

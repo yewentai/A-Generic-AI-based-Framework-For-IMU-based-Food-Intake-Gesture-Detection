@@ -1,0 +1,48 @@
+{
+    "dataset": "DXI",
+    "hand": "RIGHT",
+    "num_classes": 2,
+    "sampling_freq": 16,
+    "window_size": 960,
+    "input_dim": 6,
+    "model": "MSTCN",
+    "learning_rate": 0.0005,
+    "batch_size": 64,
+    "num_folds": 4,
+    "num_epochs": 100,
+    "augmentation_hand_mirroring": false,
+    "augmentation_axis_permutation": false,
+    "augmentation_planar_rotation": false,
+    "augmentation_spatial_orientation": false,
+    "dataset_augmentation": false,
+    "dataset_mirroring": true,
+    "dataset_mirroring_add": false,
+    "num_layers": 9,
+    "num_filters": 128,
+    "kernel_size": 3,
+    "dropout": 0.3,
+    "num_stages": 2,
+    "validate_folds": [
+        [
+            0,
+            5
+        ],
+        [
+            1,
+            9,
+            3
+        ],
+        [
+            11,
+            10,
+            12
+        ],
+        [
+            7,
+            2,
+            8,
+            6,
+            4
+        ]
+    ]
+}

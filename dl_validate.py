@@ -43,7 +43,7 @@ SAVE_LOG = True
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["202504222241"]  # Uncomment to manually specify versions
+    versions = ["202504212147", "202504212311"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -91,8 +91,6 @@ if __name__ == "__main__":
             "dataset_mirroring", False
         )
         rotation_enabled = config_info.get("augmentation_planar_rotation", False)
-        left_only = config_info.get("left_only", False)
-        right_only = config_info.get("right_only", False)
         if version == "202503281533":
             mirror_enabled = True
             rotation_enabled = True
@@ -124,19 +122,19 @@ if __name__ == "__main__":
         validation_modes = []
 
         # Determine base validation modes
-        if left_only and not right_only:
-            validation_modes.append({"name": "original_left", "X": X_L, "Y": Y_L})
-        elif right_only and not left_only:
-            validation_modes.append({"name": "original_right", "X": X_R, "Y": Y_R})
-        else:
-            X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-            validation_modes.append(
-                {
-                    "name": "mirrored_left_original_right",
-                    "X": np.concatenate((X_L_mirrored, X_R), axis=0),
-                    "Y": np.concatenate((Y_L, Y_R), axis=0),
-                }
-            )
+        validation_modes.extend(
+            [{"name": "original_left", "X": X_L, "Y": Y_L}, {"name": "original_right", "X": X_R, "Y": Y_R}]
+        )
+
+        # Add mirrored validation mode
+        X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+        validation_modes.append(
+            {
+                "name": "mirrored_left_original_right",
+                "X": np.concatenate((X_L_mirrored, X_R), axis=0),
+                "Y": np.concatenate((Y_L, Y_R), axis=0),
+            }
+        )
 
         if mirror_enabled:
             validation_modes.extend(

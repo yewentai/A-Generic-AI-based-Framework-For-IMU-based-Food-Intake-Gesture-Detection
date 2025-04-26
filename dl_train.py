@@ -61,7 +61,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Dataset Settings
-DATASET = "FDI"
+DATASET = "DXI"
 SAMPLING_FREQ_ORIGINAL = 64
 DOWNSAMPLE_FACTOR = 4
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
@@ -103,16 +103,16 @@ else:
 
 # Training Settings
 LEARNING_RATE = 5e-4
-NUM_FOLDS = 7
+NUM_FOLDS = 4
 NUM_EPOCHS = 100
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
 FLAG_AUGMENT_PLANAR_ROTATION = False
 FLAG_AUGMENT_SPATIAL_ORIENTATION = False
 FLAG_DATASET_AUGMENTATION = False
-FLAG_DATASET_MIRROR = False
-FLAG_DATASET_MIRROR_ADD = True  # If True, add mirrored data to the dataset
-DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
+FLAG_DATASET_MIRROR = True
+FLAG_DATASET_MIRROR_ADD = False  # If True, add mirrored data to the dataset
+DATASET_HAND = "RIGHT"  # "LEFT" or "RIGHT" or "BOTH"
 
 # ==============================================================================================
 #                            Main Training Code (Inline)
