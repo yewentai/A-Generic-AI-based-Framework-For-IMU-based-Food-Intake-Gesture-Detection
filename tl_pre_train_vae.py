@@ -23,7 +23,7 @@ from datetime import datetime
 from tqdm import tqdm
 
 from components.datasets import IMUDatasetX
-from components.model_vae import VAE, VAE_Loss, VAEMonitor
+from components.model_vae import VAE, VAE_Loss
 
 # Hyperparameters
 BETA = 0.1
@@ -31,122 +31,94 @@ WARMUP_EPOCHS = 30
 INITIAL_LR = 1e-3
 MIN_LR = 1e-5
 LR_PATIENCE = 5
-
+SEQ_LEN = 80  # Fixed sequence length
 
 def adjust_learning_rate(optimizer, current_lr, factor=0.5, min_lr=MIN_LR):
-    """Reduce learning rate when loss plateaus"""
     new_lr = max(current_lr * factor, min_lr)
     for param_group in optimizer.param_groups:
         param_group["lr"] = new_lr
     return new_lr
 
-
 def main():
-    # ---------------------- Configuration ----------------------
     data_dir = "dataset/Oreba/"
     X_PATH = os.path.join(data_dir, "X.pkl")
 
     with open(X_PATH, "rb") as f:
         X = np.array(pickle.load(f), dtype=object)
 
-    # Progressive training parameters
-    initial_seq_len = 40  # Start with shorter sequences
-    final_seq_len = 80  # Target sequence length
-    seq_len_step = 20  # Increase length by this amount
-    progressive_epochs = 15  # Train each sequence length for this many epochs
-
-    # Initialize monitor
+    # Initialize save directory
     version_prefix = datetime.now().strftime("%Y%m%d%H%M")
     save_dir = os.path.join("result", version_prefix)
-    monitor = VAEMonitor(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
 
-    # ---------------------- Progressive Training Loop ----------------------
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Dataset and DataLoader
+    dataset = IMUDatasetX(X, sequence_length=SEQ_LEN)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=4)
+    
+    # Model
+    latent_dim = 64
+    vae_model = VAE(input_channels=6, latent_dim=latent_dim).to(device)
+    optimizer = optim.Adam(vae_model.parameters(), lr=INITIAL_LR)
+    
     current_lr = INITIAL_LR
+    best_loss = float('inf')
+    patience_counter = 0
 
-    for seq_len in range(initial_seq_len, final_seq_len + 1, seq_len_step):
-        print(f"\n=== Training with sequence length: {seq_len} ===")
+    for epoch in range(100):
+        vae_model.train()
+        total_recon_loss = 0
+        total_kl_loss = 0
 
-        # Create dataset with current sequence length
-        dataset = IMUDatasetX(X, sequence_length=seq_len)
-        batch_size = 64
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+        for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}"):
+            x = batch.to(device).permute(0, 2, 1)
+            optimizer.zero_grad()
+            recon, mu, logvar = vae_model(x)
+            recon_loss, kl_loss = VAE_Loss(recon, x, mu, logvar)
 
-        # Initialize model (or reuse if continuing)
-        if seq_len == initial_seq_len:
-            latent_dim = 64
-            vae_model = VAE(input_channels=6, sequence_length=seq_len, latent_dim=latent_dim).to(device)
-            optimizer = optim.Adam(vae_model.parameters(), lr=current_lr)
-        else:
-            # Adjust model for new sequence length
-            vae_model.sequence_length = seq_len
-            vae_model = vae_model.to(device)
+            # KL warm-up
+            beta = min(BETA, BETA * epoch / WARMUP_EPOCHS)
+            loss = recon_loss + beta * kl_loss
 
-        # Train for progressive_epochs
-        for epoch in range(progressive_epochs):
-            vae_model.train()
-            total_recon_loss = 0
-            total_kl_loss = 0
+            loss.backward()
+            optimizer.step()
 
-            for batch in tqdm(dataloader, desc=f"SeqLen {seq_len} Epoch {epoch+1}/{progressive_epochs}"):
-                x = batch.to(device).permute(0, 2, 1)  # [B, channels, seq_len]
-                optimizer.zero_grad()
-                recon, mu, logvar = vae_model(x)
-                recon_loss, kl_loss = VAE_Loss(recon, x, mu, logvar)
+            total_recon_loss += recon_loss.item()
+            total_kl_loss += kl_loss.item()
 
-                # KL warm-up strategy
-                beta = min(BETA, BETA * epoch / WARMUP_EPOCHS)
-                loss = recon_loss + beta * kl_loss
+        avg_recon_loss = total_recon_loss / len(dataloader)
+        avg_kl_loss = total_kl_loss / len(dataloader)
+        print(f"Epoch {epoch+1} - Recon: {avg_recon_loss:.4f}, KL: {avg_kl_loss:.4f}, Beta: {beta:.4f}")
 
-                loss.backward()
-                optimizer.step()
-
-                total_recon_loss += recon_loss.item()
-                total_kl_loss += kl_loss.item()
-
-            # Calculate average losses
-            avg_recon_loss = total_recon_loss / len(dataloader)
-            avg_kl_loss = total_kl_loss / len(dataloader)
-
-            # Log metrics and reconstructions
-            monitor.log_metrics(epoch, avg_recon_loss, avg_kl_loss, current_lr, beta)
-
-            # Log sample reconstructions every 5 epochs
-            if epoch % 5 == 0:
-                monitor.log_reconstructions(x, recon, epoch)
-
-            # Check for early stopping or learning rate adjustment
-            if monitor.check_early_stop(avg_recon_loss, current_lr):
-                break
-
-            if monitor.lr_patience_counter >= LR_PATIENCE:
+        # Learning rate adjustment
+        if avg_recon_loss > best_loss:
+            patience_counter += 1
+            if patience_counter >= LR_PATIENCE:
                 current_lr = adjust_learning_rate(optimizer, current_lr)
-                monitor.lr_patience_counter = 0
-                print(f"Reduced learning rate to {current_lr:.2e}")
+                print(f"LR reduced to {current_lr:.2e}")
+                patience_counter = 0
+        else:
+            best_loss = avg_recon_loss
+            patience_counter = 0
 
-    # ---------------------- Save Final Model ----------------------
+    # Save model
     checkpoint_path = os.path.join(save_dir, "pretrained_vae.pth")
     torch.save(vae_model.state_dict(), checkpoint_path)
-    print(f"Final pre-trained VAE model saved to {checkpoint_path}")
+    print(f"Model saved to {checkpoint_path}")
 
     # Save config
     config = {
         "model": "VAE",
         "input_channels": 6,
-        "final_sequence_length": final_seq_len,
         "latent_dim": latent_dim,
-        "batch_size": batch_size,
-        "progressive_epochs": progressive_epochs,
-        "final_learning_rate": current_lr,
+        "sequence_length": SEQ_LEN,
+        "initial_lr": INITIAL_LR,
         "beta": BETA,
-        "warmup_epochs": WARMUP_EPOCHS,
+        "warmup_epochs": WARMUP_EPOCHS
     }
-    config_path = os.path.join(save_dir, "config_vae.json")
-    with open(config_path, "w") as f:
+    with open(os.path.join(save_dir, "config_vae.json"), "w") as f:
         json.dump(config, f, indent=4)
-
-    monitor.close()
-
 
 if __name__ == "__main__":
     main()
