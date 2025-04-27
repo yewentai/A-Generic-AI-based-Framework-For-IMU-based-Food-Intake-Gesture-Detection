@@ -43,7 +43,7 @@ SAVE_LOG = True
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["202504212147", "202504212311"]  # Uncomment to manually specify versions
+    versions = ["202504271525", "202504271533"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
