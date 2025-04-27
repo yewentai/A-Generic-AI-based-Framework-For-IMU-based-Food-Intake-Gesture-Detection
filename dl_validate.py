@@ -39,6 +39,8 @@ NUM_WORKERS = 4
 THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
 SAVE_LOG = True
+VALIDATE_DATASET = "DXI"  # Options: "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
+# Remind: DX has 2 classes, FD and Oreba have 3 classes
 
 
 if __name__ == "__main__":
@@ -65,7 +67,7 @@ if __name__ == "__main__":
 
         # Optionally add file handler
         if SAVE_LOG:
-            log_file = os.path.join(result_dir, "validation.log")
+            log_file = os.path.join(result_dir, f"validation_{VALIDATE_DATASET}.log")
             file_handler = logging.FileHandler(log_file, mode="w")
             file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
             logger.addHandler(file_handler)
@@ -79,7 +81,8 @@ if __name__ == "__main__":
         with open(config_file, "r") as f:
             config_info = json.load(f)
 
-        DATASET = config_info["dataset"]
+        if VALIDATE_DATASET == "ORIGINAL":
+            VALIDATE_DATASET = config_info["dataset"]
         NUM_CLASSES = config_info["num_classes"]
         MODEL = config_info["model"]
         INPUT_DIM = config_info["input_dim"]
@@ -102,65 +105,60 @@ if __name__ == "__main__":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"\nUsing device: {device}")
 
-        if DATASET.startswith("DX"):
-            sub_version = DATASET.replace("DX", "").upper() or "I"
+        if VALIDATE_DATASET.startswith("DX"):
+            sub_version = VALIDATE_DATASET.replace("DX", "").upper() or "I"
             DATA_DIR = f"./dataset/DX/DX-{sub_version}"
-        elif DATASET.startswith("FD"):
-            sub_version = DATASET.replace("FD", "").upper() or "I"
+            LR_SEPERATED = True
+        elif VALIDATE_DATASET.startswith("FD"):
+            sub_version = VALIDATE_DATASET.replace("FD", "").upper() or "I"
             DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+            LR_SEPERATED = True
+        elif VALIDATE_DATASET.startswith("OREBA"):
+            DATA_DIR = f"./dataset/OREBA/OREBA"
+            LR_SEPERATED = False
         else:
-            logger.error(f"Invalid dataset: {DATASET}")
+            logger.error(f"Invalid dataset: {VALIDATE_DATASET}")
             continue
 
-        # Load original data
-        X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
-        Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
-        X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
-        Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
-
-        # Prepare validation modes based on config
         validation_modes = []
-
-        # Determine base validation modes
-        validation_modes.extend(
-            [{"name": "original_left", "X": X_L, "Y": Y_L}, {"name": "original_right", "X": X_R, "Y": Y_R}]
-        )
-
-        # Add mirrored validation mode
-        X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-        validation_modes.append(
-            {
-                "name": "mirrored_left_original_right",
-                "X": np.concatenate((X_L_mirrored, X_R), axis=0),
-                "Y": np.concatenate((Y_L, Y_R), axis=0),
-            }
-        )
-
-        if mirror_enabled:
+        if LR_SEPERATED:
+            X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
+            Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
+            X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
+            Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
             validation_modes.extend(
-                [
-                    {"name": "original_left", "X": X_L, "Y": Y_L},
-                    {"name": "original_right", "X": X_R, "Y": Y_R},
-                ]
+                [{"name": "original_left", "X": X_L, "Y": Y_L}, {"name": "original_right", "X": X_R, "Y": Y_R}]
             )
-
-        if rotation_enabled:
-            # Apply rotation to 50% of samples
-            random_indices = np.random.choice(len(X_L), size=int(len(X_L) * 0.5), replace=False)
-            X_L_rotated = np.copy(X_L)
-            X_R_rotated = np.copy(X_R)
-            for i in random_indices:
-                X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
-                X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
-
-            X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
+            # Add mirrored validation mode
+            X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
             validation_modes.append(
                 {
-                    "name": "rotated_mirrored_left_original_right",
-                    "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
+                    "name": "mirrored_left_original_right",
+                    "X": np.concatenate((X_L_mirrored, X_R), axis=0),
                     "Y": np.concatenate((Y_L, Y_R), axis=0),
                 }
             )
+            if rotation_enabled:
+                # Apply rotation to 50% of samples
+                random_indices = np.random.choice(len(X_L), size=int(len(X_L) * 0.5), replace=False)
+                X_L_rotated = np.copy(X_L)
+                X_R_rotated = np.copy(X_R)
+                for i in random_indices:
+                    X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
+                    X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
+
+                X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
+                validation_modes.append(
+                    {
+                        "name": "rotated_mirrored_left_original_right",
+                        "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
+                        "Y": np.concatenate((Y_L, Y_R), axis=0),
+                    }
+                )
+        else:
+            X = np.array(pickle.load(open(os.path.join(DATA_DIR, "X.pkl"), "rb")), dtype=object)
+            Y = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y.pkl"), "rb")), dtype=object)
+            validation_modes.append({"name": "original", "X": X, "Y": Y})
 
         all_stats = {}
 
@@ -287,9 +285,9 @@ if __name__ == "__main__":
             all_stats[mode["name"]] = mode_stats
 
         # Save all statistics
-        stats_file_npy = os.path.join(result_dir, "validation_stats.npy")
-        stats_file_json = os.path.join(result_dir, "validation_stats.json")
-        stats_file_mat = os.path.join(result_dir, "validation_stats.mat")
+        stats_file_npy = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.npy")
+        stats_file_json = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.json")
+        stats_file_mat = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.mat")
 
         np.save(stats_file_npy, all_stats)
         with open(stats_file_json, "w") as f_json:
