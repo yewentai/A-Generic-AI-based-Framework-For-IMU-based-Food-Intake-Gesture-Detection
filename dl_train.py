@@ -39,6 +39,7 @@ from components.augmentation import (
 )
 from components.datasets import (
     IMUDataset,
+    IMUDatasetBalanced,
     create_balanced_subject_folds,
     load_predefined_validate_folds,
 )
@@ -61,7 +62,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Dataset Settings
-DATASET = "DXI"
+DATASET = "FDI"
 SAMPLING_FREQ_ORIGINAL = 64
 DOWNSAMPLE_FACTOR = 4
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
@@ -103,7 +104,7 @@ else:
 
 # Training Settings
 LEARNING_RATE = 5e-4
-NUM_FOLDS = 4
+NUM_FOLDS = 7
 NUM_EPOCHS = 100
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
@@ -112,7 +113,7 @@ FLAG_AUGMENT_SPATIAL_ORIENTATION = False
 FLAG_DATASET_AUGMENTATION = False
 FLAG_DATASET_MIRROR = False
 FLAG_DATASET_MIRROR_ADD = False  # If True, add mirrored data to the dataset
-DATASET_HAND = "RIGHT"  # "LEFT" or "RIGHT" or "BOTH"
+DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
 
 # ==============================================================================================
 #                            Main Training Code (Inline)
@@ -167,14 +168,14 @@ if FLAG_DATASET_MIRROR_ADD:
     Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
 
 if DATASET_HAND == "LEFT":
-    full_dataset = IMUDataset(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDatasetBalanced(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 elif DATASET_HAND == "RIGHT":
-    full_dataset = IMUDataset(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDatasetBalanced(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 elif DATASET_HAND == "BOTH":
     # Combine left and right data into a unified dataset
     X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
     Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDatasetBalanced(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 else:
     raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
 
@@ -194,7 +195,7 @@ if DATASET in ["FDII", "FDI"] and FLAG_DATASET_AUGMENTATION:
         X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-    fdiii_dataset = IMUDataset(
+    fdiii_dataset = IMUDatasetBalanced(
         X_fdiii,
         Y_fdiii,
         sequence_length=WINDOW_SIZE,

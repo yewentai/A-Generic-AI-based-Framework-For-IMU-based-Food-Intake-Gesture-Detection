@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 # Configuration
-DATASET = "FDI"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
+DATASET = "Oreba"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
 
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2

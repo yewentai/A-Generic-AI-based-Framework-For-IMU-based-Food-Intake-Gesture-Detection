@@ -6,7 +6,7 @@ IMU Dataset Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-25
+Edited      : 2025-04-28
 Description : This script defines the IMUDataset class for loading and preprocessing
               IMU data, as well as functions for creating balanced cross-validation folds.
 ===============================================================================
@@ -123,6 +123,138 @@ class IMUDataset(Dataset):
     def __getitem__(self, idx):
         x = torch.tensor(self.data[idx], dtype=torch.float32)
         y = torch.tensor(self.labels[idx], dtype=torch.float32)
+        return x, y
+
+
+class IMUDatasetBalanced(Dataset):
+    def __init__(
+        self,
+        X,
+        Y,
+        sequence_length=128,
+        downsample_factor=1,
+        apply_antialias=True,
+    ):
+        """
+        Dataset that balances long zero-label segments across entire recordings before
+        slicing into fixed-length windows, ensuring each window is exactly `sequence_length`.
+
+        Steps:
+          1. For each subject, optional anti-alias + downsample + normalize.
+          2. Identify runs of constant label; crop any zero-only runs to half the length
+             of the neighboring runs (ignoring missing neighbors).
+          3. Reconstruct a new sequence by concatenating the balanced runs.
+          4. Window the balanced sequence into fixed-length segments of `sequence_length`, zero-
+             padding the final remainder if necessary.
+
+        Parameters:
+            X (list of np.ndarray): IMU data per subject, shape (N, 6)
+            Y (list of np.ndarray): Label arrays per subject, shape (N,)
+            sequence_length (int): Window length after balancing.
+            downsample_factor (int): Factor for decimation.
+            apply_antialias (bool): Whether to low-pass filter before decimation.
+        """
+        if downsample_factor < 1:
+            raise ValueError("downsample_factor must be >= 1.")
+
+        self.sequence_length = sequence_length
+        self.downsample_factor = downsample_factor
+        self.apply_antialias = apply_antialias
+
+        self.data = []
+        self.labels = []
+        self.subject_indices = []
+
+        for subject_idx, (imu_data, label_seq) in enumerate(zip(X, Y)):
+            # Step 1: downsample + normalize
+            if downsample_factor > 1:
+                imu_data = self._downsample(imu_data)
+                label_seq = label_seq[::downsample_factor]
+            imu_data = self._normalize(imu_data)
+
+            # Step 2: segment by class then balance zero runs
+            runs = self._segment_by_class(imu_data, label_seq)
+            balanced_runs = self._balance_runs(runs)
+
+            # Step 3: reconstruct balanced full sequence
+            imu_balanced = np.concatenate([seg for seg, _ in balanced_runs], axis=0)
+            lbl_balanced = np.concatenate([lbl for _, lbl in balanced_runs], axis=0)
+
+            # Step 4: slice into fixed windows
+            num_samples = len(lbl_balanced)
+            end_full = num_samples - (num_samples % sequence_length)
+            for start in range(0, end_full, sequence_length):
+                x = imu_balanced[start : start + sequence_length]
+                y = lbl_balanced[start : start + sequence_length]
+                self.data.append(x)
+                self.labels.append(y)
+                self.subject_indices.append(subject_idx)
+
+            # Step 5: zero-pad the last segment if needed
+            rem = num_samples - end_full
+            if rem > 0:
+                x = imu_balanced[end_full:]
+                y = lbl_balanced[end_full:]
+                pad_len = sequence_length - rem
+                x = np.pad(x, ((0, pad_len), (0, 0)), mode="constant", constant_values=0)
+                y = np.pad(y, (0, pad_len), mode="constant", constant_values=0)
+                self.data.append(x)
+                self.labels.append(y)
+                self.subject_indices.append(subject_idx)
+
+    def _segment_by_class(self, data, labels):
+        """
+        Splits continuous arrays into runs of constant label.
+        Returns list of (imu_run, label_run).
+        """
+        runs = []
+        current_label = labels[0]
+        start = 0
+        for i in range(1, len(labels)):
+            if labels[i] != current_label:
+                runs.append((data[start:i], labels[start:i]))
+                start = i
+                current_label = labels[i]
+        runs.append((data[start:], labels[start:]))
+        return runs
+
+    def _balance_runs(self, runs):
+        """
+        Crop zero-only runs based on neighbors.
+        """
+        balanced = []
+        n = len(runs)
+        for idx, (seg, lbl) in enumerate(runs):
+            if np.all(lbl == 0):
+                left_len = len(runs[idx - 1][0]) // 2 if idx > 0 else 0
+                right_len = len(runs[idx + 1][0]) // 2 if idx < n - 1 else 0
+                target = left_len + right_len
+                L = len(lbl)
+                start = max((L - target) // 2, 0)
+                seg = seg[start : start + target]
+                lbl = lbl[start : start + target]
+            balanced.append((seg, lbl))
+        return balanced
+
+    def _downsample(self, data):
+        if self.apply_antialias:
+            nyq = 0.5 * data.shape[0]
+            cutoff = (0.5 / self.downsample_factor) * nyq
+            b, a = signal.butter(4, cutoff / nyq, btype="low", analog=False)
+            data = signal.filtfilt(b, a, data, axis=0)
+        return data[:: self.downsample_factor]
+
+    def _normalize(self, data):
+        mean = np.mean(data, axis=0, keepdims=True)
+        std = np.std(data, axis=0, keepdims=True)
+        return (data - mean) / (std + 1e-9)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        x = torch.tensor(self.data[idx], dtype=torch.float32)
+        y = torch.tensor(self.labels[idx], dtype=torch.long)
         return x, y
 
 

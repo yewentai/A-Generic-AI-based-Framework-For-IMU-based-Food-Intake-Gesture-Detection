@@ -37,15 +37,15 @@ from components.utils import convert_for_matlab
 # --- Configurations ---
 NUM_WORKERS = 4
 THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
-DEBUG_PLOT = False
+DEBUG_PLOT = True
 SAVE_LOG = True
-VALIDATE_DATASET = "DXI"  # Options: "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
+VALIDATE_DATASET = "ORIGINAL"  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
 # Remind: DX has 2 classes, FD and Oreba have 3 classes
 
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["202504271525", "202504271533"]  # Uncomment to manually specify versions
+    versions = ["202504281702"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
