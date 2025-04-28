@@ -1,9 +1,13 @@
 Number of subjects: 13
-Input features: 6
-Total samples: 4,105,704
-Unique labels: [0 1]
+Sequence length (first subject): 827243
+
+Overall Sample Counts:
 Samples with label 0: 3,952,942
 Samples with label 1: 152,762
+
+Overall Segment Counts:
+Segments with label 0: 463
+Segments with label 1: 450
 
 Subject-wise Sample Distribution:
 Subject_ID | Label_0 | Label_1
@@ -21,3 +25,20 @@ Subject_ID | Label_0 | Label_1
 11         | 282650  | 15651  
 12         | 540855  | 18719  
 13         | 152552  | 9298   
+
+Subject-wise Segment Distribution:
+Subject_ID | Label_0 | Label_1
+------------------------------
+1          | 20      | 19     
+2          | 23      | 22     
+3          | 12      | 11     
+4          | 22      | 21     
+5          | 24      | 23     
+6          | 38      | 37     
+7          | 30      | 29     
+8          | 50      | 49     
+9          | 62      | 61     
+10         | 59      | 58     
+11         | 42      | 41     
+12         | 55      | 54     
+13         | 26      | 25     

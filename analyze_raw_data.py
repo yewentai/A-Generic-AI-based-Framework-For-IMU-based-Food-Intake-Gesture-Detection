@@ -22,9 +22,10 @@ import os
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 
 # Configuration
-DATASET = "DXI"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
+DATASET = "FDI"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
 
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
@@ -74,67 +75,15 @@ def load_data():
     return X, Y
 
 
-def basic_statistics(X, Y):
-    """Print detailed dataset statistics and write to a txt file"""
-    stats_file = os.path.join(SAVE_DIR, "basic_statistics.txt")
-
-    # Get unique labels across all subjects
-    all_labels = np.concatenate(Y)
-    unique_labels = np.unique(all_labels)
-    num_labels = len(unique_labels)
-
-    # Compute label distribution per subject
-    label_counts_per_subject = []
-
-    for subj_idx, y in enumerate(Y):
-        # Initialize counts for all possible labels
-        label_counts = {label: 0 for label in range(num_labels)}
-        unique, counts = np.unique(y, return_counts=True)
-        for label, count in zip(unique, counts):
-            label_counts[label] = count
-
-        # Create tuple with subject index and counts for each label
-        counts_tuple = (subj_idx + 1,) + tuple(label_counts[label] for label in range(num_labels))
-        label_counts_per_subject.append(counts_tuple)
-
-    # Compute overall label counts
-    total_counts = np.sum([[count[i] for i in range(1, len(count))] for count in label_counts_per_subject], axis=0)
-
-    # Write to file
-    with open(stats_file, "w") as f:  # Open file in write mode
-        f.write(f"Number of subjects: {len(X)}\n")
-        f.write(f"Input features: {X[0].shape[1]}\n")  # Assuming [time, features]
-
-        total_samples = sum(len(subj) for subj in Y)
-        f.write(f"Total samples: {total_samples:,}\n")
-
-        f.write(f"Unique labels: {unique_labels}\n")
-
-        # Write overall label-specific counts
-        for label in range(num_labels):
-            f.write(f"Samples with label {label}: {total_counts[label]:,}\n")
-
-        # Write per-subject statistics
-        f.write("\nSubject-wise Sample Distribution:\n")
-        header = "Subject_ID | " + " | ".join(f"Label_{i}" for i in range(num_labels))
-        f.write(header + "\n")
-        f.write("-" * len(header) + "\n")
-
-        for counts in label_counts_per_subject:
-            subj_idx = counts[0]
-            label_counts = counts[1:]
-            row = f"{subj_idx:<10} | " + " | ".join(f"{count:<7}" for count in label_counts)
-            f.write(row + "\n")
-
-
 def segment_by_label(Y):
     """
-    Identify continuous segments of label 0, 1, and 2.
+    Identify continuous segments by labels (auto-detect labels).
 
     Returns:
         segments_dict: {label_value: [(start_idx, end_idx), ...]}
     """
-    segments_dict = {0: [], 1: [], 2: []}
+    unique_labels = np.unique(Y)
+    segments_dict = {label: [] for label in unique_labels}
 
     current_label = Y[0]
     start_idx = 0
@@ -149,6 +98,66 @@ def segment_by_label(Y):
     segments_dict[current_label].append((start_idx, len(Y)))
 
     return segments_dict
+
+
+def basic_statistics(Y):
+    """Print detailed dataset statistics and write to a txt file, including segment counts."""
+    stats_file = os.path.join(SAVE_DIR, "basic_statistics.txt")
+
+    # 1. Dynamically retrieve all unique labels
+    unique_labels = np.unique(np.concatenate(Y))
+
+    # 2. Per-subject statistics
+    sample_counts_per_subject = []
+    segment_counts_per_subject = []
+
+    for subj_idx, y in enumerate(Y):
+        # Count samples per label
+        sample_counts = {label: 0 for label in unique_labels}
+        uniq, cnts = np.unique(y, return_counts=True)
+        for lab, c in zip(uniq, cnts):
+            sample_counts[lab] = c
+        sample_counts_per_subject.append((subj_idx + 1,) + tuple(sample_counts[lab] for lab in unique_labels))
+
+        # Count segments per label
+        segs = segment_by_label(y)
+        segment_counts = {label: len(segs[label]) for label in unique_labels}
+        segment_counts_per_subject.append((subj_idx + 1,) + tuple(segment_counts[lab] for lab in unique_labels))
+
+    # 3. Aggregate totals
+    sample_arr = np.array([tup[1:] for tup in sample_counts_per_subject])
+    total_sample_counts = np.sum(sample_arr, axis=0)
+    segment_arr = np.array([tup[1:] for tup in segment_counts_per_subject])
+    total_segment_counts = np.sum(segment_arr, axis=0)
+
+    # 4. Write statistics to file
+    with open(stats_file, "w") as f:
+        f.write(f"Number of subjects: {len(Y)}\n")
+        f.write(f"Sequence length (first subject): {len(Y[0])}\n\n")
+
+        f.write("Overall Sample Counts:\n")
+        for lab, tot in zip(unique_labels, total_sample_counts):
+            f.write(f"Samples with label {lab}: {tot:,}\n")
+
+        f.write("\nOverall Segment Counts:\n")
+        for lab, tot in zip(unique_labels, total_segment_counts):
+            f.write(f"Segments with label {lab}: {tot:,}\n")
+
+        # Per-subject sample distribution
+        header = "Subject_ID | " + " | ".join(f"Label_{int(lab)}" for lab in unique_labels)
+        f.write("\nSubject-wise Sample Distribution:\n")
+        f.write(header + "\n" + "-" * len(header) + "\n")
+        for tup in sample_counts_per_subject:
+            sid, *counts = tup
+            f.write(f"{sid:<10} | " + " | ".join(f"{c:<7}" for c in counts) + "\n")
+
+        # Per-subject segment distribution
+        header2 = "Subject_ID | " + " | ".join(f"Label_{int(lab)}" for lab in unique_labels)
+        f.write("\nSubject-wise Segment Distribution:\n")
+        f.write(header2 + "\n" + "-" * len(header2) + "\n")
+        for tup in segment_counts_per_subject:
+            sid, *counts = tup
+            f.write(f"{sid:<10} | " + " | ".join(f"{c:<7}" for c in counts) + "\n")
 
 
 def plot_segment_length_distribution_by_label(Y):
@@ -339,10 +348,115 @@ def plot_longest_segments(X, Y):
             plt.close()
 
 
+def plot_all_subjects_labels(Y, sampling_freq=SAMPLING_FREQ):
+    """
+    Plot all subjects' label sequences with:
+        • A gray outline showing the full duration of each subject
+        • Filled bars for non-zero labels only
+    """
+    # Dynamically retrieve all unique labels and assign colors (using a colormap)
+    unique_labels = np.unique(np.concatenate(Y))
+    cmap = plt.cm.tab20(np.linspace(0, 1, len(unique_labels)))
+    color_map = {lab: cmap[i] for i, lab in enumerate(unique_labels)}
+
+    fig, ax = plt.subplots(figsize=(18, len(Y) * 0.7 + 4))
+    ax.set_facecolor("#FFFFFF")
+    ax.set_axisbelow(True)
+    ax.grid(axis="y", color="#E0E0E0", linestyle="-", linewidth=0.8)
+
+    # Draw the full duration outline for each subject
+    for subj_idx, y in enumerate(Y):
+        duration = len(y) / sampling_freq
+        y_center = subj_idx + 0.5
+        ax.broken_barh(
+            [(0, duration)],
+            (y_center - 0.4, 0.8),
+            facecolors="none",
+            edgecolor="#888888",
+            linewidth=1.0,
+            zorder=1,
+        )
+
+    # Draw filled bars for non-zero labels
+    for subj_idx, y in enumerate(Y):
+        segments = segment_by_label(y)
+        y_center = subj_idx + 0.5
+        for lab, seg_list in segments.items():
+            if lab == 0:
+                continue
+            for s, e in seg_list:
+                start_sec = s / sampling_freq
+                length_sec = (e - s) / sampling_freq
+                ax.broken_barh(
+                    [(start_sec, length_sec)],
+                    (y_center - 0.4, 0.8),
+                    facecolors=color_map[lab],
+                    edgecolor=None,
+                    linewidth=0,
+                    alpha=1.0,
+                    zorder=2,
+                )
+
+    # Add a legend for non-zero labels
+    legend_elements = [Patch(facecolor=color_map[lab], label=f"Label {lab}") for lab in unique_labels if lab != 0]
+    ax.legend(
+        handles=legend_elements,
+        title="Activity Labels",
+        loc="upper right",
+        frameon=True,
+        framealpha=0.95,
+        edgecolor="#CCCCCC",
+        fontsize=12,
+        title_fontsize=14,
+        borderpad=1,
+    )
+
+    # Configure axes
+    ax.invert_yaxis()
+    ax.set_ylim(0, len(Y))
+    max_time = max(len(y) for y in Y) / sampling_freq
+    ax.set_xlim(0, max_time)
+
+    ax.set_xlabel("Time (seconds)", fontsize=14, labelpad=10, fontweight="semibold")
+    ax.set_ylabel("Subject ID", fontsize=14, labelpad=10, fontweight="semibold")
+    ax.set_yticks(np.arange(len(Y)) + 0.5)
+    ax.set_yticklabels([f"Subject {i+1}" for i in range(len(Y))], fontsize=12)
+    ax.tick_params(axis="x", labelsize=12, length=0)
+
+    # Add minute-based ticks if the timeline exceeds 60 seconds
+    if max_time > 60:
+
+        def time_formatter(x, _):
+            return f"{int(x//60)}:{int(x%60):02d}"
+
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(time_formatter))
+        ax_top = ax.secondary_xaxis("top")
+        ax_top.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{round(x/60, 1)} min"))
+        ax_top.tick_params(labelsize=10)
+
+    # Beautify the plot borders
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["bottom"].set_color("#808080")
+
+    ax.set_title("Subject Activity Timeline", fontsize=16, pad=20, fontweight="bold", color="#333333")
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(SAVE_DIR, "all_subjects_labels.png"),
+        dpi=300,
+        bbox_inches="tight",
+        facecolor=fig.get_facecolor(),
+    )
+    plt.close()
+
+
 def main():
     # Load and analyze both sides together
     X, Y = load_data()
-    basic_statistics(X, Y)
+    # basic_statistics(Y)
+    plot_all_subjects_labels(Y)
     # plot_sample_distribution(Y)
     # plot_segment_length_distribution_by_label(Y)
     # plot_longest_segments(X, Y)
