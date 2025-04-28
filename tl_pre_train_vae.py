@@ -6,7 +6,7 @@ IMU VAE Pre-Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-25
+Edited      : 2025-04-28
 Description : This script pre-trains a Variational Autoencoder (VAE) on IMU
               data in an unsupervised manner to extract latent features.
 ===============================================================================
@@ -23,7 +23,7 @@ from datetime import datetime
 from tqdm import tqdm
 
 from components.datasets import IMUDatasetX
-from components.model_vae import VAE, VAE_Loss
+from components.models.vae import VAE, VAE_Loss
 
 # Hyperparameters
 BETA = 0.1
@@ -33,11 +33,13 @@ MIN_LR = 1e-5
 LR_PATIENCE = 5
 SEQ_LEN = 80  # Fixed sequence length
 
+
 def adjust_learning_rate(optimizer, current_lr, factor=0.5, min_lr=MIN_LR):
     new_lr = max(current_lr * factor, min_lr)
     for param_group in optimizer.param_groups:
         param_group["lr"] = new_lr
     return new_lr
+
 
 def main():
     data_dir = "dataset/Oreba/"
@@ -52,18 +54,18 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
     # Dataset and DataLoader
     dataset = IMUDatasetX(X, sequence_length=SEQ_LEN)
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=4)
-    
+
     # Model
     latent_dim = 64
     vae_model = VAE(input_channels=6, latent_dim=latent_dim).to(device)
     optimizer = optim.Adam(vae_model.parameters(), lr=INITIAL_LR)
-    
+
     current_lr = INITIAL_LR
-    best_loss = float('inf')
+    best_loss = float("inf")
     patience_counter = 0
 
     for epoch in range(100):
@@ -115,10 +117,11 @@ def main():
         "sequence_length": SEQ_LEN,
         "initial_lr": INITIAL_LR,
         "beta": BETA,
-        "warmup_epochs": WARMUP_EPOCHS
+        "warmup_epochs": WARMUP_EPOCHS,
     }
     with open(os.path.join(save_dir, "config_vae.json"), "w") as f:
         json.dump(config, f, indent=4)
+
 
 if __name__ == "__main__":
     main()

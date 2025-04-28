@@ -6,7 +6,7 @@ IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with MLP
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-10
+Edited      : 2025-04-28
 Description : This script loads a pre-trained ResNet encoder (via the harnet10
               framework and load_weights function) and attaches a classifier
               head (MLP) for fine-tuning on a downstream classification task.
@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 from tqdm import tqdm
 
-from components.model_resnet import Resnet, load_weights
+from components.models.resnet import Resnet, load_weights
 from components.datasets import IMUDatasetN21
 
 

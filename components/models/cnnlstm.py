@@ -6,7 +6,7 @@ IMU CNN-LSTM Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-04-28
 Description : This script defines the CNN-LSTM architecture for IMU data classification.
               It employs dilated convolutions to preserve temporal resolution and processes
               the extracted features with an LSTM layer.

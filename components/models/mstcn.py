@@ -6,7 +6,7 @@ IMU MSTCN Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-04-28
 Description : This script defines the Multi-Stage Temporal Convolutional Network (MSTCN)
               model for IMU data segmentation, including both single-stage and multi-stage
               architectures, along with the associated loss function.

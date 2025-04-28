@@ -6,7 +6,7 @@ IMU Fine-Tuned Classifier Validation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-22
+Edited      : 2025-04-28
 Description : Recreates the exact model architecture used during fine-tuning
               to ensure proper loading of the saved state dictionary and
               performs validation on the test dataset.
@@ -24,7 +24,7 @@ from tqdm import tqdm
 from sklearn.metrics import classification_report, confusion_matrix
 
 from components.datasets import IMUDatasetN21
-from components.model_resnet import Resnet
+from components.models.resnet import Resnet
 
 
 # ------------------------------------------------------------------------------

@@ -6,7 +6,7 @@ Event-based Segmentation GAN Training Script
 ------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-17
+Edited      : 2025-04-28
 Description : This script trains a GAN model for augmenting event-based IMU segmentation data.
               It is structured similarly to the MSTCN training script, with inline code for
               dataset loading, GAN model definition, training, and checkpointing.
@@ -29,7 +29,7 @@ import argparse
 
 from components.datasets import IMUDatasetSegment
 from components.checkpoint import save_generator, save_discriminator
-from components.model_gan import Generator, Discriminator
+from components.models.gan import Generator, Discriminator
 
 # ==============================================================================================
 #                             Configuration Parameters

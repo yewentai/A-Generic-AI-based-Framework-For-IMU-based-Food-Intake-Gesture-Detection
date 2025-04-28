@@ -6,7 +6,7 @@ IMU AccNet Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-04-28
 Description : This script defines the AccNet model for processing accelerometer
               data from IMU sensors. AccNet is designed as a lightweight convolutional
               network that serves as an encoder to extract compact feature representations

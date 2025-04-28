@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-04-23
+Edited      : 2025-04-28
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original left/right hand validation
               2. Hand mirroring (if enabled in config)
@@ -25,9 +25,9 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
 from scipy.io import savemat
 
-from components.model_mstcn import MSTCN
-from components.model_tcn import TCN
-from components.model_cnnlstm import CNNLSTM
+from components.models.mstcn import MSTCN
+from components.models.tcn import TCN
+from components.models.cnnlstm import CNNLSTM
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset

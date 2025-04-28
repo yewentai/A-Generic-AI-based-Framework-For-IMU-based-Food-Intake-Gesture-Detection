@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-25
+Edited      : 2025-04-28
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -44,9 +44,9 @@ from components.datasets import (
 )
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
-from components.model_cnnlstm import CNNLSTM, CNNLSTM_Loss
-from components.model_tcn import TCN, TCN_Loss
-from components.model_mstcn import MSTCN, MSTCN_Loss
+from components.models.cnnlstm import CNNLSTM, CNNLSTM_Loss
+from components.models.tcn import TCN, TCN_Loss
+from components.models.mstcn import MSTCN, MSTCN_Loss
 
 # ==============================================================================================
 #                             Configuration Parameters

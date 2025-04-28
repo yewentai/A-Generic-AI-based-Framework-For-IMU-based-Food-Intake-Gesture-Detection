@@ -6,7 +6,7 @@ IMU ResNet Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-10
+Edited      : 2025-04-28
 Description : This module defines various components of a ResNet-based model
               architecture, including classifiers, projection heads, residual
               blocks, and downsampling layers. These components are designed
