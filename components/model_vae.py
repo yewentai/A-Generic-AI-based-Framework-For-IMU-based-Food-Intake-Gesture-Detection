@@ -6,7 +6,7 @@ IMU VAE Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-25
+Edited      : 2025-04-28
 Description : This script defines the Variational Autoencoder (VAE) architecture for
               IMU data, including its encoder, decoder, and the combined VAE loss function.
 ===============================================================================
@@ -15,15 +15,13 @@ Description : This script defines the Variational Autoencoder (VAE) architecture
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+
 
 class Encoder(nn.Module):
     def __init__(self, input_channels, latent_dim):
         super(Encoder, self).__init__()
         self.input_channels = input_channels
-        
+
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv1d(input_channels, 32, kernel_size=3, stride=2, padding=1),
@@ -36,10 +34,10 @@ class Encoder(nn.Module):
             nn.BatchNorm1d(128),
             nn.LeakyReLU(0.2),
         )
-        
+
         # Calculate flattened size
         self.fc_input = 128 * (80 // (2**3))  # 80 input length reduced by 2^3 from 3 conv layers
-        
+
         # Latent space
         self.fc_mu = nn.Linear(self.fc_input, latent_dim)
         self.fc_logvar = nn.Linear(self.fc_input, latent_dim)
@@ -53,11 +51,11 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, input_channels, latent_dim):
         super(Decoder, self).__init__()
-        
+
         # Decoder
         self.fc_input = 128 * (80 // (2**3))  # Match encoder's flattened size
         self.decoder_input = nn.Linear(latent_dim, self.fc_input)
-        
+
         self.decoder = nn.Sequential(
             nn.ConvTranspose1d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.BatchNorm1d(64),
@@ -66,7 +64,7 @@ class Decoder(nn.Module):
             nn.BatchNorm1d(32),
             nn.LeakyReLU(0.2),
             nn.ConvTranspose1d(32, input_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.Tanh()
+            nn.Tanh(),
         )
 
     def forward(self, z):
@@ -91,7 +89,8 @@ class VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decoder(z), mu, logvar
 
+
 def VAE_Loss(recon, x, mu, logvar):
-    recon_loss = F.mse_loss(recon, x, reduction='mean')
+    recon_loss = F.mse_loss(recon, x, reduction="mean")
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss, kl_loss
