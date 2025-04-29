@@ -36,7 +36,9 @@ from components.utils import convert_for_matlab
 
 # --- Configurations ---
 NUM_WORKERS = 4
-THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
+SEGMENT_VALIDATION = True
+if SEGMENT_VALIDATION:
+    THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
 SAVE_LOG = True
 VALIDATE_DATASET = "ORIGINAL"  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
@@ -51,7 +53,8 @@ if __name__ == "__main__":
 
     for version in versions:
         result_dir = os.path.join(result_root, version)
-        os.makedirs(result_dir, exist_ok=True)
+        if not os.path.exists(result_dir):
+            logger.warning(f"Result directory does not exist: {result_dir}.")
 
         # Set up logging
         logger = logging.getLogger(f"validation_{version}")
@@ -86,6 +89,7 @@ if __name__ == "__main__":
         NUM_CLASSES = config_info["num_classes"]
         MODEL = config_info["model"]
         INPUT_DIM = config_info["input_dim"]
+        DOWNSAMPLE_FACTOR = config_info["downsample_factor"]
         SAMPLING_FREQ = config_info["sampling_freq"]
         WINDOW_SIZE = config_info["window_size"]
         BATCH_SIZE = config_info["batch_size"]
@@ -165,7 +169,7 @@ if __name__ == "__main__":
         for mode in validation_modes:
             logger.info(f"\n--- Validating {mode['name']} ---")
 
-            dataset = IMUDataset(mode["X"], mode["Y"], sequence_length=WINDOW_SIZE)
+            dataset = IMUDataset(mode["X"], mode["Y"], sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
             mode_stats = []
 
             for fold, validate_subjects in enumerate(tqdm(validate_folds, desc=f"K-Fold ({mode['name']})", leave=True)):
@@ -220,40 +224,40 @@ if __name__ == "__main__":
                     pin_memory=True,
                 )
 
-                # all_predictions, all_labels = [], []
-                # with torch.no_grad():
-                #     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
-                #         batch_x = batch_x.permute(0, 2, 1).to(device)
-                #         outputs = model(batch_x)
-                #         logits = outputs[:, -1, :, :] if outputs.ndim == 4 else outputs
-                #         probs = F.softmax(logits, dim=1)
-                #         preds = torch.argmax(probs, dim=1)
-                #         all_predictions.extend(preds.view(-1).cpu().numpy())
-                #         all_labels.extend(batch_y.view(-1).cpu().numpy())
-
                 all_predictions, all_labels = [], []
-
                 with torch.no_grad():
                     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
-                        # [B, L, C_in] → [B, C_in, L]
                         batch_x = batch_x.permute(0, 2, 1).to(device)
+                        outputs = model(batch_x)
+                        logits = outputs[:, -1, :, :] if outputs.ndim == 4 else outputs
+                        probs = F.softmax(logits, dim=1)
+                        preds = torch.argmax(probs, dim=1)
+                        all_predictions.extend(preds.view(-1).cpu().numpy())
+                        all_labels.extend(batch_y.view(-1).cpu().numpy())
 
-                        # forward pass: now returns List[Tensor] for MSTCN
-                        outputs_list = model(batch_x)
+                # all_predictions, all_labels = [], []
 
-                        # pick the last stage's logits
-                        if isinstance(outputs_list, list):
-                            logits = outputs_list[-1]  # -> [B, num_classes, L]
-                        else:
-                            logits = outputs_list  # for single-stage TCN
+                # with torch.no_grad():
+                #     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
+                #         # [B, L, C_in] → [B, C_in, L]
+                #         batch_x = batch_x.permute(0, 2, 1).to(device)
 
-                        # softmax + argmax over class-dim
-                        probs = F.softmax(logits, dim=1)  # [B, C, L]
-                        preds = torch.argmax(probs, dim=1)  # [B, L]
+                #         # forward pass: now returns List[Tensor] for MSTCN
+                #         outputs_list = model(batch_x)
 
-                        # flatten and store
-                        all_predictions.extend(preds.reshape(-1).cpu().numpy())
-                        all_labels.extend(batch_y.reshape(-1).cpu().numpy())
+                #         # pick the last stage's logits
+                #         if isinstance(outputs_list, list):
+                #             logits = outputs_list[-1]  # -> [B, num_classes, L]
+                #         else:
+                #             logits = outputs_list  # for single-stage TCN
+
+                #         # softmax + argmax over class-dim
+                #         probs = F.softmax(logits, dim=1)  # [B, C, L]
+                #         preds = torch.argmax(probs, dim=1)  # [B, L]
+
+                #         # flatten and store
+                #         all_predictions.extend(preds.reshape(-1).cpu().numpy())
+                #         all_labels.extend(batch_y.reshape(-1).cpu().numpy())
 
                 preds_array = np.array(all_predictions)
                 labels_array = np.array(all_labels)

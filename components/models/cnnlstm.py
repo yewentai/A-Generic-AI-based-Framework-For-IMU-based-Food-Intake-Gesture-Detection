@@ -6,7 +6,7 @@ IMU CNN-LSTM Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
+Edited      : 2025-04-29
 Description : This script defines the CNN-LSTM architecture for IMU data classification.
               It employs dilated convolutions to preserve temporal resolution and processes
               the extracted features with an LSTM layer.
@@ -15,9 +15,7 @@ Adjustment  : Use dilated convolutions instead of max pooling (which downsamples
 ===============================================================================
 """
 
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class CNNLSTM(nn.Module):
@@ -92,45 +90,3 @@ class CNNLSTM(nn.Module):
         # Transpose to get final output shape (B, num_classes, M)
         out = out.transpose(1, 2)
         return out
-
-
-def CNNLSTM_Loss(outputs, targets):
-    """
-    Loss function for CNN_LSTM for multi-class classification.
-
-    Assumes:
-      - outputs: Tensor of shape [batch_size, num_classes, seq_len] (logits)
-      - targets: Tensor of shape [batch_size, seq_len] with integer class labels
-                 in the range [0, num_classes - 1].
-
-    The loss is computed as a combination of:
-      - Cross-Entropy loss (applied on each time step).
-      - Temporal smoothing loss: MSE loss between the log-softmax predictions
-        for consecutive time steps.
-
-    Returns:
-        ce_loss (torch.Tensor): Cross-entropy loss.
-        mse_loss_mean (torch.Tensor): Temporal smoothing loss.
-    """
-    targets = targets.long()
-    loss_ce_fn = nn.CrossEntropyLoss(ignore_index=-100)
-    loss_mse_fn = nn.MSELoss(reduction="none")
-
-    batch_size, num_classes, seq_len = outputs.size()
-
-    # Compute cross-entropy loss.
-    # Transpose outputs to [batch_size, seq_len, num_classes] and reshape.
-    ce_loss = loss_ce_fn(outputs.transpose(2, 1).contiguous().view(-1, num_classes), targets.view(-1))
-
-    # Compute temporal smoothing loss if there is more than one time step.
-    if seq_len > 1:
-        mse_loss_value = loss_mse_fn(
-            F.log_softmax(outputs[:, :, 1:], dim=1),
-            F.log_softmax(outputs.detach()[:, :, :-1], dim=1),
-        )
-        mse_loss_value = torch.clamp(mse_loss_value, min=0, max=16)
-        mse_loss_mean = torch.mean(mse_loss_value)
-    else:
-        mse_loss_mean = torch.tensor(0.0, device=outputs.device)
-
-    return ce_loss, mse_loss_mean

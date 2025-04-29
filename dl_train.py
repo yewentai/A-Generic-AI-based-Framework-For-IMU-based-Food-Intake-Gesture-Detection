@@ -10,27 +10,35 @@ Edited      : 2025-04-29
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
-              3. Configurable model architectures (MSTCN, TCN, CNN-LSTM)
-              4. Flexible dataset handling (DX/FD, Oreba/Clemson)
+              3. Configurable model architectures (CNN-LSTM, TCN, MSTCN)
+              4. Flexible dataset handling (DX/FD/Oreba)
               5. Comprehensive logging and checkpointing
 
               Tips: Use --distributed flag for distributed training mode.
 ===============================================================================
 """
 
+# Standard library imports
 import os
 import json
 import pickle
+import logging
+import argparse
+from datetime import datetime
+
+# Third-party imports
 import numpy as np
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader, Subset, ConcatDataset, DistributedSampler
-from datetime import datetime
-import argparse
 from tqdm import tqdm
-import logging
 
-# Import custom modules from the components package
+# Local imports
+from components.pre_processing import hand_mirroring
+from components.checkpoint import save_best_model
+from components.models.cnnlstm import CNNLSTM
+from components.models.tcn import TCN, MSTCN
+from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
     augment_axis_permutation,
@@ -43,12 +51,8 @@ from components.datasets import (
     create_balanced_subject_folds,
     load_predefined_validate_folds,
 )
-from components.pre_processing import hand_mirroring
-from components.checkpoint import save_best_model
-from components.models.cnnlstm import CNNLSTM, CNNLSTM_Loss
-from components.models.tcn import TCN, TCN_Loss, MSTCN, MSTCN_Loss
 
-# from components.models.mstcn import MSTCN, MSTCN_Loss
+# from components.models.mstcn import MSTCN
 
 # ==============================================================================================
 #                             Configuration Parameters
@@ -62,7 +66,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Dataset Settings
+# ----------------------------------------------------------------------------------------------
+# Dataset Configuration
+# ----------------------------------------------------------------------------------------------
 DATASET = "DXI"
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
@@ -71,6 +77,7 @@ if DATASET.startswith("DX"):
     sub_version = DATASET.replace("DX", "").upper() or "I"
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
+    HAND_SEPERATION = True
 elif DATASET.startswith("FD"):
     SAMPLING_FREQ_ORIGINAL = 64
     DOWNSAMPLE_FACTOR = 4
@@ -78,31 +85,39 @@ elif DATASET.startswith("FD"):
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
     TASK = "multiclass"
+    HAND_SEPERATION = True
 elif DATASET.startswith("OREBA"):
     SAMPLING_FREQ_ORIGINAL = 64
     DOWNSAMPLE_FACTOR = 4
     NUM_CLASSES = 3
     DATA_DIR = "./dataset/Oreba"
     TASK = "multiclass"
+    HAND_SEPERATION = False
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 
-# Dataloader Settings
+# ----------------------------------------------------------------------------------------------
+# Dataloader Configuration
+# ----------------------------------------------------------------------------------------------
 WINDOW_LENGTH = 60
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 
-# Model Settings
+# ----------------------------------------------------------------------------------------------
+# Model Configuration
+# ----------------------------------------------------------------------------------------------
 MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
 INPUT_DIM = 6
+SMOOTHING = "MSE"
 LAMBDA_COEF = 0.15
 if MODEL in ["TCN", "MSTCN"]:
+    KERNEL_SIZE = 3
     NUM_LAYERS = 9
     NUM_FILTERS = 128
-    KERNEL_SIZE = 3
     DROPOUT = 0.3
+    CAUSAL = False
     if MODEL == "MSTCN":
         NUM_STAGES = 2
 elif MODEL == "CNN_LSTM":
@@ -111,24 +126,35 @@ elif MODEL == "CNN_LSTM":
 else:
     raise ValueError(f"Invalid model: {MODEL}")
 
-# Training Settings
+# ----------------------------------------------------------------------------------------------
+# Training Configuration
+# ----------------------------------------------------------------------------------------------
 LEARNING_RATE = 5e-4
-NUM_FOLDS = 4
+if DATASET == "FDI":
+    NUM_FOLDS = 7
+else:
+    NUM_FOLDS = 4
 NUM_EPOCHS = 100
+
+# ----------------------------------------------------------------------------------------------
+# Augmentation Configuration
+# ----------------------------------------------------------------------------------------------
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
 FLAG_AUGMENT_PLANAR_ROTATION = False
 FLAG_AUGMENT_SPATIAL_ORIENTATION = False
 FLAG_DATASET_AUGMENTATION = False
-FLAG_DATASET_MIRROR = False
-FLAG_DATASET_MIRROR_ADD = False  # If True, add mirrored data to the dataset
-DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
+
+if HAND_SEPERATION:
+    DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
+    FLAG_DATASET_MIRROR = False  # If True, mirror the left hand data
+    FLAG_DATASET_MIRROR_ADD = False  # If True, add mirrored data to the dataset
 
 # ==============================================================================================
-#                            Main Training Code (Inline)
+#                                   Main Training Code
 # ==============================================================================================
 
-parser = argparse.ArgumentParser(description="MSTCN IMU Training Script (Combined Mode)")
+parser = argparse.ArgumentParser(description="IMU HAR Training Script")
 parser.add_argument("--distributed", action="store_true", help="Run in distributed mode")
 args = parser.parse_args()
 
@@ -153,44 +179,50 @@ if local_rank == 0:
     checkpoint_dir = os.path.join(result_dir, "checkpoint")
     os.makedirs(checkpoint_dir, exist_ok=True)
     training_stats_file = os.path.join(result_dir, "train_stats.npy")
+
+if HAND_SEPERATION:
+    with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
+        X_L = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
+        Y_L = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
+        X_R = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
+        Y_R = np.array(pickle.load(f), dtype=object)
+
+    if FLAG_DATASET_MIRROR:
+        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+    if FLAG_DATASET_MIRROR_ADD:
+        X_L_mirror = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+        X_R_mirror = np.array([hand_mirroring(sample) for sample in X_R], dtype=object)
+        X_L = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_L_mirror)], dtype=object)
+        X_R = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_R, X_R_mirror)], dtype=object)
+        Y_L = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_L)], dtype=object)
+        Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
+
+    if DATASET_HAND == "LEFT":
+        full_dataset = IMUDataset(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    elif DATASET_HAND == "RIGHT":
+        full_dataset = IMUDataset(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    elif DATASET_HAND == "BOTH":
+        # Combine left and right data into a unified dataset
+        X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+        Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
+        full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    else:
+        raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
 else:
-    checkpoint_dir = None
-
-with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
-    X_L = np.array(pickle.load(f), dtype=object)
-with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
-    Y_L = np.array(pickle.load(f), dtype=object)
-with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
-    X_R = np.array(pickle.load(f), dtype=object)
-with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
-    Y_R = np.array(pickle.load(f), dtype=object)
-
-if FLAG_DATASET_MIRROR:
-    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-
-if FLAG_DATASET_MIRROR_ADD:
-    X_L_mirror = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-    X_R_mirror = np.array([hand_mirroring(sample) for sample in X_R], dtype=object)
-    X_L = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_L_mirror)], dtype=object)
-    X_R = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_R, X_R_mirror)], dtype=object)
-    Y_L = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_L)], dtype=object)
-    Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
-
-if DATASET_HAND == "LEFT":
-    full_dataset = IMUDataset(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-elif DATASET_HAND == "RIGHT":
-    full_dataset = IMUDataset(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-elif DATASET_HAND == "BOTH":
-    # Combine left and right data into a unified dataset
-    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
-    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
+    with open(os.path.join(DATA_DIR, "X.pkl"), "rb") as f:
+        X = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
+        Y = np.array(pickle.load(f), dtype=object)
     full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-else:
-    raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
 
-# Augment Dataset with FDIII (if using FDII/FDI)
+# Augment Dataset
 fdiii_dataset = None
-if DATASET in ["FDII", "FDI"] and FLAG_DATASET_AUGMENTATION:
+oreba_dataset = None
+if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
     fdiii_dir = "./dataset/FD/FD-III"
     with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
         X_L_fdiii = np.array(pickle.load(f), dtype=object)
@@ -211,23 +243,36 @@ if DATASET in ["FDII", "FDI"] and FLAG_DATASET_AUGMENTATION:
         downsample_factor=DOWNSAMPLE_FACTOR,
     )
 
-# Create validation folds based on the dataset type
+    oreba_dir = "./dataset/Oreba"
+    with open(os.path.join(oreba_dir, "X.pkl"), "rb") as f:
+        X_oreba = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(oreba_dir, "Y.pkl"), "rb") as f:
+        Y_oreba = np.array(pickle.load(f), dtype=object)
+    oreba_dataset = IMUDataset(
+        X_oreba,
+        Y_oreba,
+        sequence_length=WINDOW_SIZE,
+        downsample_factor=DOWNSAMPLE_FACTOR,
+    )
+
+# Create validation folds
 if DATASET == "FDI":
     validate_folds = load_predefined_validate_folds()
 else:
     validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
 training_statistics = []
 
-loss_fn = {"TCN": TCN_Loss, "MSTCN": MSTCN_Loss, "CNN_LSTM": CNNLSTM_Loss}[MODEL]
-
+# Training loop over folds
 for fold, validate_subjects in enumerate(validate_folds):
+    # Prepare training data
     train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
-    if DATASET in ["FDII", "FDI"] and fdiii_dataset is not None and FLAG_DATASET_AUGMENTATION:
+    if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
         base_train_dataset = Subset(full_dataset, train_indices)
-        train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset])
+        train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset, oreba_dataset])
     else:
         train_dataset = Subset(full_dataset, train_indices)
 
+    # Setup dataloader
     train_sampler = (
         DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True)
         if args.distributed
@@ -280,6 +325,7 @@ for fold, validate_subjects in enumerate(validate_folds):
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     best_loss = float("inf")
 
+    # Training loop over epochs
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         model.train()
         if args.distributed:
@@ -308,7 +354,15 @@ for fold, validate_subjects in enumerate(validate_folds):
 
             optimizer.zero_grad()
             outputs = model(batch_x)
-            ce_loss, mse_loss = loss_fn(outputs, batch_y)
+            if MODEL == "MSTCN":
+                ce_loss = 0.0
+                mse_loss = 0.0
+                for output in outputs:
+                    ce, smooth = loss_fn(output, batch_y, smoothing=SMOOTHING)
+                    ce_loss += ce
+                    mse_loss += smooth
+            else:
+                ce_loss, mse_loss = loss_fn(outputs, batch_y, smoothing=SMOOTHING)
             loss = ce_loss + LAMBDA_COEF * mse_loss
             loss.backward()
             optimizer.step()
@@ -330,23 +384,41 @@ for fold, validate_subjects in enumerate(validate_folds):
                 "train_loss_mse": training_loss_mse / len(train_loader),
             }
             training_statistics.append(stats)
+            if epoch % 5 == 0:
+                logger.info(
+                    f"[Rank {local_rank}] Epoch {epoch+1}/{NUM_EPOCHS} - Loss: {avg_loss:.4f}, CE: {training_loss_ce / len(train_loader):.4f}, MSE: {training_loss_mse / len(train_loader):.4f}"
+                )
 
+# Save final results
 if local_rank == 0:
     np.save(training_stats_file, training_statistics)
     logger.info(f"Training statistics saved to {training_stats_file}")
+    logger.info(f"Training completed in {datetime.now() - overall_start}")
 
+    # Save configuration
     config_info = {
+        # Dataset Settings
         "dataset": DATASET,
+        "task": TASK,
+        "hand_separation": HAND_SEPERATION,
         "hand": DATASET_HAND,
         "num_classes": NUM_CLASSES,
+        "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
+        "downsample_factor": DOWNSAMPLE_FACTOR,
         "sampling_freq": SAMPLING_FREQ,
+        "data_dir": DATA_DIR,
+        # Dataloader Settings
+        "window_length": WINDOW_LENGTH,
         "window_size": WINDOW_SIZE,
-        "input_dim": INPUT_DIM,
-        # Model information grouped together
-        "model": MODEL,
-        "learning_rate": LEARNING_RATE,
         "batch_size": BATCH_SIZE,
-        # Training configuration
+        "num_workers": NUM_WORKERS,
+        # Model Settings
+        "model": MODEL,
+        "input_dim": INPUT_DIM,
+        "smoothing": SMOOTHING,
+        "lambda_coef": LAMBDA_COEF,
+        # Training Settings
+        "learning_rate": LEARNING_RATE,
         "num_folds": NUM_FOLDS,
         "num_epochs": NUM_EPOCHS,
         # Augmentation flags
@@ -360,12 +432,18 @@ if local_rank == 0:
         # Model-specific parameters
         **({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN} if MODEL == "CNN_LSTM" else {}),
         **(
-            {"num_layers": NUM_LAYERS, "num_filters": NUM_FILTERS, "kernel_size": KERNEL_SIZE, "dropout": DROPOUT}
+            {
+                "num_layers": NUM_LAYERS,
+                "num_filters": NUM_FILTERS,
+                "kernel_size": KERNEL_SIZE,
+                "dropout": DROPOUT,
+                "causal": CAUSAL,
+            }
             if MODEL in ["TCN", "MSTCN"]
             else {}
         ),
         **({"num_stages": NUM_STAGES} if MODEL == "MSTCN" else {}),
-        # Validation configuration at the end
+        # Validation configuration
         "validate_folds": validate_folds,
     }
 
