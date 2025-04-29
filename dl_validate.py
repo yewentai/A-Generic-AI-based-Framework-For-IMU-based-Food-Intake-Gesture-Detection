@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-04-28
+Edited      : 2025-04-29
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original left/right hand validation
               2. Hand mirroring (if enabled in config)
@@ -25,8 +25,8 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
 from scipy.io import savemat
 
-from components.models.mstcn import MSTCN
-from components.models.tcn import TCN
+# from components.models.mstcn import MSTCN
+from components.models.tcn import TCN, MSTCN
 from components.models.cnnlstm import CNNLSTM
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
@@ -37,7 +37,7 @@ from components.utils import convert_for_matlab
 # --- Configurations ---
 NUM_WORKERS = 4
 THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
-DEBUG_PLOT = True
+DEBUG_PLOT = False
 SAVE_LOG = True
 VALIDATE_DATASET = "ORIGINAL"  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
 # Remind: DX has 2 classes, FD and Oreba have 3 classes
@@ -45,7 +45,7 @@ VALIDATE_DATASET = "ORIGINAL"  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "D
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["202504281702"]  # Uncomment to manually specify versions
+    versions = ["202504291127"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -220,16 +220,40 @@ if __name__ == "__main__":
                     pin_memory=True,
                 )
 
+                # all_predictions, all_labels = [], []
+                # with torch.no_grad():
+                #     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
+                #         batch_x = batch_x.permute(0, 2, 1).to(device)
+                #         outputs = model(batch_x)
+                #         logits = outputs[:, -1, :, :] if outputs.ndim == 4 else outputs
+                #         probs = F.softmax(logits, dim=1)
+                #         preds = torch.argmax(probs, dim=1)
+                #         all_predictions.extend(preds.view(-1).cpu().numpy())
+                #         all_labels.extend(batch_y.view(-1).cpu().numpy())
+
                 all_predictions, all_labels = [], []
+
                 with torch.no_grad():
                     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
+                        # [B, L, C_in] → [B, C_in, L]
                         batch_x = batch_x.permute(0, 2, 1).to(device)
-                        outputs = model(batch_x)
-                        logits = outputs[:, -1, :, :] if outputs.ndim == 4 else outputs
-                        probs = F.softmax(logits, dim=1)
-                        preds = torch.argmax(probs, dim=1)
-                        all_predictions.extend(preds.view(-1).cpu().numpy())
-                        all_labels.extend(batch_y.view(-1).cpu().numpy())
+
+                        # forward pass: now returns List[Tensor] for MSTCN
+                        outputs_list = model(batch_x)
+
+                        # pick the last stage's logits
+                        if isinstance(outputs_list, list):
+                            logits = outputs_list[-1]  # -> [B, num_classes, L]
+                        else:
+                            logits = outputs_list  # for single-stage TCN
+
+                        # softmax + argmax over class-dim
+                        probs = F.softmax(logits, dim=1)  # [B, C, L]
+                        preds = torch.argmax(probs, dim=1)  # [B, L]
+
+                        # flatten and store
+                        all_predictions.extend(preds.reshape(-1).cpu().numpy())
+                        all_labels.extend(batch_y.reshape(-1).cpu().numpy())
 
                 preds_array = np.array(all_predictions)
                 labels_array = np.array(all_labels)

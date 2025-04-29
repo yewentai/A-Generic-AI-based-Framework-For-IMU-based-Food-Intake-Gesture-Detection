@@ -6,7 +6,7 @@ IMU Training Result Analysis Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-23
+Edited      : 2025-04-29
 Description : This script analyzes training results for DX/FD datasets with:
               1. Comparative analysis of segment-wise and sample-wise metrics
               2. Support for multiple validation modes (original, mirrored, rotated)
@@ -24,7 +24,7 @@ from dl_validate import THRESHOLD_LIST  # [0.1, 0.25, 0.5, 0.75]
 if __name__ == "__main__":
     result_root = "result"
     # Discover all version directories
-    versions = ["202504271525", "202504271533"]  # Uncomment to manually specify versions
+    versions = ["202504262136", "202504291127"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 

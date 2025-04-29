@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
+Edited      : 2025-04-29
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -46,8 +46,9 @@ from components.datasets import (
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM, CNNLSTM_Loss
-from components.models.tcn import TCN, TCN_Loss
-from components.models.mstcn import MSTCN, MSTCN_Loss
+from components.models.tcn import TCN, TCN_Loss, MSTCN, MSTCN_Loss
+
+# from components.models.mstcn import MSTCN, MSTCN_Loss
 
 # ==============================================================================================
 #                             Configuration Parameters
@@ -62,22 +63,30 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Dataset Settings
-DATASET = "FDI"
-SAMPLING_FREQ_ORIGINAL = 64
-DOWNSAMPLE_FACTOR = 4
-SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+DATASET = "DXI"
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 4
     sub_version = DATASET.replace("DX", "").upper() or "I"
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
 elif DATASET.startswith("FD"):
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 4
     NUM_CLASSES = 3
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
     TASK = "multiclass"
+elif DATASET.startswith("OREBA"):
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 4
+    NUM_CLASSES = 3
+    DATA_DIR = "./dataset/Oreba"
+    TASK = "multiclass"
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
+SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 
 # Dataloader Settings
 WINDOW_LENGTH = 60
@@ -104,7 +113,7 @@ else:
 
 # Training Settings
 LEARNING_RATE = 5e-4
-NUM_FOLDS = 7
+NUM_FOLDS = 4
 NUM_EPOCHS = 100
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
@@ -168,14 +177,14 @@ if FLAG_DATASET_MIRROR_ADD:
     Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
 
 if DATASET_HAND == "LEFT":
-    full_dataset = IMUDatasetBalanced(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 elif DATASET_HAND == "RIGHT":
-    full_dataset = IMUDatasetBalanced(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 elif DATASET_HAND == "BOTH":
     # Combine left and right data into a unified dataset
     X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
     Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-    full_dataset = IMUDatasetBalanced(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 else:
     raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
 
@@ -195,7 +204,7 @@ if DATASET in ["FDII", "FDI"] and FLAG_DATASET_AUGMENTATION:
         X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-    fdiii_dataset = IMUDatasetBalanced(
+    fdiii_dataset = IMUDataset(
         X_fdiii,
         Y_fdiii,
         sequence_length=WINDOW_SIZE,
