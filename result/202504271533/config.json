@@ -2,6 +2,7 @@
     "dataset": "DXI",
     "hand": "RIGHT",
     "num_classes": 2,
+    "downsample_factor": 4,
     "sampling_freq": 16,
     "window_size": 960,
     "input_dim": 6,

@@ -2,6 +2,7 @@
     "dataset": "FDI",
     "hand": "RIGHT",
     "num_classes": 3,
+    "downsample_factor": 4,
     "sampling_freq": 16,
     "window_size": 960,
     "input_dim": 6,
