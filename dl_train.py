@@ -169,16 +169,22 @@ else:
     local_rank = 0
 
 if local_rank == 0:
+    # Logger setup
     logger.info(f"[Rank {local_rank}] Using device: {device}")
     overall_start = datetime.now()
     logger.info(f"Training started at: {overall_start}")
-    # Generate version prefix from current datetime (first 12 characters)
+
+    # Create result directory
     version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
     result_dir = os.path.join("result", version_prefix)
     os.makedirs(result_dir, exist_ok=True)
     checkpoint_dir = os.path.join(result_dir, "checkpoint")
     os.makedirs(checkpoint_dir, exist_ok=True)
-    training_stats_file = os.path.join(result_dir, "train_stats.npy")
+    training_stats_file = os.path.join(result_dir, "training_stats.npy")
+
+# ----------------------------------------------------------------------------------------------
+# Load Dataset
+# ----------------------------------------------------------------------------------------------
 
 if HAND_SEPERATION:
     with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
@@ -219,7 +225,10 @@ else:
         Y = np.array(pickle.load(f), dtype=object)
     full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 
+# ----------------------------------------------------------------------------------------------
 # Augment Dataset
+# ----------------------------------------------------------------------------------------------
+
 fdiii_dataset = None
 oreba_dataset = None
 if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
@@ -255,14 +264,14 @@ if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
         downsample_factor=DOWNSAMPLE_FACTOR,
     )
 
-# Create validation folds
+# ----------------------------------------------------------------------------------------------
+# Training loop over folds
+# ----------------------------------------------------------------------------------------------
 if DATASET == "FDI":
     validate_folds = load_predefined_validate_folds()
 else:
     validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
 training_statistics = []
-
-# Training loop over folds
 for fold, validate_subjects in enumerate(validate_folds):
     # Prepare training data
     train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
@@ -389,7 +398,9 @@ for fold, validate_subjects in enumerate(validate_folds):
                     f"[Rank {local_rank}] Epoch {epoch+1}/{NUM_EPOCHS} - Loss: {avg_loss:.4f}, CE: {training_loss_ce / len(train_loader):.4f}, MSE: {training_loss_mse / len(train_loader):.4f}"
                 )
 
-# Save final results
+# ==============================================================================================
+#                                   Save final results
+# ==============================================================================================
 if local_rank == 0:
     np.save(training_stats_file, training_statistics)
     logger.info(f"Training statistics saved to {training_stats_file}")
@@ -456,7 +467,7 @@ if local_rank == 0:
         if MODEL == "MSTCN":
             config_info["num_stages"] = NUM_STAGES
 
-    config_file = os.path.join(result_dir, "config.json")
+    config_file = os.path.join(result_dir, "training_config.json")
     with open(config_file, "w") as f:
         json.dump(config_info, f, indent=4)
     logger.info(f"Configuration saved to {config_file}")

@@ -25,8 +25,8 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
 from scipy.io import savemat
 
-# from components.models.mstcn import MSTCN
-from components.models.tcn import TCN, MSTCN
+from components.models.mstcn import MSTCN
+from components.models.tcn import TCN
 from components.models.cnnlstm import CNNLSTM
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
@@ -36,7 +36,7 @@ from components.utils import convert_for_matlab
 
 # --- Configurations ---
 NUM_WORKERS = 4
-SEGMENT_VALIDATION = True
+SEGMENT_VALIDATION = False
 if SEGMENT_VALIDATION:
     THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
@@ -47,8 +47,8 @@ VALIDATE_DATASET = "ORIGINAL"  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "D
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["202504291127"]  # Uncomment to manually specify versions
-    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    # versions = ["202504291127"]  # Uncomment to manually specify versions
+    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
@@ -287,28 +287,35 @@ if __name__ == "__main__":
                 weighted_f1_sample = sum(metrics_sample[str(l)]["f1"] * label_weight[l] for l in range(1, NUM_CLASSES))
                 metrics_sample["weighted_f1"] = float(weighted_f1_sample)
 
-                processed_preds = post_process_predictions(preds_array, SAMPLING_FREQ)
-                metrics_segment_all = {}
-                for threshold in THRESHOLD_LIST:
-                    metrics_segment = {}
-                    for label in range(1, NUM_CLASSES):
-                        fn, fp, tp = segment_evaluation(
-                            processed_preds, labels_array, class_label=label, threshold=threshold, debug_plot=DEBUG_PLOT
+                if SEGMENT_VALIDATION:
+                    processed_preds = post_process_predictions(preds_array, SAMPLING_FREQ)
+                    metrics_segment_all = {}
+                    for threshold in THRESHOLD_LIST:
+                        metrics_segment = {}
+                        for label in range(1, NUM_CLASSES):
+                            fn, fp, tp = segment_evaluation(
+                                processed_preds,
+                                labels_array,
+                                class_label=label,
+                                threshold=threshold,
+                                debug_plot=DEBUG_PLOT,
+                            )
+                            denom = 2 * tp + fp + fn
+                            f1 = (2 * tp / denom) if denom > 0 else 0.0
+                            metrics_segment[str(label)] = {"fn": int(fn), "fp": int(fp), "tp": int(tp), "f1": float(f1)}
+                        weighted_f1 = sum(
+                            metrics_segment[str(l)]["f1"] * label_weight[l] for l in range(1, NUM_CLASSES)
                         )
-                        denom = 2 * tp + fp + fn
-                        f1 = (2 * tp / denom) if denom > 0 else 0.0
-                        metrics_segment[str(label)] = {"fn": int(fn), "fp": int(fp), "tp": int(tp), "f1": float(f1)}
-                    weighted_f1 = sum(metrics_segment[str(l)]["f1"] * label_weight[l] for l in range(1, NUM_CLASSES))
-                    metrics_segment["weighted_f1"] = float(weighted_f1)
-                    metrics_segment_all[str(threshold)] = metrics_segment
+                        metrics_segment["weighted_f1"] = float(weighted_f1)
+                        metrics_segment_all[str(threshold)] = metrics_segment
 
-                fold_stat = {
-                    "fold": fold + 1,
-                    "metrics_segment": metrics_segment_all,
-                    "metrics_sample": metrics_sample,
-                    "label_distribution": label_distribution,
-                }
-                mode_stats.append(fold_stat)
+                    fold_stat = {
+                        "fold": fold + 1,
+                        "metrics_segment": metrics_segment_all,
+                        "metrics_sample": metrics_sample,
+                        "label_distribution": label_distribution,
+                    }
+                    mode_stats.append(fold_stat)
 
             all_stats[mode["name"]] = mode_stats
 
