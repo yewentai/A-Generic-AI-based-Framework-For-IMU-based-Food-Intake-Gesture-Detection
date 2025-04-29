@@ -23,7 +23,6 @@ import torch.nn.functional as F
 import logging
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
-from scipy.io import savemat
 
 from components.models.mstcn import MSTCN
 from components.models.tcn import TCN
@@ -32,7 +31,6 @@ from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
 from components.pre_processing import hand_mirroring, planar_rotation
-from components.utils import convert_for_matlab
 
 # --- Configurations ---
 NUM_WORKERS = 4
@@ -40,15 +38,14 @@ SEGMENT_VALIDATION = False
 if SEGMENT_VALIDATION:
     THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
-SAVE_LOG = True
 VALIDATE_DATASET = "ORIGINAL"  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
 # Remind: DX has 2 classes, FD and Oreba have 3 classes
 
 
 if __name__ == "__main__":
     result_root = "result"
-    # versions = ["202504291127"]  # Uncomment to manually specify versions
-    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    versions = ["FDI_BOTH_MSTCN"]  # Uncomment to manually specify versions
+    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
@@ -68,16 +65,9 @@ if __name__ == "__main__":
         stream_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
         logger.addHandler(stream_handler)
 
-        # Optionally add file handler
-        if SAVE_LOG:
-            log_file = os.path.join(result_dir, f"validation_{VALIDATE_DATASET}.log")
-            file_handler = logging.FileHandler(log_file, mode="w")
-            file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-            logger.addHandler(file_handler)
-
         logger.info(f"\n=== Validating Version: {version} ===")
 
-        config_file = os.path.join(result_dir, "config.json")
+        config_file = os.path.join(result_dir, "training_config.json")
         if not os.path.exists(config_file):
             logger.warning(f"Configuration file not found for version {version}, skipping...")
             continue
@@ -93,10 +83,10 @@ if __name__ == "__main__":
         SAMPLING_FREQ = config_info["sampling_freq"]
         WINDOW_SIZE = config_info["window_size"]
         BATCH_SIZE = config_info["batch_size"]
+        FLAG_AUGMENT_HAND_MIRRORINGING = config_info.get("augmentation_hand_mirroring", False)
+        FLAG_DATASET_MIRRORING = config_info.get("dataset_mirroring", False)
+        FLAG_DATASET_MIRRORING_ADD = config_info.get("dataset_mirroring_add", False)
         validate_folds = config_info.get("validate_folds")
-        mirror_enabled = config_info.get("augmentation_hand_mirroring", False) or config_info.get(
-            "dataset_mirroring", False
-        )
         rotation_enabled = config_info.get("augmentation_planar_rotation", False)
         if version == "202503281533":
             mirror_enabled = True
@@ -287,6 +277,7 @@ if __name__ == "__main__":
                 weighted_f1_sample = sum(metrics_sample[str(l)]["f1"] * label_weight[l] for l in range(1, NUM_CLASSES))
                 metrics_sample["weighted_f1"] = float(weighted_f1_sample)
 
+                metrics_segment_all = None
                 if SEGMENT_VALIDATION:
                     processed_preds = post_process_predictions(preds_array, SAMPLING_FREQ)
                     metrics_segment_all = {}
@@ -309,26 +300,21 @@ if __name__ == "__main__":
                         metrics_segment["weighted_f1"] = float(weighted_f1)
                         metrics_segment_all[str(threshold)] = metrics_segment
 
-                    fold_stat = {
-                        "fold": fold + 1,
-                        "metrics_segment": metrics_segment_all,
-                        "metrics_sample": metrics_sample,
-                        "label_distribution": label_distribution,
-                    }
-                    mode_stats.append(fold_stat)
+                fold_stat = {
+                    "fold": fold + 1,
+                    "metrics_segment": metrics_segment_all,
+                    "metrics_sample": metrics_sample,
+                    "label_distribution": label_distribution,
+                }
+                mode_stats.append(fold_stat)
 
             all_stats[mode["name"]] = mode_stats
 
         # Save all statistics
+        VALIDATE_DATASET = VALIDATE_DATASET.lower()
         stats_file_npy = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.npy")
         stats_file_json = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.json")
-        stats_file_mat = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.mat")
-
         np.save(stats_file_npy, all_stats)
         with open(stats_file_json, "w") as f_json:
             json.dump(all_stats, f_json, indent=4)
-        matlab_stats = {}
-        for mode, stats in all_stats.items():
-            matlab_stats[mode] = convert_for_matlab(stats)
-        savemat(stats_file_mat, {f"{version}": matlab_stats})
-        logger.info(f"\nAll validation statistics saved to {stats_file_npy}, {stats_file_json}, {stats_file_mat}")
+        logger.info(f"\nAll validation statistics saved to {stats_file_npy}, {stats_file_json}")

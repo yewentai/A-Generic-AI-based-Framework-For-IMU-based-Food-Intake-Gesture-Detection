@@ -147,8 +147,8 @@ FLAG_DATASET_AUGMENTATION = False
 
 if HAND_SEPERATION:
     DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
-    FLAG_DATASET_MIRROR = False  # If True, mirror the left hand data
-    FLAG_DATASET_MIRROR_ADD = False  # If True, add mirrored data to the dataset
+    FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
+    FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
 
 # ==============================================================================================
 #                                   Main Training Code
@@ -196,14 +196,14 @@ if HAND_SEPERATION:
     with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
         Y_R = np.array(pickle.load(f), dtype=object)
 
-    if FLAG_DATASET_MIRROR:
+    if FLAG_DATASET_MIRRORING:
         X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-    if FLAG_DATASET_MIRROR_ADD:
-        X_L_mirror = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-        X_R_mirror = np.array([hand_mirroring(sample) for sample in X_R], dtype=object)
-        X_L = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_L_mirror)], dtype=object)
-        X_R = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_R, X_R_mirror)], dtype=object)
+    if FLAG_DATASET_MIRRORING_ADD:
+        X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+        X_R_mirrored = np.array([hand_mirroring(sample) for sample in X_R], dtype=object)
+        X_L = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_L_mirrored)], dtype=object)
+        X_R = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_R, X_R_mirrored)], dtype=object)
         Y_L = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_L)], dtype=object)
         Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
 
@@ -241,7 +241,7 @@ if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
         X_R_fdiii = np.array(pickle.load(f), dtype=object)
     with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
         Y_R_fdiii = np.array(pickle.load(f), dtype=object)
-    if FLAG_DATASET_MIRROR:
+    if FLAG_DATASET_MIRRORING:
         X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
     X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
     Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
@@ -438,8 +438,8 @@ if local_rank == 0:
         "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
         "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
         "dataset_augmentation": FLAG_DATASET_AUGMENTATION,
-        "dataset_mirroring": FLAG_DATASET_MIRROR,
-        "dataset_mirroring_add": FLAG_DATASET_MIRROR_ADD,
+        "dataset_mirroring": FLAG_DATASET_MIRRORING,
+        "dataset_mirroring_add": FLAG_DATASET_MIRRORING_ADD,
         # Model-specific parameters
         **({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN} if MODEL == "CNN_LSTM" else {}),
         **(
