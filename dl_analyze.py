@@ -23,43 +23,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 from seaborn import color_palette
 
-
-def setup_logger(name: str) -> logging.Logger:
-    """
-    Create a logger with a single StreamHandler, avoiding duplicate handlers.
-    """
-    logger = logging.getLogger(name)
-    # Remove existing handlers to prevent duplicate logs
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-    logger.addHandler(handler)
-    return logger
-
-
 if __name__ == "__main__":
     result_root = "result"
     versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
     for version in versions:
-        logger = setup_logger(f"validation_{version}")
+        # Set up logging
+        logger = logging.getLogger(f"validation_{version}")
+        if logger.hasHandlers():
+            logger.handlers.clear()
+        logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+        logger.addHandler(handler)
         logger.info(f"\n=== Validating Version: {version} ===")
 
+        # Load threshold_list and validation flag`
         result_dir = os.path.join(result_root, version)
         config_file = os.path.join(result_dir, "validation_config.json")
         if not os.path.exists(config_file):
             logger.warning(f"Config file does not exist: {config_file}.")
             continue
-
         with open(config_file, "r") as f:
             config = json.load(f)
-
-        # Load threshold_list and validation flag
         threshold_list = config.get("threshold_list", []) or []
         flag_segment_validation = config.get("flag_segment_validation", False)
-
         if not threshold_list:
             logger.warning("No thresholds provided in config; segment-wise analysis will be skipped.")
 
