@@ -1,5 +1,6 @@
 {
     "dataset": "FDI",
+    "hand_separation": true,
     "hand": "BOTH",
     "num_classes": 3,
     "downsample_factor": 4,

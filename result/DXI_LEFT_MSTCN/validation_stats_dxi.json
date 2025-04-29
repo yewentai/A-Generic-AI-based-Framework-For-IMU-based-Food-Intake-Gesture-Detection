@@ -1,0 +1,224 @@
+{
+    "original": [
+        {
+            "fold": 1,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 581,
+                    "fp": 37,
+                    "fn": 3198,
+                    "tn": 253464,
+                    "f1": 0.26427109392767795
+                },
+                "weighted_f1": 0.26427109392767795
+            },
+            "label_distribution": {
+                "0": 253501,
+                "1": 3779
+            }
+        },
+        {
+            "fold": 2,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 3403,
+                    "fp": 515,
+                    "fn": 6908,
+                    "tn": 254134,
+                    "f1": 0.47831892613676297
+                },
+                "weighted_f1": 0.47831892613676297
+            },
+            "label_distribution": {
+                "0": 254649,
+                "1": 10311
+            }
+        },
+        {
+            "fold": 3,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 1331,
+                    "fp": 132,
+                    "fn": 9586,
+                    "tn": 245271,
+                    "f1": 0.2150242326332795
+                },
+                "weighted_f1": 0.2150242326332795
+            },
+            "label_distribution": {
+                "0": 245403,
+                "1": 10917
+            }
+        },
+        {
+            "fold": 4,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 2671,
+                    "fp": 466,
+                    "fn": 10501,
+                    "tn": 239802,
+                    "f1": 0.32754920595989945
+                },
+                "weighted_f1": 0.32754920595989945
+            },
+            "label_distribution": {
+                "0": 240268,
+                "1": 13172
+            }
+        }
+    ],
+    "left": [
+        {
+            "fold": 1,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 887,
+                    "fp": 93,
+                    "fn": 542,
+                    "tn": 127118,
+                    "f1": 0.7364051473640515
+                },
+                "weighted_f1": 0.7364051473640515
+            },
+            "label_distribution": {
+                "0": 127211,
+                "1": 1429
+            }
+        },
+        {
+            "fold": 2,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 3315,
+                    "fp": 228,
+                    "fn": 2101,
+                    "tn": 128756,
+                    "f1": 0.7400379506641366
+                },
+                "weighted_f1": 0.7400379506641366
+            },
+            "label_distribution": {
+                "0": 128984,
+                "1": 5416
+            }
+        },
+        {
+            "fold": 3,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 2203,
+                    "fp": 331,
+                    "fn": 835,
+                    "tn": 126231,
+                    "f1": 0.7907394113424264
+                },
+                "weighted_f1": 0.7907394113424264
+            },
+            "label_distribution": {
+                "0": 126562,
+                "1": 3038
+            }
+        },
+        {
+            "fold": 4,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 3975,
+                    "fp": 1127,
+                    "fn": 1385,
+                    "tn": 121193,
+                    "f1": 0.7598929458994456
+                },
+                "weighted_f1": 0.7598929458994456
+            },
+            "label_distribution": {
+                "0": 122320,
+                "1": 5360
+            }
+        }
+    ],
+    "right": [
+        {
+            "fold": 1,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 52,
+                    "fp": 48,
+                    "fn": 2303,
+                    "tn": 126237,
+                    "f1": 0.04236252545824847
+                },
+                "weighted_f1": 0.04236252545824847
+            },
+            "label_distribution": {
+                "0": 126285,
+                "1": 2355
+            }
+        },
+        {
+            "fold": 2,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 199,
+                    "fp": 178,
+                    "fn": 4702,
+                    "tn": 129321,
+                    "f1": 0.07540735126942023
+                },
+                "weighted_f1": 0.07540735126942023
+            },
+            "label_distribution": {
+                "0": 129499,
+                "1": 4901
+            }
+        },
+        {
+            "fold": 3,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 34,
+                    "fp": 51,
+                    "fn": 7845,
+                    "tn": 120710,
+                    "f1": 0.008538422903063787
+                },
+                "weighted_f1": 0.008538422903063787
+            },
+            "label_distribution": {
+                "0": 120761,
+                "1": 7879
+            }
+        },
+        {
+            "fold": 4,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 242,
+                    "fp": 251,
+                    "fn": 7569,
+                    "tn": 118658,
+                    "f1": 0.05828516377649326
+                },
+                "weighted_f1": 0.05828516377649326
+            },
+            "label_distribution": {
+                "0": 118909,
+                "1": 7811
+            }
+        }
+    ]
+}

@@ -1,0 +1,224 @@
+{
+    "original": [
+        {
+            "fold": 1,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 2863,
+                    "fp": 345,
+                    "fn": 916,
+                    "tn": 253156,
+                    "f1": 0.8195219693716903
+                },
+                "weighted_f1": 0.8195219693716903
+            },
+            "label_distribution": {
+                "0": 253501,
+                "1": 3779
+            }
+        },
+        {
+            "fold": 2,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 6112,
+                    "fp": 668,
+                    "fn": 4199,
+                    "tn": 253981,
+                    "f1": 0.7152302381370312
+                },
+                "weighted_f1": 0.7152302381370312
+            },
+            "label_distribution": {
+                "0": 254649,
+                "1": 10311
+            }
+        },
+        {
+            "fold": 3,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 6024,
+                    "fp": 896,
+                    "fn": 1990,
+                    "tn": 246450,
+                    "f1": 0.8067496986741663
+                },
+                "weighted_f1": 0.8067496986741663
+            },
+            "label_distribution": {
+                "0": 247346,
+                "1": 8014
+            }
+        },
+        {
+            "fold": 4,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 13176,
+                    "fp": 2582,
+                    "fn": 2899,
+                    "tn": 235743,
+                    "f1": 0.8278201865988125
+                },
+                "weighted_f1": 0.8278201865988125
+            },
+            "label_distribution": {
+                "0": 238325,
+                "1": 16075
+            }
+        }
+    ],
+    "left": [
+        {
+            "fold": 1,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 1031,
+                    "fp": 295,
+                    "fn": 398,
+                    "tn": 126916,
+                    "f1": 0.7484573502722323
+                },
+                "weighted_f1": 0.7484573502722323
+            },
+            "label_distribution": {
+                "0": 127211,
+                "1": 1429
+            }
+        },
+        {
+            "fold": 2,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 3380,
+                    "fp": 1091,
+                    "fn": 2036,
+                    "tn": 127893,
+                    "f1": 0.6837261049863457
+                },
+                "weighted_f1": 0.6837261049863457
+            },
+            "label_distribution": {
+                "0": 128984,
+                "1": 5416
+            }
+        },
+        {
+            "fold": 3,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 866,
+                    "fp": 286,
+                    "fn": 74,
+                    "tn": 128374,
+                    "f1": 0.8279158699808795
+                },
+                "weighted_f1": 0.8279158699808795
+            },
+            "label_distribution": {
+                "0": 128660,
+                "1": 940
+            }
+        },
+        {
+            "fold": 4,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 5651,
+                    "fp": 1403,
+                    "fn": 1807,
+                    "tn": 118819,
+                    "f1": 0.7788037486218302
+                },
+                "weighted_f1": 0.7788037486218302
+            },
+            "label_distribution": {
+                "0": 120222,
+                "1": 7458
+            }
+        }
+    ],
+    "right": [
+        {
+            "fold": 1,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 1850,
+                    "fp": 186,
+                    "fn": 505,
+                    "tn": 126099,
+                    "f1": 0.8426326577089501
+                },
+                "weighted_f1": 0.8426326577089501
+            },
+            "label_distribution": {
+                "0": 126285,
+                "1": 2355
+            }
+        },
+        {
+            "fold": 2,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 2411,
+                    "fp": 478,
+                    "fn": 2490,
+                    "tn": 129021,
+                    "f1": 0.6189987163029526
+                },
+                "weighted_f1": 0.6189987163029526
+            },
+            "label_distribution": {
+                "0": 129499,
+                "1": 4901
+            }
+        },
+        {
+            "fold": 3,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 5240,
+                    "fp": 808,
+                    "fn": 1835,
+                    "tn": 120757,
+                    "f1": 0.7985978815819553
+                },
+                "weighted_f1": 0.7985978815819553
+            },
+            "label_distribution": {
+                "0": 121565,
+                "1": 7075
+            }
+        },
+        {
+            "fold": 4,
+            "metrics_segment": null,
+            "metrics_sample": {
+                "1": {
+                    "tp": 6634,
+                    "fp": 1968,
+                    "fn": 1981,
+                    "tn": 116137,
+                    "f1": 0.7706336760178893
+                },
+                "weighted_f1": 0.7706336760178893
+            },
+            "label_distribution": {
+                "0": 118105,
+                "1": 8615
+            }
+        }
+    ]
+}

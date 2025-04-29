@@ -14,9 +14,12 @@ Description : This script validates MSTCN models on DX/FD IMU datasets with:
 ===============================================================================
 """
 
+# Standard library imports
 import os
 import json
 import pickle
+
+# Third-party library imports
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -24,6 +27,7 @@ import logging
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
 
+# Local imports
 from components.models.mstcn import MSTCN
 from components.models.tcn import TCN
 from components.models.cnnlstm import CNNLSTM
@@ -38,100 +42,101 @@ SEGMENT_VALIDATION = False
 if SEGMENT_VALIDATION:
     THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
 DEBUG_PLOT = False
-VALIDATE_DATASET = "ORIGINAL"  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
-# Remind: DX has 2 classes, FD and Oreba have 3 classes
 
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["FDI_BOTH_MSTCN"]  # Uncomment to manually specify versions
+    versions = ["FDI_LEFT_MSTCN"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
-        result_dir = os.path.join(result_root, version)
-        if not os.path.exists(result_dir):
-            logger.warning(f"Result directory does not exist: {result_dir}.")
-
         # Set up logging
         logger = logging.getLogger(f"validation_{version}")
         logger.setLevel(logging.INFO)
-
-        if logger.hasHandlers():
-            logger.handlers.clear()
-
-        # Always add stream handler (console)
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
         logger.addHandler(stream_handler)
-
         logger.info(f"\n=== Validating Version: {version} ===")
 
+        # Load configuration
+        result_dir = os.path.join(result_root, version)
+        if not os.path.exists(result_dir):
+            logger.warning(f"Result directory does not exist: {result_dir}.")
+            continue
         config_file = os.path.join(result_dir, "training_config.json")
         if not os.path.exists(config_file):
             logger.warning(f"Configuration file not found for version {version}, skipping...")
             continue
         with open(config_file, "r") as f:
             config_info = json.load(f)
-
-        if VALIDATE_DATASET == "ORIGINAL":
-            VALIDATE_DATASET = config_info["dataset"]
-        NUM_CLASSES = config_info["num_classes"]
-        MODEL = config_info["model"]
-        INPUT_DIM = config_info["input_dim"]
-        DOWNSAMPLE_FACTOR = config_info["downsample_factor"]
-        SAMPLING_FREQ = config_info["sampling_freq"]
-        WINDOW_SIZE = config_info["window_size"]
-        BATCH_SIZE = config_info["batch_size"]
-        FLAG_AUGMENT_HAND_MIRRORINGING = config_info.get("augmentation_hand_mirroring", False)
-        FLAG_DATASET_MIRRORING = config_info.get("dataset_mirroring", False)
-        FLAG_DATASET_MIRRORING_ADD = config_info.get("dataset_mirroring_add", False)
+        validate_dataset = config_info["dataset"]  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
+        num_classes = config_info["num_classes"]
+        model_name = config_info["model"]
+        input_dim = config_info["input_dim"]
+        downsample_factor = config_info["downsample_factor"]
+        sampling_freq = config_info["sampling_freq"]
+        window_size = config_info["window_size"]
+        batch_size = config_info["batch_size"]
+        flag_augment_hand_mirroringing = config_info.get("augmentation_hand_mirroring", False)
+        flag_dataset_mirroring = config_info.get("dataset_mirroring", False)
+        flag_dataset_mirroring_add = config_info.get("dataset_mirroring_add", False)
         validate_folds = config_info.get("validate_folds")
         rotation_enabled = config_info.get("augmentation_planar_rotation", False)
-        if version == "202503281533":
-            mirror_enabled = True
-            rotation_enabled = True
+        hand_separation = config_info.get("hand_separation", False)
+        if flag_augment_hand_mirroringing or flag_dataset_mirroring or flag_dataset_mirroring_add:
+            mirroring_enabled = True
+        else:
+            mirroring_enabled = False
 
-        if validate_folds is None:
-            logger.error("No 'validate_folds' found in the configuration file.")
-            continue
-
+        # Set up device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"\nUsing device: {device}")
 
-        if VALIDATE_DATASET.startswith("DX"):
-            sub_version = VALIDATE_DATASET.replace("DX", "").upper() or "I"
+        # Set up dataset directory
+        if validate_dataset.startswith("DX"):
+            sub_version = validate_dataset.replace("DX", "").upper() or "I"
             DATA_DIR = f"./dataset/DX/DX-{sub_version}"
-            LR_SEPERATED = True
-        elif VALIDATE_DATASET.startswith("FD"):
-            sub_version = VALIDATE_DATASET.replace("FD", "").upper() or "I"
+        elif validate_dataset.startswith("FD"):
+            sub_version = validate_dataset.replace("FD", "").upper() or "I"
             DATA_DIR = f"./dataset/FD/FD-{sub_version}"
-            LR_SEPERATED = True
-        elif VALIDATE_DATASET.startswith("OREBA"):
+        elif validate_dataset.startswith("OREBA"):
             DATA_DIR = f"./dataset/OREBA/OREBA"
-            LR_SEPERATED = False
         else:
-            logger.error(f"Invalid dataset: {VALIDATE_DATASET}")
+            logger.error(f"Invalid dataset: {validate_dataset}")
             continue
 
+        # Load dataset
         validation_modes = []
-        if LR_SEPERATED:
+        if hand_separation:
             X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
             Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
             X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
             Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
+            X = np.array([np.concatenate([X_L[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object)
+            Y = np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object)
             validation_modes.extend(
-                [{"name": "original_left", "X": X_L, "Y": Y_L}, {"name": "original_right", "X": X_R, "Y": Y_R}]
+                [
+                    {"name": "original", "X": X, "Y": Y},
+                    {"name": "left", "X": X_L, "Y": Y_L},
+                    {"name": "right", "X": X_R, "Y": Y_R},
+                ]
             )
-            # Add mirrored validation mode
-            X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-            validation_modes.append(
-                {
-                    "name": "mirrored_left_original_right",
-                    "X": np.concatenate((X_L_mirrored, X_R), axis=0),
-                    "Y": np.concatenate((Y_L, Y_R), axis=0),
-                }
-            )
+
+            if mirroring_enabled:
+                X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+                validation_modes.append(
+                    {
+                        "name": "mirrored_left_original_right",
+                        "X": np.array(
+                            [np.concatenate([X_L_mirrored[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object
+                        ),
+                        "Y": np.array(
+                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
+                        ),
+                    }
+                )
+
             if rotation_enabled:
                 # Apply rotation to 50% of samples
                 random_indices = np.random.choice(len(X_L), size=int(len(X_L) * 0.5), replace=False)
@@ -145,8 +150,16 @@ if __name__ == "__main__":
                 validation_modes.append(
                     {
                         "name": "rotated_mirrored_left_original_right",
-                        "X": np.concatenate((X_L_rotated_mirrored, X_R_rotated), axis=0),
-                        "Y": np.concatenate((Y_L, Y_R), axis=0),
+                        "X": np.array(
+                            [
+                                np.concatenate([X_L_rotated_mirrored[i], X_R_rotated[i]], axis=0)
+                                for i in range(len(X_L))
+                            ],
+                            dtype=object,
+                        ),
+                        "Y": np.array(
+                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
+                        ),
                     }
                 )
         else:
@@ -155,11 +168,10 @@ if __name__ == "__main__":
             validation_modes.append({"name": "original", "X": X, "Y": Y})
 
         all_stats = {}
-
         for mode in validation_modes:
             logger.info(f"\n--- Validating {mode['name']} ---")
 
-            dataset = IMUDataset(mode["X"], mode["Y"], sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+            dataset = IMUDataset(mode["X"], mode["Y"], sequence_length=window_size, downsample_factor=downsample_factor)
             mode_stats = []
 
             for fold, validate_subjects in enumerate(tqdm(validate_folds, desc=f"K-Fold ({mode['name']})", leave=True)):
@@ -168,34 +180,34 @@ if __name__ == "__main__":
                     logger.warning(f"Checkpoint not found for fold {fold+1}, skipping...")
                     continue
 
-                if MODEL == "TCN":
+                if model_name == "TCN":
                     model = TCN(
                         num_layers=config_info["num_layers"],
-                        num_classes=NUM_CLASSES,
-                        input_dim=INPUT_DIM,
+                        num_classes=num_classes,
+                        input_dim=input_dim,
                         num_filters=config_info["num_filters"],
                         kernel_size=config_info["kernel_size"],
                         dropout=config_info["dropout"],
                     ).to(device)
-                elif MODEL == "MSTCN":
+                elif model_name == "MSTCN":
                     model = MSTCN(
                         num_stages=config_info["num_stages"],
                         num_layers=config_info["num_layers"],
-                        num_classes=NUM_CLASSES,
-                        input_dim=INPUT_DIM,
+                        num_classes=num_classes,
+                        input_dim=input_dim,
                         num_filters=config_info["num_filters"],
                         kernel_size=config_info["kernel_size"],
                         dropout=config_info["dropout"],
                     ).to(device)
-                elif MODEL == "CNN_LSTM":
+                elif model_name == "CNN_LSTM":
                     model = CNNLSTM(
-                        input_channels=INPUT_DIM,
+                        input_channels=input_dim,
                         conv_filters=config_info["conv_filters"],
                         lstm_hidden=config_info["lstm_hidden"],
-                        num_classes=NUM_CLASSES,
+                        num_classes=num_classes,
                     ).to(device)
                 else:
-                    logger.error(f"Invalid model: {MODEL}")
+                    logger.error(f"Invalid model: {model_name}")
                     continue
 
                 state_dict = torch.load(checkpoint_path, map_location=device, weights_only=True)
@@ -208,7 +220,7 @@ if __name__ == "__main__":
                 ]
                 validate_loader = DataLoader(
                     Subset(dataset, validate_indices),
-                    batch_size=BATCH_SIZE,
+                    batch_size=batch_size,
                     shuffle=False,
                     num_workers=NUM_WORKERS,
                     pin_memory=True,
@@ -259,7 +271,7 @@ if __name__ == "__main__":
                 label_weight = {l: c / total_positive for l, c in positive_counts.items()}
 
                 metrics_sample = {}
-                for label in range(1, NUM_CLASSES):
+                for label in range(1, num_classes):
                     tp = np.sum((preds_array == label) & (labels_array == label))
                     fp = np.sum((preds_array == label) & (labels_array != label))
                     fn = np.sum((preds_array != label) & (labels_array == label))
@@ -274,16 +286,16 @@ if __name__ == "__main__":
                         "f1": float(f1),
                     }
 
-                weighted_f1_sample = sum(metrics_sample[str(l)]["f1"] * label_weight[l] for l in range(1, NUM_CLASSES))
+                weighted_f1_sample = sum(metrics_sample[str(l)]["f1"] * label_weight[l] for l in range(1, num_classes))
                 metrics_sample["weighted_f1"] = float(weighted_f1_sample)
 
                 metrics_segment_all = None
                 if SEGMENT_VALIDATION:
-                    processed_preds = post_process_predictions(preds_array, SAMPLING_FREQ)
+                    processed_preds = post_process_predictions(preds_array, sampling_freq)
                     metrics_segment_all = {}
                     for threshold in THRESHOLD_LIST:
                         metrics_segment = {}
-                        for label in range(1, NUM_CLASSES):
+                        for label in range(1, num_classes):
                             fn, fp, tp = segment_evaluation(
                                 processed_preds,
                                 labels_array,
@@ -295,7 +307,7 @@ if __name__ == "__main__":
                             f1 = (2 * tp / denom) if denom > 0 else 0.0
                             metrics_segment[str(label)] = {"fn": int(fn), "fp": int(fp), "tp": int(tp), "f1": float(f1)}
                         weighted_f1 = sum(
-                            metrics_segment[str(l)]["f1"] * label_weight[l] for l in range(1, NUM_CLASSES)
+                            metrics_segment[str(l)]["f1"] * label_weight[l] for l in range(1, num_classes)
                         )
                         metrics_segment["weighted_f1"] = float(weighted_f1)
                         metrics_segment_all[str(threshold)] = metrics_segment
@@ -311,10 +323,19 @@ if __name__ == "__main__":
             all_stats[mode["name"]] = mode_stats
 
         # Save all statistics
-        VALIDATE_DATASET = VALIDATE_DATASET.lower()
-        stats_file_npy = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.npy")
-        stats_file_json = os.path.join(result_dir, f"validation_stats_{VALIDATE_DATASET}.json")
+        stats_file_npy = os.path.join(result_dir, f"validation_stats_{validate_dataset.lower()}.npy")
+        stats_file_json = os.path.join(result_dir, f"validation_stats_{validate_dataset.lower()}.json")
         np.save(stats_file_npy, all_stats)
         with open(stats_file_json, "w") as f_json:
             json.dump(all_stats, f_json, indent=4)
         logger.info(f"\nAll validation statistics saved to {stats_file_npy}, {stats_file_json}")
+
+        # Save configuration
+        config_info = {
+            "flag_segment_validation": SEGMENT_VALIDATION,
+            "threshold_list": THRESHOLD_LIST if SEGMENT_VALIDATION else None,
+        }
+        config_save_path = os.path.join(result_dir, "validation_config.json")
+        with open(config_save_path, "w") as f:
+            json.dump(config_info, f, indent=4)
+        logger.info(f"\nValidation configuration saved to {config_save_path}")
