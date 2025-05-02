@@ -6,11 +6,14 @@ IMU Dataset Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
-Description : This script defines the IMUDataset class for loading and preprocessing
-              IMU data, as well as functions for creating balanced cross-validation folds.
+Edited      : 2025-05-02
+Description : This script defines multiple dataset classes for loading and preprocessing
+              IMU data, including support for segment-based, balanced, sliding window,
+              and unlabeled variants. It also includes helper functions for generating
+              subject-balanced cross-validation folds and loading predefined test splits.
 ===============================================================================
 """
+
 
 import numpy as np
 import torch

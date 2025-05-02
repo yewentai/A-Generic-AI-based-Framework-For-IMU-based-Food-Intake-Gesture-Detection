@@ -1,3 +1,18 @@
+"""
+================================================================================================
+Loss Functions and MATLAB-Compatible Conversion Utilities
+------------------------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-05-02
+Description : This script includes utility functions for converting nested Python structures
+              into MATLAB-compatible formats and computing various temporal smoothing losses
+              for sequence models such as MSTCN. It supports multiple smoothing strategies
+              (e.g., MSE, L1, Huber, KL, JS, TV, etc.) and includes a deep-supervised loss
+              wrapper for multi-stage predictions.
+================================================================================================
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

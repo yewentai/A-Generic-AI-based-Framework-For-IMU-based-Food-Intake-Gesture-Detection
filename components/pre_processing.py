@@ -6,11 +6,13 @@ IMU Pre-Processing Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-14
-Description : This script contains functions for pre-processing IMU data,
-              including transformations such as hand mirroring.
+Edited      : 2025-05-02
+Description : This script provides IMU data augmentation functions, including
+              hand mirroring and planar rotation. These transformations are
+              useful for improving model robustness in activity recognition tasks.
 ===============================================================================
 """
+
 
 import numpy as np
 import torch

@@ -6,11 +6,15 @@ IMU TCN Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-29
-Description : This script defines a Temporal Convolutional Network (TCN) model for
-              IMU data processing, including dilated residual layers and a loss function.
+Edited      : 2025-05-02
+Description : This script defines Temporal Convolutional Network (TCN) architectures
+              including single-stage and multi-stage (MSTCN) variants for processing
+              IMU time-series data. Models are built using dilated residual layers
+              and support causal or non-causal convolutions. Each stage includes
+              intermediate and final projections for sequence labeling tasks.
 ===============================================================================
 """
+
 
 import torch
 import torch.nn as nn
@@ -260,5 +264,3 @@ class MSTCN(nn.Module):
                 hidden = self.conv_projs[stage_idx](logits)
 
         return logits_list
-
-

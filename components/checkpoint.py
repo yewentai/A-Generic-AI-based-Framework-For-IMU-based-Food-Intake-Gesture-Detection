@@ -6,9 +6,11 @@ Checkpoint Utility Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
-Description : This script provides utility functions for saving and loading model
-              checkpoints during training, including tracking the best model state.
+Edited      : 2025-05-02
+Description : This script provides utility functions to save and load model
+              checkpoints, including fold-specific best model saving based on a
+              performance metric. It also supports checkpointing for GAN generator
+              and discriminator models during training.
 ===============================================================================
 """
 

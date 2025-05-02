@@ -6,11 +6,14 @@ IMU Post-Processing Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
-Description : This script defines functions for post-processing IMU prediction masks,
-              such as removing short segments and merging close segments.
+Edited      : 2025-05-02
+Description : This script provides utility functions for refining IMU segmentation
+              predictions. It includes logic to remove segments that are too short
+              and to merge segments that are separated by short gaps. It supports
+              both binary and multi-class prediction masks.
 ===============================================================================
 """
+
 
 import numpy as np
 

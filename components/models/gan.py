@@ -6,11 +6,15 @@ Event-based Segmentation GAN Model Definition
 ------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
-Description : This module defines the Generator and Discriminator classes for a GAN model
-              used in augmenting event-based IMU segmentation data.
+Edited      : 2025-05-02
+Description : This module defines the Generator and Discriminator architectures used in a
+              GAN model for event-based IMU segmentation. The generator maps latent vectors
+              to fixed-length multi-channel sequences using transposed 1D convolutions, while
+              the discriminator evaluates sequence authenticity using stacked 1D convolutions
+              followed by global pooling and binary classification.
 ================================================================================================
 """
+
 
 import torch.nn as nn
 

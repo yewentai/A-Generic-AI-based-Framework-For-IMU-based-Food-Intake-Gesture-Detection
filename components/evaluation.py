@@ -6,12 +6,14 @@ IMU Segmentation Evaluation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
-Description : This script defines functions for evaluating segmentation performance
-              by matching predicted intervals with ground truth intervals and computing
-              metrics such as precision, recall, and F1 score.
+Edited      : 2025-05-02
+Description : This script provides evaluation functions for IMU segmentation tasks.
+              It matches predicted and ground truth intervals for a target class,
+              computes overlap-based metrics (e.g., precision, recall, F1), and supports
+              optional debugging plots to visualize true/false positives and negatives.
 ===============================================================================
 """
+
 
 import numpy as np
 import matplotlib.pyplot as plt

@@ -6,11 +6,14 @@ IMU VAE Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
-Description : This script defines the Variational Autoencoder (VAE) architecture for
-              IMU data, including its encoder, decoder, and the combined VAE loss function.
+Edited      : 2025-05-02
+Description : This script implements a Variational Autoencoder (VAE) for IMU data.
+              It includes definitions for the encoder and decoder using 1D convolutional
+              and transposed convolutional layers, the reparameterization trick, and
+              a custom VAE loss function combining MSE reconstruction loss and KL divergence.
 ===============================================================================
 """
+
 
 import torch
 import torch.nn as nn
