@@ -6,10 +6,12 @@ IMU Fine-Tuned Classifier Validation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
-Description : Recreates the exact model architecture used during fine-tuning
-              to ensure proper loading of the saved state dictionary and
-              performs validation on the test dataset.
+Edited      : 2025-05-02
+Description : This script validates a fine-tuned IMU classifier by recreating
+              the exact model architecture used during fine-tuning, loading
+              the saved state dictionary, and evaluating the model on a test
+              dataset. It calculates accuracy, generates a classification
+              report, and saves the validation results.
 ===============================================================================
 """
 

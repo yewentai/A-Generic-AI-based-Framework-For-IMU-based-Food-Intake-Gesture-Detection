@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Training Result Analysis Script (DX/FD Datasets)
+IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-29
-Description : This script analyzes training results for DX/FD datasets with:
+Edited      : 2025-05-02
+Description : This script analyzes training results:
               1. Comparative analysis of segment-wise and sample-wise metrics
               2. Support for multiple validation modes (original, mirrored, rotated)
               3. Per-class performance analysis

@@ -6,11 +6,17 @@ Project Directory Cleanup Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-23
-Description : This script recursively traverses specified directories to find and
-              remove empty subdirectories, 'analysis' folders, and specific files.
+Edited      : 2025-05-02
+Description : This script recursively scans target project directories to:
+              - Remove empty subdirectories
+              - Delete all 'analysis' folders and their contents
+              - (Optional) Remove specific validation files
+              - (Optional) Rename validation output files
+
+              It helps maintain a clean directory structure for experiments.
 ===============================================================================
 """
+
 
 import os
 

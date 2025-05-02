@@ -11,12 +11,14 @@ Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
               3. Configurable model architectures (CNN-LSTM, TCN, MSTCN)
-              4. Flexible dataset handling (DX/FD/Oreba)
-              5. Comprehensive logging and checkpointing
+              4. Flexible dataset handling (DX/FD/Oreba) with hand-specific inputs
+              5. Optional augmentation strategies and dataset merging (FDIII/Oreba)
+              6. Detailed logging, fold-wise statistics, and checkpoint saving
 
               Tips: Use --distributed flag for distributed training mode.
 ===============================================================================
 """
+
 
 # Standard library imports
 import os

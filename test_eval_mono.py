@@ -6,12 +6,16 @@ IMU Test Evaluation Script (Binary Case)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
-Description : This script evaluates IMU segmentation predictions against ground truth
-              for binary gesture recognition, computes sample-wise and segment-wise F1 scores,
-              and visualizes the results.
+Edited      : 2025-05-02
+Description : This script evaluates binary segmentation predictions for IMU
+              gesture recognition. It:
+              1. Compares ground truth vs predicted labels
+              2. Visualizes both sequences with annotated error types
+              3. Computes sample-wise F1 score
+              4. Computes segment-wise F1 score using overlap-based evaluation
 ===============================================================================
 """
+
 
 import numpy as np
 import matplotlib.pyplot as plt

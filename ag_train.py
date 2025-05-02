@@ -6,10 +6,12 @@ Event-based Segmentation GAN Training Script
 ------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
-Description : This script trains a GAN model for augmenting event-based IMU segmentation data.
-              It is structured similarly to the MSTCN training script, with inline code for
-              dataset loading, GAN model definition, training, and checkpointing.
+Edited      : 2025-05-02
+Description : This script trains a GAN model for event-based IMU segmentation. It loads and
+              preprocesses IMU segment data, defines and trains a 1D-CNN generator and a
+              2D-CNN discriminator using WGAN-GP with label smoothing and L1 regularization.
+              The script supports single and distributed GPU training, saves configuration
+              and training stats, and checkpoints the best-performing generator.
 ================================================================================================
 """
 

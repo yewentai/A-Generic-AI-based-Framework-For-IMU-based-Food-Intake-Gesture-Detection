@@ -6,11 +6,14 @@ IMU Training Loss Curve Plotter
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-22
-Description : This script plots training loss curves per fold for the specified
-              experiment version and validation type.
+Edited      : 2025-05-02
+Description : This script plots fold-wise training loss curves (total, cross-entropy,
+              and MSE losses) for a specified experiment version. It loads training
+              statistics from a .npy file and generates log-scale plots for visual
+              inspection of training behavior across epochs.
 ===============================================================================
 """
+
 
 import os
 import numpy as np

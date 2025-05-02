@@ -6,11 +6,16 @@ IMU VAE Pre-Training Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
+Edited      : 2025-05-02
 Description : This script pre-trains a Variational Autoencoder (VAE) on IMU
-              data in an unsupervised manner to extract latent features.
+              data in an unsupervised manner. Features:
+              1. Custom VAE architecture with 1D convolutional layers
+              2. KL divergence warm-up scheduling
+              3. Adaptive learning rate scheduling with early patience
+              4. Saves model weights and configuration to result directory
 ===============================================================================
 """
+
 
 import os
 import json

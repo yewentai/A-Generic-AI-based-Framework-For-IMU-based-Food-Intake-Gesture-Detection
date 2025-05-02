@@ -5,14 +5,16 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-04-29
+Edited      : 2025-05-02
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
-              1. Original left/right hand validation
-              2. Hand mirroring (if enabled in config)
-              3. Planar rotation (if enabled in config)
-              4. Support for both DX and FD dataset formats
+              1. Original, left, and right hand-based validation modes
+              2. Optional data augmentation: hand mirroring and planar rotation
+              3. Compatibility with CNN-LSTM, TCN, and MSTCN models
+              4. Sample-wise and optional segment-wise evaluation
+              5. Output of per-fold metrics and optional threshold-based F1 analysis
 ===============================================================================
 """
+
 
 # Standard library imports
 import os

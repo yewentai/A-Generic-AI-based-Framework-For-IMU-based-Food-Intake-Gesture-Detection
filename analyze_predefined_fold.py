@@ -1,21 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-===============================================================================
-Dataset Statistics Analyzer for IMU-based Fall Detection
-
-Enhanced version that shows:
-1. Each fold's sample proportion of total samples
-2. Each fold's class proportions relative to total class counts
-3. Each fold's class proportions relative to the left and right classes
-
--------------------------------------------------------------------------------
+================================================================================================
+Event-based Segmentation GAN Training Script
+------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-25
-Description : FD-I Dataset Fold Statistics Analyzer with Proportion Analysis
-===============================================================================
+Edited      : 2025-05-02
+Description : This script analyzes the fold-wise and global label distributions in the FD-I
+              dataset used for event-based IMU segmentation. It loads preprocessed label data
+              for both left and right hands, applies predefined validation folds, and computes
+              detailed statistics on sample counts and class distributions across folds.
+================================================================================================
 """
+
 
 import os
 import pickle

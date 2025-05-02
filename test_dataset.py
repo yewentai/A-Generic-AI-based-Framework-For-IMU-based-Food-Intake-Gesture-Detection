@@ -1,3 +1,22 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Dataset Loader and Visualization Script (Standard vs Balanced)
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Edited      : 2025-05-02
+Description : This script compares standard and balanced IMU datasets by:
+              1. Loading left and right hand raw IMU sequences and labels
+              2. Creating standard and class-balanced datasets for training
+              3. Initializing DataLoaders and printing subject distributions
+              4. Plotting randomly sampled time-domain signals from both datasets
+
+              Useful for verifying data balancing and augmentation impacts.
+===============================================================================
+"""
+
+# ── Imports ───────────────────────────────────────────────────────
 import os
 import pickle
 import numpy as np

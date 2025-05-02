@@ -6,12 +6,17 @@ IMU Test Evaluation Script (Ternary/Multiclass Case)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-03
+Edited      : 2025-05-02
 Description : This script evaluates IMU segmentation predictions against ground truth
-              for a multiclass scenario, computing F1 scores for each class and visualizing
-              the segmentation performance.
+              for a multiclass scenario. It:
+              1. Computes sample-wise F1 score for a selected class
+              2. Computes segment-wise F1 scores for each foreground class
+              3. Visualizes evaluation for each class using overlap-based scoring
+
+              Intended for debugging and inspecting prediction performance class-by-class.
 ===============================================================================
 """
+
 
 import numpy as np
 from components.evaluation import segment_evaluation

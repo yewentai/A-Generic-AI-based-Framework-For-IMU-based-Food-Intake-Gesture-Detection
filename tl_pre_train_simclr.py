@@ -6,15 +6,17 @@ IMU SimCLR Pre-Training Script (Using TCN as Encoder)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
+Edited      : 2025-05-02
 Description : This script pre-trains a SimCLR model on IMU (Inertial Measurement
-              Unit) data in an unsupervised manner. It uses a Temporal Convolutional
-              Network (TCN) as the encoder and a simple MLP as the projection head.
-              The NT-Xent loss is computed between two augmented views of the same input.
-              The trained model weights and configuration are saved in a timestamped
-              directory for subsequent downstream tasks.
+              Unit) data in an unsupervised manner. It:
+              1. Uses a Temporal Convolutional Network (TCN) as the encoder
+              2. Wraps the encoder with global average pooling to get fixed-size features
+              3. Uses an MLP projection head to map features into a contrastive space
+              4. Computes NT-Xent loss between two augmented views of the same input
+              5. Saves the trained model and configuration for downstream use
 ===============================================================================
 """
+
 
 import os
 import json

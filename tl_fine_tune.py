@@ -6,13 +6,18 @@ IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with MLP
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
+Edited      : 2025-05-02
 Description : This script loads a pre-trained ResNet encoder (via the harnet10
               framework and load_weights function) and attaches a classifier
               head (MLP) for fine-tuning on a downstream classification task.
-              The entire ResNet-MLP network is then fine-tuned and saved.
+              It performs the following:
+              1. Loads and combines left/right IMU data
+              2. Wraps the ResNet encoder for feature extraction
+              3. Trains an MLP classifier on top of the encoder
+              4. Fine-tunes the full network and saves model + config
 ===============================================================================
 """
+
 
 import os
 import json
