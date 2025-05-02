@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-29
+Edited      : 2025-05-02
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -175,7 +175,15 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
+    version_prefix = f"{DATASET}_{DATASET_HAND}_{MODEL}"
+    if FLAG_AUGMENT_HAND_MIRRORING:
+        version_prefix += "_HM"
+    if FLAG_DATASET_AUGMENTATION:
+        version_prefix += "_DA"
+    if FLAG_DATASET_MIRRORING:
+        version_prefix += "_DM"
+    if FLAG_DATASET_MIRRORING_ADD:
+        version_prefix += "_DMA"
     result_dir = os.path.join("result", version_prefix)
     os.makedirs(result_dir, exist_ok=True)
     checkpoint_dir = os.path.join(result_dir, "checkpoint")
