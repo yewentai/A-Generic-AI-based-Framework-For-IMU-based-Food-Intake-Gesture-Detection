@@ -6,9 +6,9 @@ IMU Training Loss Curve Plotter
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-05
 Description : This script plots fold-wise training loss curves (total, cross-entropy,
-              and MSE losses) for a specified experiment version. It loads training
+              and smooth losses) for a specified experiment version. It loads training
               statistics from a .npy file and generates log-scale plots for visual
               inspection of training behavior across epochs.
 ===============================================================================
@@ -47,22 +47,22 @@ if __name__ == "__main__":
 
                 loss_per_epoch = {epoch: [] for epoch in epochs}
                 loss_ce_per_epoch = {epoch: [] for epoch in epochs}
-                loss_mse_per_epoch = {epoch: [] for epoch in epochs}
+                loss_smooth_per_epoch = {epoch: [] for epoch in epochs}
 
                 for entry in stats_fold:
                     epoch = entry["epoch"]
                     loss_per_epoch[epoch].append(entry["train_loss"])
                     loss_ce_per_epoch[epoch].append(entry["train_loss_ce"])
-                    loss_mse_per_epoch[epoch].append(entry["train_loss_mse"])
+                    loss_smooth_per_epoch[epoch].append(entry["train_loss_smooth"])
 
                 mean_loss = [np.mean(loss_per_epoch[e]) for e in epochs]
                 mean_ce = [np.mean(loss_ce_per_epoch[e]) for e in epochs]
-                mean_mse = [np.mean(loss_mse_per_epoch[e]) for e in epochs]
+                mean_smooth = [np.mean(loss_smooth_per_epoch[e]) for e in epochs]
 
                 plt.figure(figsize=(10, 6))
                 plt.plot(epochs, mean_loss, label="Total Loss", color="blue")
                 plt.plot(epochs, mean_ce, label="Cross Entropy Loss", linestyle="--", color="red")
-                plt.plot(epochs, mean_mse, label="MSE Loss", linestyle=":", color="green")
+                plt.plot(epochs, mean_smooth, label="Smooth Loss", linestyle=":", color="green")
                 plt.yscale("log")
 
                 plt.title(f"Training Loss Over Epochs (Fold {fold})")

@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-05
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -39,7 +39,7 @@ from tqdm import tqdm
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM
-from components.models.tcn import TCN, MSTCN
+from components.models.tcn import TCN
 from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
@@ -54,7 +54,7 @@ from components.datasets import (
     load_predefined_validate_folds,
 )
 
-# from components.models.mstcn import MSTCN
+from components.models.mstcn import MSTCN, MSTCN_Loss
 
 # ==============================================================================================
 #                             Configuration Parameters
@@ -71,7 +71,7 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------------------------------
 # Dataset Configuration
 # ----------------------------------------------------------------------------------------------
-DATASET = "DXI"
+DATASET = "OREBA"
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
     SAMPLING_FREQ_ORIGINAL = 64
@@ -98,6 +98,7 @@ elif DATASET.startswith("OREBA"):
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
 
 # ----------------------------------------------------------------------------------------------
 # Dataloader Configuration
@@ -135,7 +136,7 @@ LEARNING_RATE = 5e-4
 if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
-    NUM_FOLDS = 4
+    NUM_FOLDS = 5
 NUM_EPOCHS = 100
 
 # ----------------------------------------------------------------------------------------------
@@ -146,11 +147,8 @@ FLAG_AUGMENT_AXIS_PERMUTATION = False
 FLAG_AUGMENT_PLANAR_ROTATION = False
 FLAG_AUGMENT_SPATIAL_ORIENTATION = False
 FLAG_DATASET_AUGMENTATION = False
-
-if HAND_SEPERATION:
-    DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
-    FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
-    FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
+FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
+FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
 
 # ==============================================================================================
 #                                   Main Training Code
@@ -186,7 +184,13 @@ if local_rank == 0:
         version_prefix += "_DM"
     if FLAG_DATASET_MIRRORING_ADD:
         version_prefix += "_DMA"
+
     result_dir = os.path.join("result", version_prefix)
+    postfix = 1
+    original_result_dir = result_dir
+    while os.path.exists(result_dir):
+        result_dir = f"{original_result_dir}_{postfix}"
+        postfix += 1
     os.makedirs(result_dir, exist_ok=True)
     checkpoint_dir = os.path.join(result_dir, "checkpoint")
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -352,7 +356,7 @@ for fold, validate_subjects in enumerate(validate_folds):
 
         training_loss = 0
         training_loss_ce = 0
-        training_loss_mse = 0
+        training_loss_smooth = 0
 
         for batch_x, batch_y in train_loader:
             # Shape of batch_x: [batch_size, seq_len, channels]
@@ -374,21 +378,22 @@ for fold, validate_subjects in enumerate(validate_folds):
             optimizer.zero_grad()
             outputs = model(batch_x)
             if MODEL == "MSTCN":
-                ce_loss = 0.0
-                mse_loss = 0.0
-                for output in outputs:
-                    ce, smooth = loss_fn(output, batch_y, smoothing=SMOOTHING)
-                    ce_loss += ce
-                    mse_loss += smooth
+                # ce_loss = 0.0
+                # smooth_loss = 0.0
+                # for output in outputs:
+                #     ce, smooth = loss_fn(output, batch_y, smoothing=SMOOTHING)
+                #     ce_loss += ce
+                #     smooth_loss += smooth
+                ce_loss, smooth_loss = MSTCN_Loss(outputs, batch_y)
             else:
-                ce_loss, mse_loss = loss_fn(outputs, batch_y, smoothing=SMOOTHING)
-            loss = ce_loss + LAMBDA_COEF * mse_loss
+                ce_loss, smooth_loss = loss_fn(outputs, batch_y, smoothing=SMOOTHING)
+            loss = ce_loss + LAMBDA_COEF * smooth_loss
             loss.backward()
             optimizer.step()
 
             training_loss += loss.item()
             training_loss_ce += ce_loss.item()
-            training_loss_mse += mse_loss.item()
+            training_loss_smooth += smooth_loss.item()
 
         if local_rank == 0:
             avg_loss = training_loss / len(train_loader)
@@ -400,12 +405,12 @@ for fold, validate_subjects in enumerate(validate_folds):
                 "epoch": epoch + 1,
                 "train_loss": avg_loss,
                 "train_loss_ce": training_loss_ce / len(train_loader),
-                "train_loss_mse": training_loss_mse / len(train_loader),
+                "train_loss_smooth": training_loss_smooth / len(train_loader),
             }
             training_statistics.append(stats)
             if epoch % 5 == 0:
                 logger.info(
-                    f"[Rank {local_rank}] Epoch {epoch+1}/{NUM_EPOCHS} - Loss: {avg_loss:.4f}, CE: {training_loss_ce / len(train_loader):.4f}, MSE: {training_loss_mse / len(train_loader):.4f}"
+                    f"[Rank {local_rank}] Epoch {epoch+1}/{NUM_EPOCHS} - Loss: {avg_loss:.4f}, CE: {training_loss_ce / len(train_loader):.4f}, smooth: {training_loss_smooth / len(train_loader):.4f}"
                 )
 
 # ==============================================================================================
