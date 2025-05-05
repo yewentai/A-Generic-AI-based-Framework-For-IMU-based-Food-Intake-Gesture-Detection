@@ -1,3 +1,4 @@
 {
-    "flag_segment_validation": false
+    "flag_segment_validation": false,
+    "threshold_list": null
 }

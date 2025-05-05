@@ -1,6 +1,7 @@
 The dataset contains three sub-datasets: FD-I, FD-II, and Meal-Only (MO) dataset.
 
 1. Dataset Description:
+
 1.1. Sensor Info:
 The off-the-shelf IMU sensor Shimmer3 is used in this study. The Shimmer3 IMU contains a 3-axis accelerometer unit, a 3-axis gyroscope unit, and a 3-axis magnetometer unit. The signals from the accelerometer and gyroscope were used in this study, hence 6 Degrees-of-Freedom (6 DoF). Two IMUs were attached to the left and right wrists of the participant. The sampling frequency is 64 Hz.
 

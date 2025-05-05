@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-05-02
+Edited      : 2025-05-05
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original, left, and right hand-based validation modes
               2. Optional data augmentation: hand mirroring and planar rotation
@@ -48,7 +48,7 @@ DEBUG_PLOT = False
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["FDI_LEFT_MSTCN"]  # Uncomment to manually specify versions
+    versions = ["DXI_BOTH_MSTCN"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
