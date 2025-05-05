@@ -145,17 +145,20 @@ The objective of this thesis is to design a generic AI-based framework to proces
 3. Training Options:
 
    - For deep learning training:
+
      ```sh
      python dl_train.py
      ```
-   
+
    - For transfer learning:
+
      ```sh
      python tl_pre_train_simclr.py  # Pre-train with SimCLR
      python tl_fine_tune.py         # Fine-tune the model
      ```
 
 4. Evaluation:
+
    ```sh
    python dl_validate.py           # Validate deep learning models
    python tl_validate_finetune.py  # Validate transfer learning models
