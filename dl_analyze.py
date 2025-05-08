@@ -6,7 +6,7 @@ IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-05
+Edited      : 2025-05-08
 Description : This script analyzes training results:
               1. Comparative analysis of segment-wise and sample-wise metrics
               2. Support for multiple validation modes (original, mirrored, rotated)
@@ -25,7 +25,10 @@ from seaborn import color_palette
 
 if __name__ == "__main__":
     result_root = "result"
-    versions = ["OREBA_BOTH_MSTCN_1"]  # Uncomment to manually specify versions
+    versions = [
+        "DXI_BOTH_MSTCN",
+        "DXI_BOTH_MSTCN_DATASET_MIRRORING",
+    ]  # Uncomment to manually specify versions
     # versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
     for version in versions:
@@ -182,11 +185,21 @@ if __name__ == "__main__":
             num_folds = len(next(iter(mode_metrics.values()))["sample_wise"])
             folds = np.arange(1, num_folds + 1)
 
+            highest_mean_score = 0  # Initialize variable to track the highest mean score
+
             for i, mode_name in enumerate(mode_names):
                 scores = mode_metrics[mode_name]["sample_wise"]
+                mean_score = np.mean(scores)
+                highest_mean_score = max(highest_mean_score, mean_score)  # Update highest mean score
                 positions = folds + (i - len(mode_names) / 2 + 0.5) * bar_width
                 bars = plt.bar(
-                    positions, scores, bar_width, label=mode_name, edgecolor="black", linewidth=0.5, alpha=0.8
+                    positions,
+                    scores,
+                    bar_width,
+                    label=f"{mode_name} (Mean: {mean_score:.2f})",
+                    edgecolor="black",
+                    linewidth=0.5,
+                    alpha=0.8,
                 )
                 for bar, s in zip(bars, scores):
                     plt.text(
@@ -208,4 +221,8 @@ if __name__ == "__main__":
             plt.savefig(os.path.join(analysis_dir, f"f1_per_fold_{dataset_name}.png"), dpi=300)
             plt.close()
 
+            logger.info(f"Mean Sample-wise F1 Score for {mode_name}: {mean_score:.2f}")
             logger.info(f"Analysis for version {version} ({dataset_name}) completed. Plots saved to {analysis_dir}")
+
+            # Print the highest mean value with 3 digits after the decimal
+            logger.info(f"Highest Mean Sample-wise F1 Score: {highest_mean_score:.3f}")

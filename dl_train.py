@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-05
+Edited      : 2025-05-08
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -71,7 +71,7 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------------------------------
 # Dataset Configuration
 # ----------------------------------------------------------------------------------------------
-DATASET = "OREBA"
+DATASET = "DXI"
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
     SAMPLING_FREQ_ORIGINAL = 64
