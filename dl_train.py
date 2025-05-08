@@ -39,7 +39,7 @@ from tqdm import tqdm
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM
-from components.models.tcn import TCN
+from components.models.tcn import TCN, MSTCN
 from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
@@ -54,7 +54,6 @@ from components.datasets import (
     load_predefined_validate_folds,
 )
 
-from components.models.mstcn import MSTCN, MSTCN_Loss
 
 # ==============================================================================================
 #                             Configuration Parameters
@@ -113,7 +112,6 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
 INPUT_DIM = 6
-SMOOTHING = "MSE"
 LAMBDA_COEF = 0.15
 if MODEL in ["TCN", "MSTCN"]:
     KERNEL_SIZE = 3
@@ -156,7 +154,9 @@ FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
 
 parser = argparse.ArgumentParser(description="IMU HAR Training Script")
 parser.add_argument("--distributed", action="store_true", help="Run in distributed mode")
+parser.add_argument("--smoothing", type=str, default="L1", help="Smoothing loss type")
 args = parser.parse_args()
+SMOOTHING = args.smoothing
 
 if args.distributed:
     local_rank = int(os.environ["LOCAL_RANK"])
@@ -175,7 +175,7 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = f"{DATASET}_{DATASET_HAND}_{MODEL}"
+    version_prefix = f"{DATASET}_{DATASET_HAND}_{MODEL}_{SMOOTHING}"
     if FLAG_AUGMENT_HAND_MIRRORING:
         version_prefix += "_HM"
     if FLAG_DATASET_AUGMENTATION:
@@ -378,13 +378,13 @@ for fold, validate_subjects in enumerate(validate_folds):
             optimizer.zero_grad()
             outputs = model(batch_x)
             if MODEL == "MSTCN":
-                # ce_loss = 0.0
-                # smooth_loss = 0.0
-                # for output in outputs:
-                #     ce, smooth = loss_fn(output, batch_y, smoothing=SMOOTHING)
-                #     ce_loss += ce
-                #     smooth_loss += smooth
-                ce_loss, smooth_loss = MSTCN_Loss(outputs, batch_y)
+                ce_loss = 0.0
+                smooth_loss = 0.0
+                for output in outputs:
+                    ce, smooth = loss_fn(output, batch_y, smoothing=SMOOTHING)
+                    ce_loss += ce
+                    smooth_loss += smooth
+                # ce_loss, smooth_loss = MSTCN_Loss(outputs, batch_y)
             else:
                 ce_loss, smooth_loss = loss_fn(outputs, batch_y, smoothing=SMOOTHING)
             loss = ce_loss + LAMBDA_COEF * smooth_loss
