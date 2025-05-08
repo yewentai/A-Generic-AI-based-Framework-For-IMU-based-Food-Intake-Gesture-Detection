@@ -26,8 +26,9 @@ from seaborn import color_palette
 if __name__ == "__main__":
     result_root = "result"
     versions = [
-        "DXI_BOTH_MSTCN",
-        "DXI_BOTH_MSTCN_DATASET_MIRRORING",
+        "DXI_BOTH_MSTCN_HUBER",
+        "DXI_BOTH_MSTCN_L1",
+        "DXI_BOTH_MSTCN_MSE",
     ]  # Uncomment to manually specify versions
     # versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
