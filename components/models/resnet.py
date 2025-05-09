@@ -6,7 +6,7 @@ IMU ResNet Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-04-28
+Edited      : 2025-05-09
 Description : This module defines various components of a ResNet-based model
               architecture, including classifiers, projection heads, residual
               blocks, and downsampling layers. These components are designed
@@ -373,3 +373,50 @@ class Resnet(nn.Module):
             y = self.classifier(feats.view(x.shape[0], -1))
             return y
         return y
+
+
+class ResNetEncoder(nn.Module):
+    def __init__(self, weight_path, n_channels=3, class_num=2, my_device="cpu", freeze_encoder=False):
+        """
+        Loads the pre-trained ResNet model, removes its classifier head, and
+        outputs flattened features from the feature extractor.
+
+        Parameters:
+            weight_path (str): Path to the pre-trained weights.
+            n_channels (int): Number of input channels.
+            class_num (int): Number of classes used during pre-training (for model instantiation).
+            my_device (str): Device for loading the weights.
+            freeze_encoder (bool): If True, freeze encoder weights.
+        """
+        super(ResNetEncoder, self).__init__()
+        # Create the ResNet model with is_eva=True to use the two-layer FC head in pre-training.
+        # (The classifier head will be discarded.)
+        self.resnet = Resnet(
+            output_size=class_num,
+            n_channels=n_channels,
+            is_eva=True,
+            resnet_version=1,
+        )
+        # Load pre-trained weights. The load_weights function adapts the parameter names if needed.
+        load_weights(weight_path, self.resnet, my_device=my_device, is_dist=True, name_start_idx=1)
+        print("Pre-trained ResNet weights loaded.")
+
+        # Freeze encoder parameters if requested.
+        if freeze_encoder:
+            for param in self.resnet.parameters():
+                param.requires_grad = False
+
+        # Save the feature extractor, which is all layers before the classifier.
+        self.feature_extractor = self.resnet.feature_extractor
+
+        # Infer the feature dimension from the last layer output channels.
+        # (Assumes the classifier head was created with in_features equal to the last out_channels.)
+        # For example, for epoch_len=10 using your configuration, the last layer defined in
+        # cgf is (1024, 5, 0, 5, 3, 1) so feature dimension is 1024.
+        self.out_features = 1024
+
+    def forward(self, x):
+        # x is expected to be of shape [B, channels, seq_len]
+        feats = self.feature_extractor(x)
+        feats = feats.view(x.shape[0], -1)  # flatten
+        return feats
