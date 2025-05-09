@@ -111,7 +111,7 @@ def main():
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
-            remove_analysis_folders(parent)
+            # remove_analysis_folders(parent)
             remove_empty_subdirs(parent)
             # remove_specified_files(parent)
             # rename_files(parent)
