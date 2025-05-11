@@ -32,8 +32,6 @@ from torch.utils.data import DataLoader, Subset
 # Local imports
 from components.models.resnet import ResNetEncoder
 from components.models.head import MLPClassifier, ResNetMLP
-from components.post_processing import post_process_predictions
-from components.evaluation import segment_evaluation
 from components.datasets import IMUDatasetN21
 from components.pre_processing import hand_mirroring, planar_rotation
 
