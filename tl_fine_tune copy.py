@@ -18,7 +18,6 @@ Description : This script loads a pre-trained ResNet encoder (via the harnet10
 ===============================================================================
 """
 
-
 import argparse
 import json
 import logging
@@ -31,14 +30,14 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler, Subset
 from tqdm import tqdm
 
-from components.pre_processing import hand_mirroring
-from components.models.resnet import ResNetEncoder
-from components.models.head import MLPClassifier, ResNetMLP
 from components.datasets import IMUDatasetN21, create_balanced_subject_folds, load_predefined_validate_folds
-
+from components.models.head import MLPClassifier, ResNetMLP
+from components.models.resnet import ResNetEncoder
+from components.pre_processing import hand_mirroring
+from components.checkpoint import save_best_model
 
 # ==============================================================================================
 #                             Configuration Parameters
@@ -126,9 +125,7 @@ FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
 
 parser = argparse.ArgumentParser(description="IMU HAR Training Script")
 parser.add_argument("--distributed", action="store_true", help="Run in distributed mode")
-parser.add_argument("--smoothing", type=str, default="L1", help="Smoothing loss type")
 args = parser.parse_args()
-SMOOTHING = args.smoothing
 
 if args.distributed:
     local_rank = int(os.environ["LOCAL_RANK"])
@@ -147,7 +144,7 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = f"{DATASET}_{DATASET_HAND}_{MODEL}_{SMOOTHING}"
+    version_prefix = f"{DATASET}_{DATASET_HAND}_{MODEL}"
     if FLAG_AUGMENT_HAND_MIRRORING:
         version_prefix += "_HM"
     if FLAG_DATASET_AUGMENTATION:
@@ -254,10 +251,8 @@ for fold, validate_subjects in enumerate(validate_folds):
     ).to(device)
     feature_dim = encoder.out_features
 
-    num_classes = 3  # Modify to match your downstream task
-
     # ---------------------- Build Fine-Tuning Model (ResNet + MLP) ----------------------
-    classifier = MLPClassifier(feature_dim=feature_dim, num_classes=num_classes)
+    classifier = MLPClassifier(feature_dim=feature_dim, num_classes=NUM_CLASSES)
     model = ResNetMLP(encoder, classifier).to(device)
 
     # Set up optimizer and loss function
@@ -265,56 +260,79 @@ for fold, validate_subjects in enumerate(validate_folds):
     criterion = nn.CrossEntropyLoss()
 
     # ---------------------- Fine-Tuning Loop ----------------------
-    num_epochs_ft = 50
     model.train()
-    for epoch in range(num_epochs_ft):
-        epoch_loss = 0.0
-        correct = 0
-        total = 0
-        for batch_x, batch_y in tqdm(dataloader, desc=f"Fine-tune Epoch {epoch+1}/{num_epochs_ft}"):
-            # batch_x shape: [B, sequence_length, channels] --> need to permute to [B, channels, seq_len]
-            batch_x = batch_x.to(device).permute(0, 2, 1)
-            # Use the first label of each sequence as the sample label
-            labels = batch_y[:, 0].long().to(device)
+    for epoch in range(NUM_EPOCHS):
+        training_loss = 0.0
+        best_loss = float("inf")
+        for batch_x, batch_y in tqdm(dataloader, desc=f"Fine-tune Epoch {epoch+1}/{NUM_EPOCHS}"):
+            # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
+            # Shape of batch_x: [batch_size, channels, seq_len]
+            batch_x = batch_x.permute(0, 2, 1).to(device)
+            batch_y = batch_y[:, 0].long().to(device)
             optimizer.zero_grad()
-            logits = model(batch_x)
-            loss = criterion(logits, labels)
+            outputs = model(batch_x)
+            loss = criterion(outputs, batch_y)
             loss.backward()
             optimizer.step()
+            training_loss += loss.item()
 
-            epoch_loss += loss.item()
-            preds = logits.argmax(dim=1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
+        if local_rank == 0:
+            avg_loss = training_loss / len(train_loader)
+            best_loss = save_best_model(model, fold + 1, avg_loss, best_loss, checkpoint_dir, "min")
+            stats = {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "fold": fold + 1,
+                "epoch": epoch + 1,
+                "train_loss": avg_loss,
+            }
 
-        avg_loss = epoch_loss / len(dataloader)
-        acc = correct / total
-        print(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}, Accuracy = {acc:.4f}")
+# ==============================================================================================
+#                                   Save final results
+# ==============================================================================================
+if local_rank == 0:
+    np.save(training_stats_file, training_statistics)
+    logger.info(f"Training statistics saved to {training_stats_file}")
+    logger.info(f"Training completed in {datetime.now() - overall_start}")
+    # Save configuration
+    config_info = {
+        # Dataset Settings
+        "dataset": DATASET,
+        "task": TASK,
+        "hand_separation": HAND_SEPERATION,
+        "hand": DATASET_HAND,
+        "num_classes": NUM_CLASSES,
+        "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
+        "downsample_factor": DOWNSAMPLE_FACTOR,
+        "sampling_freq": SAMPLING_FREQ,
+        "data_dir": DATA_DIR,
+        # Dataloader Settings
+        "window_length": WINDOW_LENGTH,
+        "window_size": WINDOW_SIZE,
+        "batch_size": BATCH_SIZE,
+        "num_workers": NUM_WORKERS,
+        # Model Settings
+        "model": MODEL,
+        "input_dim": INPUT_DIM,
+        "lambda_coef": LAMBDA_COEF,
+        # Training Settings
+        "learning_rate": LEARNING_RATE,
+        "num_folds": NUM_FOLDS,
+        "num_epochs": NUM_EPOCHS,
+        # Augmentation flags
+        "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
+        "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
+        "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
+        "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
+        "dataset_augmentation": FLAG_DATASET_AUGMENTATION,
+        "dataset_mirroring": FLAG_DATASET_MIRRORING,
+        "dataset_mirroring_add": FLAG_DATASET_MIRRORING_ADD,
+    }
 
-    # ---------------------- Save Fine-Tuned Model and Configuration ----------------------
-    version_prefix = datetime.now().strftime("%Y%m%d%H%M")
-    ft_save_dir = os.path.join("result", version_prefix)
-    os.makedirs(ft_save_dir, exist_ok=True)
-    ckpt_path = os.path.join(ft_save_dir, "fine_tuned_resnet_mlp.pth")
-    torch.save(model.state_dict(), ckpt_path)
-    print(f"Fine-tuned model saved to {ckpt_path}")
-
-ft_config = {
-    "pretrained_ckpt": pretrained_ckpt,
-    "model": "ResNetMLP",
-    "feature_dim": feature_dim,
-    "num_classes": num_classes,
-    "sequence_length": WINDOW_SIZE,
-    "batch_size": batch_size,
-    "num_epochs_ft": num_epochs_ft,
-    "learning_rate": 5e-4,
-    "freeze_encoder": False,
-}
-config_path = os.path.join(ft_save_dir, "ft_config.json")
-with open(config_path, "w") as f:
-    json.dump(ft_config, f, indent=4)
-print(f"Fine-tuning configuration saved to {config_path}")
-
+    config_file = os.path.join(result_dir, "training_config.json")
+    with open(config_file, "w") as f:
+        json.dump(config_info, f, indent=4)
+    logger.info(f"Configuration saved to {config_file}")
 
 if args.distributed:
     dist.destroy_process_group()
