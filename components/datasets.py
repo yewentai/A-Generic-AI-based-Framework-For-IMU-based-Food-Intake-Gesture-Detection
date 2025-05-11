@@ -267,7 +267,7 @@ class IMUDatasetN21(Dataset):
         X,
         Y,
         sequence_length=300,
-        stride=30,
+        stride=20,
         downsample_factor=2,
         apply_antialias=True,
         selected_channels=[0, 1, 2],

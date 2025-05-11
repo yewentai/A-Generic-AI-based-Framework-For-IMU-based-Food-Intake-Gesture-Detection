@@ -6,7 +6,7 @@ IMU ResNet Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-09
+Edited      : 2025-05-11
 Description : This module defines various components of a ResNet-based model
               architecture, including classifiers, projection heads, residual
               blocks, and downsampling layers. These components are designed
@@ -48,7 +48,6 @@ def load_weights(weight_path, model, my_device="cpu", name_start_idx=2, is_dist=
 
     # 3. load the new state dict
     model.load_state_dict(model_dict)
-    print("%d Weights loaded" % len(pretrained_dict))
 
 
 class Classifier(nn.Module):
@@ -399,7 +398,6 @@ class ResNetEncoder(nn.Module):
         )
         # Load pre-trained weights. The load_weights function adapts the parameter names if needed.
         load_weights(weight_path, self.resnet, my_device=my_device, is_dist=True, name_start_idx=1)
-        print("Pre-trained ResNet weights loaded.")
 
         # Freeze encoder parameters if requested.
         if freeze_encoder:

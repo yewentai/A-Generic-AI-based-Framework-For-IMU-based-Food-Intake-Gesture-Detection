@@ -6,7 +6,7 @@ IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-08
+Edited      : 2025-05-11
 Description : This script analyzes training results:
               1. Comparative analysis of segment-wise and sample-wise metrics
               2. Support for multiple validation modes (original, mirrored, rotated)
@@ -26,8 +26,6 @@ from seaborn import color_palette
 if __name__ == "__main__":
     result_root = "result"
     versions = [
-        "DXI_BOTH_MSTCN_HUBER",
-        "DXI_BOTH_MSTCN_L1",
         "DXI_BOTH_MSTCN_MSE",
     ]  # Uncomment to manually specify versions
     # versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]

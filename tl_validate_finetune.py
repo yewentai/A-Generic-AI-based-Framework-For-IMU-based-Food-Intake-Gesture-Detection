@@ -34,6 +34,7 @@ from components.models.resnet import ResNetEncoder
 from components.models.head import MLPClassifier, ResNetMLP
 from components.datasets import IMUDatasetN21
 from components.pre_processing import hand_mirroring, planar_rotation
+from components.models.head import SequenceLabelingHead, ResNetSeqLabeler
 
 # --- Configurations ---
 NUM_WORKERS = 4
@@ -46,7 +47,7 @@ DEBUG_PLOT = False
 if __name__ == "__main__":
     result_root = "result"
     versions = [
-        "DXI_ResNetMLP_1",
+        "DXI_ResNetSeqLabeler",
     ]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
@@ -185,18 +186,22 @@ if __name__ == "__main__":
                 if not os.path.exists(checkpoint_path):
                     logger.warning(f"Checkpoint not found for fold {fold+1}, skipping...")
                     continue
-
+                encoder = ResNetEncoder(
+                    weight_path=pretrained_ckpt,
+                    n_channels=input_dim,
+                    class_num=num_classes,
+                    my_device=device,
+                    freeze_encoder=True,
+                ).to(device)
+                feature_dim = encoder.out_features
                 if model_name == "ResNetMLP":
-                    encoder = ResNetEncoder(
-                        weight_path=pretrained_ckpt,
-                        n_channels=input_dim,
-                        class_num=num_classes,
-                        my_device=device,
-                        freeze_encoder=True,
-                    ).to(device)
-                    feature_dim = encoder.out_features
                     classifier = MLPClassifier(feature_dim=feature_dim, num_classes=num_classes)
                     model = ResNetMLP(encoder, classifier).to(device)
+                elif model_name == "ResNetSeqLabeler":
+                    seq_labeler = SequenceLabelingHead(
+                        feature_dim=feature_dim, seq_length=window_size, num_classes=num_classes, hidden_dim=128
+                    ).to(device)
+                    model = ResNetSeqLabeler(encoder, seq_labeler).to(device)
                 else:
                     logger.error(f"Invalid model: {model_name}")
                     continue
@@ -218,56 +223,51 @@ if __name__ == "__main__":
 
                 all_predictions, all_labels = [], []
 
+                model.eval()
+                all_predictions = []
+                all_labels = []
+
                 with torch.no_grad():
                     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
                         # [B, L, C_in] → [B, C_in, L]
                         batch_x = batch_x.permute(0, 2, 1).to(device)
+                        # [B, L] → [B, L] on device, long for indexing
+                        batch_y = batch_y.long().to(device)
 
-                        # forward pass
-                        outputs_list = model(batch_x)
-                        logits = outputs_list[-1] if isinstance(outputs_list, list) else outputs_list
+                        # Forward pass: get per‐frame logits [B, seq_length, num_classes]
+                        logits = model(batch_x)
 
-                        # softmax + argmax → per-window predictions
-                        probs = F.softmax(logits, dim=1)
-                        preds_seq = torch.argmax(
-                            probs, dim=1
-                        )  # → [B] if classification head, or [B, L] if segmentation head
+                        # Softmax over the class dimension (last dim) → [B, L, C]
+                        probs = F.softmax(logits, dim=2)
 
-                        # determine true label per window by majority vote
-                        y = batch_y.long()  # [B, L]
-                        segment_labels, _ = torch.mode(y, dim=1)  # → [B]
+                        # Argmax per frame → [B, L]
+                        preds_seq = torch.argmax(probs, dim=2)
 
-                        # flatten predictions if needed
-                        if preds_seq.ndim == 2:
-                            # segmentation head: [B, L] → flatten to [B * L]
-                            preds_flat = preds_seq.reshape(-1)
-                            true_flat = y.reshape(-1)
-                        else:
-                            # classification head: already [B]
-                            preds_flat = preds_seq
-                            true_flat = segment_labels
+                        # Flatten everything to 1D: [B*L]
+                        preds_flat = preds_seq.reshape(-1).cpu().numpy()
+                        true_flat = batch_y.reshape(-1).cpu().numpy()
 
-                        all_predictions.extend(preds_flat.cpu().numpy())
-                        all_labels.extend(true_flat.cpu().numpy())
+                        all_predictions.extend(preds_flat.tolist())
+                        all_labels.extend(true_flat.tolist())
 
+                # Convert to numpy arrays
                 preds_array = np.array(all_predictions)
                 labels_array = np.array(all_labels)
 
+                # Compute label distribution
                 unique_labels, counts = np.unique(labels_array, return_counts=True)
                 label_distribution = {int(l): int(c) for l, c in zip(unique_labels, counts)}
-                # after computing label_distribution:
+
+                # Compute weights for positive classes (1..num_classes-1)
                 positive_counts = {l: c for l, c in label_distribution.items() if l > 0}
                 total_positive = sum(positive_counts.values())
-
-                # CASE A: no positives at all (should rarely happen)
                 if total_positive == 0:
-                    # give each class equal weight
+                    # No positives: uniform weights
                     label_weight = {l: 1.0 / (num_classes - 1) for l in range(1, num_classes)}
                 else:
-                    # normal: weight = count / total_positive, missing get 0.0
                     label_weight = {l: positive_counts.get(l, 0) / total_positive for l in range(1, num_classes)}
 
-                # compute per-class confusion & f1
+                # Compute per-class confusion & F1
                 metrics_sample = {}
                 for label in range(1, num_classes):
                     tp = np.sum((preds_array == label) & (labels_array == label))

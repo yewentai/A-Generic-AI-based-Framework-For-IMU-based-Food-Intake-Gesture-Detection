@@ -1,0 +1,344 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with Sequence Labeling
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-05-11
+Description : This script loads a pre-trained ResNet encoder (via the harnet10
+              framework and load_weights function) and attaches a sequence
+              labeling head for fine-tuning on a downstream sequence labeling
+              task. It performs the following:
+              1. Loads and combines left/right IMU data
+              2. Wraps the ResNet encoder for feature extraction
+              3. Trains a sequence labeling head on top of the encoder
+              4. Fine-tunes the full network and saves model + config
+===============================================================================
+"""
+
+import argparse
+import json
+import logging
+import os
+import pickle
+from datetime import datetime
+
+import numpy as np
+import torch
+import torch.distributed as dist
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, DistributedSampler, Subset
+from tqdm import tqdm
+
+from components.datasets import IMUDatasetN21, create_balanced_subject_folds, load_predefined_validate_folds
+from components.models.resnet import ResNetEncoder
+from components.models.head import SequenceLabelingHead, ResNetSeqLabeler
+from components.pre_processing import hand_mirroring
+from components.checkpoint import save_best_model
+
+# ==============================================================================================
+#                             Configuration Parameters
+# ==============================================================================================
+
+# Setup logger
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)s: %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------------------------------------
+# Dataset Configuration
+# ----------------------------------------------------------------------------------------------
+DATASET = "DXI"
+if DATASET.startswith("DX"):
+    NUM_CLASSES = 2
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 2
+    sub_version = DATASET.replace("DX", "").upper() or "I"
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
+    HAND_SEPERATION = True
+elif DATASET.startswith("FD"):
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 2
+    NUM_CLASSES = 3
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
+    HAND_SEPERATION = True
+elif DATASET.startswith("OREBA"):
+    SAMPLING_FREQ_ORIGINAL = 64
+    DOWNSAMPLE_FACTOR = 2
+    NUM_CLASSES = 3
+    DATA_DIR = "./dataset/Oreba"
+    TASK = "multiclass"
+    HAND_SEPERATION = False
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
+SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+
+# ----------------------------------------------------------------------------------------------
+# Dataloader Configuration
+# ----------------------------------------------------------------------------------------------
+WINDOW_LENGTH = 10  # seconds
+WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+BATCH_SIZE = 64
+NUM_WORKERS = 16
+
+# ----------------------------------------------------------------------------------------------
+# Model Configuration
+# ----------------------------------------------------------------------------------------------
+MODEL = "ResNetSeqLabeler"  # Changed from ResNetMLP to ResNetSeqLabeler
+INPUT_DIM = 3  # Only accelerometer data
+
+# ----------------------------------------------------------------------------------------------
+# Training Configuration
+# ----------------------------------------------------------------------------------------------
+LEARNING_RATE = 5e-4
+if DATASET == "FDI":
+    NUM_FOLDS = 7
+else:
+    NUM_FOLDS = 5
+NUM_EPOCHS = 100
+
+# ----------------------------------------------------------------------------------------------
+# Augmentation Configuration
+# ----------------------------------------------------------------------------------------------
+FLAG_AUGMENT_HAND_MIRRORING = False
+FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
+FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
+
+# ==============================================================================================
+#                            New Sequence Labeling Components
+# ==============================================================================================
+
+
+# ==============================================================================================
+#                                   Main Training Code
+# ==============================================================================================
+
+parser = argparse.ArgumentParser(description="IMU Sequence Labeling Training Script")
+parser.add_argument("--distributed", action="store_true", help="Run in distributed mode")
+args = parser.parse_args()
+
+if args.distributed:
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    dist.init_process_group(backend="nccl", rank=local_rank, world_size=world_size)
+    torch.cuda.set_device(local_rank)
+    device = torch.device("cuda", local_rank)
+else:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    local_rank = 0
+
+if local_rank == 0:
+    # Logger setup
+    logger.info(f"[Rank {local_rank}] Using device: {device}")
+    overall_start = datetime.now()
+    logger.info(f"Training started at: {overall_start}")
+
+    # Create result directory
+    version_prefix = f"{DATASET}_{MODEL}"
+    if FLAG_AUGMENT_HAND_MIRRORING:
+        version_prefix += "_HM"
+    if FLAG_DATASET_MIRRORING:
+        version_prefix += "_DM"
+    if FLAG_DATASET_MIRRORING_ADD:
+        version_prefix += "_DMA"
+
+    result_dir = os.path.join("result", version_prefix)
+    postfix = 1
+    original_result_dir = result_dir
+    while os.path.exists(result_dir):
+        result_dir = f"{original_result_dir}_{postfix}"
+        postfix += 1
+    os.makedirs(result_dir, exist_ok=True)
+    checkpoint_dir = os.path.join(result_dir, "checkpoint")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    training_stats_file = os.path.join(result_dir, "training_stats.npy")
+
+# ----------------------------------------------------------------------------------------------
+# Load Dataset
+# ----------------------------------------------------------------------------------------------
+
+if HAND_SEPERATION:
+    with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
+        X_L = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
+        Y_L = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
+        X_R = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
+        Y_R = np.array(pickle.load(f), dtype=object)
+
+    if FLAG_DATASET_MIRRORING:
+        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+
+    if FLAG_DATASET_MIRRORING_ADD:
+        X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+        X_R_mirrored = np.array([hand_mirroring(sample) for sample in X_R], dtype=object)
+        X_L = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_L_mirrored)], dtype=object)
+        X_R = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_R, X_R_mirrored)], dtype=object)
+        Y_L = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_L)], dtype=object)
+        Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
+
+    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
+else:
+    with open(os.path.join(DATA_DIR, "X.pkl"), "rb") as f:
+        X = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
+        Y = np.array(pickle.load(f), dtype=object)
+
+dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+
+# ----------------------------------------------------------------------------------------------
+# Training loop over folds
+# ----------------------------------------------------------------------------------------------
+if DATASET == "FDI":
+    validate_folds = load_predefined_validate_folds()
+else:
+    validate_folds = create_balanced_subject_folds(dataset, num_folds=NUM_FOLDS)
+training_statistics = []
+for fold, validate_subjects in enumerate(validate_folds):
+    # Prepare training data
+    train_indices = [i for i, s in enumerate(dataset.subject_indices) if s not in validate_subjects]
+
+    train_dataset = Subset(dataset, train_indices)
+
+    # Setup dataloader
+    train_sampler = (
+        DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True)
+        if args.distributed
+        else None
+    )
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=not args.distributed,
+        sampler=train_sampler,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
+
+    # ---------------------- Load Pre-Trained ResNet Encoder ----------------------
+    # Path to the pre-trained ResNet weights
+    pretrained_ckpt = "mtl_best.mdl"
+
+    # Create the encoder with desired parameters
+    encoder = ResNetEncoder(
+        weight_path=pretrained_ckpt, n_channels=INPUT_DIM, class_num=NUM_CLASSES, my_device=device, freeze_encoder=False
+    ).to(device)
+    feature_dim = encoder.out_features
+
+    # ---------------------- Build Sequence Labeling Model ----------------------
+    # Create the sequence labeling head
+    seq_labeler = SequenceLabelingHead(
+        feature_dim=feature_dim, seq_length=WINDOW_SIZE, num_classes=NUM_CLASSES, hidden_dim=128
+    ).to(device)
+
+    # Create the full model
+    model = ResNetSeqLabeler(encoder, seq_labeler).to(device)
+
+    # Set up optimizer and loss function
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    criterion = nn.CrossEntropyLoss()
+
+    # ---------------------- Fine-Tuning Loop ----------------------
+    model.train()
+    best_loss = float("inf")
+
+    for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
+        training_loss = 0.0
+
+        for batch_x, batch_y in train_loader:
+            # Rearrange dimensions for ResNet encoder
+            # Shape of batch_x: [batch_size, seq_len, channels] -> [batch_size, channels, seq_len]
+            batch_x = batch_x.permute(0, 2, 1).to(device)
+
+            # For sequence labeling, we need all labels, not just one per sequence
+            # Shape of batch_y: [batch_size, seq_len]
+            batch_y = batch_y.long().to(device)
+
+            optimizer.zero_grad()
+
+            # Forward pass
+            outputs = model(batch_x)  # [batch_size, seq_len, num_classes]
+
+            # Reshape for loss calculation
+            # outputs: [batch_size, seq_len, num_classes] -> [batch_size * seq_len, num_classes]
+            # batch_y: [batch_size, seq_len] -> [batch_size * seq_len]
+            outputs = outputs.reshape(-1, NUM_CLASSES)
+            batch_y = batch_y.reshape(-1)
+
+            # Calculate loss
+            loss = criterion(outputs, batch_y)
+
+            # Backward pass and optimization
+            loss.backward()
+            optimizer.step()
+
+            training_loss += loss.item()
+
+        if local_rank == 0:
+            avg_loss = training_loss / len(train_loader)
+            best_loss = save_best_model(model, fold + 1, avg_loss, best_loss, checkpoint_dir, "min")
+            stats = {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "fold": fold + 1,
+                "epoch": epoch + 1,
+                "train_loss": avg_loss,
+            }
+            training_statistics.append(stats)
+
+# ==============================================================================================
+#                                   Save final results
+# ==============================================================================================
+if local_rank == 0:
+    np.save(training_stats_file, training_statistics)
+    logger.info(f"Training statistics saved to {training_stats_file}")
+    logger.info(f"Training completed in {datetime.now() - overall_start}")
+    # Save configuration
+    config_info = {
+        # Dataset Settings
+        "dataset": DATASET,
+        "task": TASK,
+        "hand_separation": HAND_SEPERATION,
+        "num_classes": NUM_CLASSES,
+        "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
+        "downsample_factor": DOWNSAMPLE_FACTOR,
+        "sampling_freq": SAMPLING_FREQ,
+        "data_dir": DATA_DIR,
+        # Dataloader Settings
+        "window_length": WINDOW_LENGTH,
+        "window_size": WINDOW_SIZE,
+        "batch_size": BATCH_SIZE,
+        "num_workers": NUM_WORKERS,
+        # Model Settings
+        "model": MODEL,
+        "input_dim": INPUT_DIM,
+        # Training Settings
+        "learning_rate": LEARNING_RATE,
+        "num_folds": NUM_FOLDS,
+        "num_epochs": NUM_EPOCHS,
+        # Augmentation flags
+        "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
+        "dataset_mirroring": FLAG_DATASET_MIRRORING,
+        "dataset_mirroring_add": FLAG_DATASET_MIRRORING_ADD,
+        # Validation configuration
+        "validate_folds": validate_folds,
+    }
+
+    config_file = os.path.join(result_dir, "training_config.json")
+    with open(config_file, "w") as f:
+        json.dump(config_info, f, indent=4)
+    logger.info(f"Configuration saved to {config_file}")
+
+if args.distributed:
+    dist.destroy_process_group()
