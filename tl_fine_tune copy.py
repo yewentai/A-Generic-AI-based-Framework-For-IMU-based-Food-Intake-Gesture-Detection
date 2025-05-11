@@ -6,7 +6,7 @@ IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with MLP
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-09
+Edited      : 2025-05-11
 Description : This script loads a pre-trained ResNet encoder (via the harnet10
               framework and load_weights function) and attaches a classifier
               head (MLP) for fine-tuning on a downstream classification task.
@@ -31,13 +31,13 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset, DistributedSampler
 from tqdm import tqdm
 
 from components.pre_processing import hand_mirroring
 from components.models.resnet import ResNetEncoder
 from components.models.head import MLPClassifier, ResNetMLP
-from components.datasets import IMUDatasetN21
+from components.datasets import IMUDatasetN21, create_balanced_subject_folds, load_predefined_validate_folds
 
 
 # ==============================================================================================
@@ -59,14 +59,14 @@ DATASET = "DXI"
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
     SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 4
+    DOWNSAMPLE_FACTOR = 2
     sub_version = DATASET.replace("DX", "").upper() or "I"
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
     HAND_SEPERATION = True
 elif DATASET.startswith("FD"):
     SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 4
+    DOWNSAMPLE_FACTOR = 2
     NUM_CLASSES = 3
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
@@ -74,7 +74,7 @@ elif DATASET.startswith("FD"):
     HAND_SEPERATION = True
 elif DATASET.startswith("OREBA"):
     SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 4
+    DOWNSAMPLE_FACTOR = 2
     NUM_CLASSES = 3
     DATA_DIR = "./dataset/Oreba"
     TASK = "multiclass"
@@ -87,7 +87,7 @@ DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
 # ----------------------------------------------------------------------------------------------
 # Dataloader Configuration
 # ----------------------------------------------------------------------------------------------
-WINDOW_LENGTH = 60
+WINDOW_LENGTH = 10  # seconds
 WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
 BATCH_SIZE = 64
 NUM_WORKERS = 16
@@ -95,22 +95,9 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 # Model Configuration
 # ----------------------------------------------------------------------------------------------
-MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
+MODEL = "ResNetMLP"  # Options:
 INPUT_DIM = 6
 LAMBDA_COEF = 0.15
-if MODEL in ["TCN", "MSTCN"]:
-    KERNEL_SIZE = 3
-    NUM_LAYERS = 9
-    NUM_FILTERS = 128
-    DROPOUT = 0.3
-    CAUSAL = False
-    if MODEL == "MSTCN":
-        NUM_STAGES = 2
-elif MODEL == "CNN_LSTM":
-    CONV_FILTERS = (32, 64, 128)
-    LSTM_HIDDEN = 128
-else:
-    raise ValueError(f"Invalid model: {MODEL}")
 
 # ----------------------------------------------------------------------------------------------
 # Training Configuration
@@ -207,14 +194,14 @@ if HAND_SEPERATION:
         Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
 
     if DATASET_HAND == "LEFT":
-        full_dataset = IMUDatasetN21(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+        dataset = IMUDatasetN21(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
     elif DATASET_HAND == "RIGHT":
-        full_dataset = IMUDatasetN21(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+        dataset = IMUDatasetN21(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
     elif DATASET_HAND == "BOTH":
         # Combine left and right data into a unified dataset
         X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
         Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-        full_dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+        dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
     else:
         raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
 else:
@@ -223,15 +210,43 @@ else:
     with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
         Y = np.array(pickle.load(f), dtype=object)
 
-    dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE)
-    batch_size = 64
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+batch_size = 64
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ---------------------- Load Pre-Trained ResNet Encoder ----------------------
+# Path to the pre-trained ResNet weights (adjust as necessary)
+pretrained_ckpt = "mtl_best.mdl"
 
-    # ---------------------- Load Pre-Trained ResNet Encoder ----------------------
-    # Path to the pre-trained ResNet weights (adjust as necessary)
-    pretrained_ckpt = "mtl_best.mdl"
+# ----------------------------------------------------------------------------------------------
+# Training loop over folds
+# ----------------------------------------------------------------------------------------------
+if DATASET == "FDI":
+    validate_folds = load_predefined_validate_folds()
+else:
+    validate_folds = create_balanced_subject_folds(dataset, num_folds=NUM_FOLDS)
+training_statistics = []
+for fold, validate_subjects in enumerate(validate_folds):
+    # Prepare training data
+    train_indices = [i for i, s in enumerate(dataset.subject_indices) if s not in validate_subjects]
+
+    train_dataset = Subset(dataset, train_indices)
+
+    # Setup dataloader
+    train_sampler = (
+        DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank, shuffle=True)
+        if args.distributed
+        else None
+    )
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=not args.distributed,
+        sampler=train_sampler,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
+
     # Create the encoder with desired parameters.
     # For example, using 3 input channels and a pre-training classification head with 2 classes.
     encoder = ResNetEncoder(
@@ -284,21 +299,21 @@ else:
     torch.save(model.state_dict(), ckpt_path)
     print(f"Fine-tuned model saved to {ckpt_path}")
 
-    ft_config = {
-        "pretrained_ckpt": pretrained_ckpt,
-        "model": "ResNetMLP",
-        "feature_dim": feature_dim,
-        "num_classes": num_classes,
-        "sequence_length": WINDOW_SIZE,
-        "batch_size": batch_size,
-        "num_epochs_ft": num_epochs_ft,
-        "learning_rate": 5e-4,
-        "freeze_encoder": False,
-    }
-    config_path = os.path.join(ft_save_dir, "ft_config.json")
-    with open(config_path, "w") as f:
-        json.dump(ft_config, f, indent=4)
-    print(f"Fine-tuning configuration saved to {config_path}")
+ft_config = {
+    "pretrained_ckpt": pretrained_ckpt,
+    "model": "ResNetMLP",
+    "feature_dim": feature_dim,
+    "num_classes": num_classes,
+    "sequence_length": WINDOW_SIZE,
+    "batch_size": batch_size,
+    "num_epochs_ft": num_epochs_ft,
+    "learning_rate": 5e-4,
+    "freeze_encoder": False,
+}
+config_path = os.path.join(ft_save_dir, "ft_config.json")
+with open(config_path, "w") as f:
+    json.dump(ft_config, f, indent=4)
+print(f"Fine-tuning configuration saved to {config_path}")
 
 
 if args.distributed:

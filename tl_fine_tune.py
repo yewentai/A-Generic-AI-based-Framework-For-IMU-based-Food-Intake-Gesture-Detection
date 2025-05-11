@@ -6,7 +6,7 @@ IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with MLP
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-09
+Edited      : 2025-05-11
 Description : This script loads a pre-trained ResNet encoder (via the harnet10
               framework and load_weights function) and attaches a classifier
               head (MLP) for fine-tuning on a downstream classification task.
@@ -95,8 +95,8 @@ def main():
     with open(Y_R_PATH, "rb") as f:
         Y_R = np.array(pickle.load(f), dtype=object)
 
-    X = np.concatenate([X_L, X_R], axis=0)
-    Y = np.concatenate([Y_L, Y_R], axis=0)
+    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
 
     sequence_length = 300  # Adjust as needed
     dataset = IMUDatasetN21(X, Y, sequence_length=sequence_length)
