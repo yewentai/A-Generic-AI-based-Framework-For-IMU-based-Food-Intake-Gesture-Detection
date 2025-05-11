@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-08
+Edited      : 2025-05-11
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -349,8 +349,8 @@ for fold, validate_subjects in enumerate(validate_folds):
     best_loss = float("inf")
 
     # Training loop over epochs
+    model.train()
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
-        model.train()
         if args.distributed:
             train_sampler.set_epoch(epoch)
 

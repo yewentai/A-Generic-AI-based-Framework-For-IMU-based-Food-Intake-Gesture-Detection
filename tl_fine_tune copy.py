@@ -261,7 +261,7 @@ for fold, validate_subjects in enumerate(validate_folds):
 
     # ---------------------- Fine-Tuning Loop ----------------------
     model.train()
-    for epoch in range(NUM_EPOCHS):
+    for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         training_loss = 0.0
         best_loss = float("inf")
         for batch_x, batch_y in tqdm(dataloader, desc=f"Fine-tune Epoch {epoch+1}/{NUM_EPOCHS}"):
