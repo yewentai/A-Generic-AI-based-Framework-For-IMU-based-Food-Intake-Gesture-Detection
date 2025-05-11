@@ -6,7 +6,7 @@ IMU Dataset Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-11
 Description : This script defines multiple dataset classes for loading and preprocessing
               IMU data, including support for segment-based, balanced, sliding window,
               and unlabeled variants. It also includes helper functions for generating
@@ -266,9 +266,9 @@ class IMUDatasetN21(Dataset):
         self,
         X,
         Y,
-        sequence_length=128,
-        stride=None,
-        downsample_factor=4,
+        sequence_length=300,
+        stride=30,
+        downsample_factor=2,
         apply_antialias=True,
         selected_channels=[0, 1, 2],
     ):
@@ -287,7 +287,7 @@ class IMUDatasetN21(Dataset):
         self.data = []
         self.labels = []
         self.sequence_length = sequence_length
-        self.stride = stride if stride is not None else sequence_length
+        self.stride = stride
         self.subject_indices = []
         self.downsample_factor = downsample_factor
         self.selected_channels = selected_channels
@@ -317,30 +317,10 @@ class IMUDatasetN21(Dataset):
                 self.labels.append(label_segment)
                 self.subject_indices.append(subject_idx)
 
-            # For samples that do not fill a complete segment, pad with zeros.
+            # For samples that do not fill a complete segment, discard them.
             remainder = (num_samples - sequence_length) % self.stride
             if remainder > 0 and num_samples >= sequence_length:
-                start = num_samples - remainder
-                imu_segment = imu_data[start:]
-                label_segment = labels[start:]
-                pad_length = sequence_length - imu_segment.shape[0]
-
-                imu_segment_padded = np.pad(
-                    imu_segment,
-                    pad_width=((0, pad_length), (0, 0)),
-                    mode="constant",
-                    constant_values=0,
-                )
-                label_segment_padded = np.pad(
-                    label_segment,
-                    pad_width=(0, pad_length),
-                    mode="constant",
-                    constant_values=0,
-                )
-
-                self.data.append(imu_segment_padded)
-                self.labels.append(label_segment_padded)
-                self.subject_indices.append(subject_idx)
+                num_samples -= remainder
 
     def downsample(self, data, factor, apply_antialias=True):
         if apply_antialias:

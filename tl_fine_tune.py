@@ -81,7 +81,6 @@ elif DATASET.startswith("OREBA"):
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
-DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
 
 # ----------------------------------------------------------------------------------------------
 # Dataloader Configuration
@@ -96,7 +95,6 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 MODEL = "ResNetMLP"  # Options:
 INPUT_DIM = 3  # Only accelerometer data
-LAMBDA_COEF = 0.15
 
 # ----------------------------------------------------------------------------------------------
 # Training Configuration
@@ -112,10 +110,6 @@ NUM_EPOCHS = 100
 # Augmentation Configuration
 # ----------------------------------------------------------------------------------------------
 FLAG_AUGMENT_HAND_MIRRORING = False
-FLAG_AUGMENT_AXIS_PERMUTATION = False
-FLAG_AUGMENT_PLANAR_ROTATION = False
-FLAG_AUGMENT_SPATIAL_ORIENTATION = False
-FLAG_DATASET_AUGMENTATION = False
 FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
 FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
 
@@ -144,11 +138,9 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = f"{DATASET}_{DATASET_HAND}_{MODEL}"
+    version_prefix = f"{DATASET}_{MODEL}"
     if FLAG_AUGMENT_HAND_MIRRORING:
         version_prefix += "_HM"
-    if FLAG_DATASET_AUGMENTATION:
-        version_prefix += "_DA"
     if FLAG_DATASET_MIRRORING:
         version_prefix += "_DM"
     if FLAG_DATASET_MIRRORING_ADD:
@@ -190,24 +182,15 @@ if HAND_SEPERATION:
         Y_L = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_L)], dtype=object)
         Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
 
-    if DATASET_HAND == "LEFT":
-        dataset = IMUDatasetN21(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-    elif DATASET_HAND == "RIGHT":
-        dataset = IMUDatasetN21(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-    elif DATASET_HAND == "BOTH":
-        # Combine left and right data into a unified dataset
-        X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
-        Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-        dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-    else:
-        raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
+    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
 else:
     with open(os.path.join(DATA_DIR, "X.pkl"), "rb") as f:
         X = np.array(pickle.load(f), dtype=object)
     with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
         Y = np.array(pickle.load(f), dtype=object)
 
-    dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 batch_size = 64
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
@@ -256,7 +239,7 @@ for fold, validate_subjects in enumerate(validate_folds):
     model = ResNetMLP(encoder, classifier).to(device)
 
     # Set up optimizer and loss function
-    optimizer = optim.Adam(model.parameters(), lr=5e-4)
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.CrossEntropyLoss()
 
     # ---------------------- Fine-Tuning Loop ----------------------
@@ -264,7 +247,7 @@ for fold, validate_subjects in enumerate(validate_folds):
     for epoch in tqdm(range(NUM_EPOCHS), desc=f"Fold {fold+1}", leave=False):
         training_loss = 0.0
         best_loss = float("inf")
-        for batch_x, batch_y in tqdm(dataloader, desc=f"Fine-tune Epoch {epoch+1}/{NUM_EPOCHS}"):
+        for batch_x, batch_y in dataloader:
             # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
             # Shape of batch_x: [batch_size, channels, seq_len]
             batch_x = batch_x.permute(0, 2, 1).to(device)
@@ -300,7 +283,6 @@ if local_rank == 0:
         "dataset": DATASET,
         "task": TASK,
         "hand_separation": HAND_SEPERATION,
-        "hand": DATASET_HAND,
         "num_classes": NUM_CLASSES,
         "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
         "downsample_factor": DOWNSAMPLE_FACTOR,
@@ -314,17 +296,12 @@ if local_rank == 0:
         # Model Settings
         "model": MODEL,
         "input_dim": INPUT_DIM,
-        "lambda_coef": LAMBDA_COEF,
         # Training Settings
         "learning_rate": LEARNING_RATE,
         "num_folds": NUM_FOLDS,
         "num_epochs": NUM_EPOCHS,
         # Augmentation flags
         "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
-        "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
-        "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
-        "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
-        "dataset_augmentation": FLAG_DATASET_AUGMENTATION,
         "dataset_mirroring": FLAG_DATASET_MIRRORING,
         "dataset_mirroring_add": FLAG_DATASET_MIRRORING_ADD,
         # Validation configuration
