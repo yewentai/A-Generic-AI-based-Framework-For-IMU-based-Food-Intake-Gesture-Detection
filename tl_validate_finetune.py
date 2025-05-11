@@ -6,7 +6,7 @@ IMU Fine-Tuned Classifier Validation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-11
 Description : This script validates a fine-tuned IMU classifier by recreating
               the exact model architecture used during fine-tuning, loading
               the saved state dictionary, and evaluating the model on a test
@@ -15,181 +15,304 @@ Description : This script validates a fine-tuned IMU classifier by recreating
 ===============================================================================
 """
 
+
+# Standard library imports
 import os
 import json
 import pickle
+
+# Third-party library imports
 import numpy as np
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
+import torch.nn.functional as F
+import logging
 from tqdm import tqdm
-from sklearn.metrics import classification_report, confusion_matrix
+from torch.utils.data import DataLoader, Subset
 
+# Local imports
+from components.models.resnet import ResNetEncoder
+from components.models.head import MLPClassifier, ResNetMLP
+from components.post_processing import post_process_predictions
+from components.evaluation import segment_evaluation
 from components.datasets import IMUDatasetN21
-from components.models.resnet import Resnet
+from components.pre_processing import hand_mirroring, planar_rotation
 
-
-# ------------------------------------------------------------------------------
-# Define the ResNetEncoder class identical to the one used in fine-tuning
-# ------------------------------------------------------------------------------
-class ResNetEncoder(nn.Module):
-    def __init__(self, n_channels=3, class_num=2, epoch_len=10):
-        """
-        Creates the same ResNet encoder structure used during fine-tuning.
-        This must match EXACTLY what was used in pre-training.
-        """
-        super(ResNetEncoder, self).__init__()
-        # Create the ResNet model - IMPORTANT: use class_num=2 to match pre-training
-        # regardless of the downstream task's number of classes
-        self.resnet = Resnet(
-            output_size=2,  # This must be 2 to match pre-training model
-            n_channels=n_channels,
-            is_eva=True,
-            resnet_version=1,
-            epoch_len=epoch_len,
-        )
-
-        # Save the feature extractor
-        self.feature_extractor = self.resnet.feature_extractor
-        self.out_features = 1024  # For epoch_len=10
-
-    def forward(self, x):
-        feats = self.feature_extractor(x)
-        feats = feats.view(x.shape[0], -1)  # flatten
-        return feats
-
-
-# ------------------------------------------------------------------------------
-# Define the MLP classifier head - same as in fine-tuning
-# ------------------------------------------------------------------------------
-class MLPClassifier(nn.Module):
-    def __init__(self, feature_dim, num_classes):
-        super(MLPClassifier, self).__init__()
-        self.fc = nn.Sequential(nn.Linear(feature_dim, 64), nn.ReLU(), nn.Linear(64, num_classes))
-
-    def forward(self, x):
-        return self.fc(x)
-
-
-# ------------------------------------------------------------------------------
-# Combine the ResNet encoder and the MLP classifier - same as in fine-tuning
-# ------------------------------------------------------------------------------
-class ResNetMLP(nn.Module):
-    def __init__(self, encoder, classifier):
-        super(ResNetMLP, self).__init__()
-        self.encoder = encoder
-        self.classifier = classifier
-
-    def forward(self, x):
-        features = self.encoder(x)
-        logits = self.classifier(features)
-        return logits
-
-
-def main():
-    # ---------------------- Configuration ----------------------
-    data_dir = "./dataset/FD/FD-III"
-    test_batch_size = 64
-
-    # Load test data
-    with open(os.path.join(data_dir, "X_L.pkl"), "rb") as f:
-        X_L = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(data_dir, "Y_L.pkl"), "rb") as f:
-        Y_L = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(data_dir, "X_R.pkl"), "rb") as f:
-        X_R = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(data_dir, "Y_R.pkl"), "rb") as f:
-        Y_R = np.array(pickle.load(f), dtype=object)
-
-    X = np.concatenate([X_L, X_R], axis=0)
-    Y = np.concatenate([Y_L, Y_R], axis=0)
-
-    # ---------------------- Load Fine-Tuned Model Config ----------------------
-    ft_dir = "result/202504102302"
-    ckpt_path = os.path.join(ft_dir, "fine_tuned_resnet_mlp.pth")
-    ft_config_path = os.path.join(ft_dir, "ft_config.json")
-
-    with open(ft_config_path, "r") as f:
-        config = json.load(f)
-
-    # Get sequence length from config or use default
-    sequence_length = config.get("sequence_length", 300)
-
-    # Create dataset with the correct sequence length
-    dataset = IMUDatasetN21(X, Y, sequence_length=sequence_length, stride=1, selected_channels=[0, 1, 2])
-    dataloader = DataLoader(dataset, batch_size=test_batch_size, shuffle=False, num_workers=4)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # ---------------------- Recreate the EXACT model architecture used during fine-tuning ----------------------
-    # Create the encoder with the same params as during fine-tuning
-    # IMPORTANT: The ResNet must be initialized with 2 classes to match pre-training
-    # even though the downstream task has config["num_classes"] classes
-    encoder = ResNetEncoder(
-        n_channels=3,
-        class_num=2,  # Must be 2 to match the pre-trained model
-        epoch_len=10,  # Must match the epoch_len used in fine-tuning
-    ).to(device)
-
-    # Create classifier
-    feature_dim = encoder.out_features
-    classifier = MLPClassifier(feature_dim=feature_dim, num_classes=config["num_classes"]).to(device)
-
-    # Create the combined model with the EXACT same structure as during fine-tuning
-    model = ResNetMLP(encoder, classifier).to(device)
-
-    # Load the fine-tuned weights
-    checkpoint = torch.load(ckpt_path, map_location=device)
-
-    # Handle missing/incompatible keys
-    model_dict = model.state_dict()
-
-    # Filter out classifier weights which may have different dimensions
-    pretrained_dict = {
-        k: v
-        for k, v in checkpoint.items()
-        if (k in model_dict and (not k.startswith("encoder.resnet.classifier") or model_dict[k].shape == v.shape))
-    }
-
-    # Update the model with compatible weights
-    model_dict.update(pretrained_dict)
-    model.load_state_dict(model_dict, strict=False)
-    model.eval()
-
-    print(f"Model loaded successfully from {ckpt_path}")
-    print(f"Evaluating on {len(dataset)} samples with sequence length {sequence_length}...")
-
-    # ---------------------- Evaluation ----------------------
-    all_preds, all_labels = [], []
-    with torch.no_grad():
-        for batch_x, batch_y in tqdm(dataloader, desc="Validating"):
-            batch_x = batch_x.permute(0, 2, 1).to(device)  # [B, C, T]
-            labels = batch_y[:, 0].long().to(device)
-            logits = model(batch_x)
-            preds = logits.argmax(dim=1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-
-    # Calculate metrics
-    all_preds = np.array(all_preds)
-    all_labels = np.array(all_labels)
-    accuracy = np.mean(all_preds == all_labels)
-    print(f"Test Accuracy: {accuracy:.4f}")
-
-    print("Classification Report:")
-    print(classification_report(all_labels, all_preds, digits=4))
-
-    print("Confusion Matrix:")
-    print(confusion_matrix(all_labels, all_preds))
-
-    # Save results
-    results = {"accuracy": float(accuracy), "predictions": all_preds.tolist(), "true_labels": all_labels.tolist()}
-
-    results_path = os.path.join(ft_dir, "validation_results.json")
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=4)
-    print(f"Validation results saved to {results_path}")
+# --- Configurations ---
+NUM_WORKERS = 4
+SEGMENT_VALIDATION = False
+if SEGMENT_VALIDATION:
+    THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
+DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    main()
+    result_root = "result"
+    versions = [
+        "DXI_BOTH_ResNetMLP",
+    ]  # Uncomment to manually specify versions
+    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    versions.sort()
+
+    for version in versions:
+        # Set up logging
+        logger = logging.getLogger(f"validation_{version}")
+        logger.setLevel(logging.INFO)
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+        logger.addHandler(stream_handler)
+        logger.info(f"\n=== Validating Version: {version} ===")
+
+        # Load configuration
+        result_dir = os.path.join(result_root, version)
+        if not os.path.exists(result_dir):
+            logger.warning(f"Result directory does not exist: {result_dir}.")
+            continue
+        config_file = os.path.join(result_dir, "training_config.json")
+        if not os.path.exists(config_file):
+            logger.warning(f"Configuration file not found for version {version}, skipping...")
+            continue
+        with open(config_file, "r") as f:
+            config_info = json.load(f)
+        validate_dataset = config_info["dataset"]  # Options: "ORIGINAL", "FDI", "FDII", "FDIII", "DXI", "DXII", "OREBA"
+        num_classes = config_info["num_classes"]
+        model_name = config_info["model"]
+        input_dim = config_info["input_dim"]
+        downsample_factor = config_info["downsample_factor"]
+        sampling_freq = config_info["sampling_freq"]
+        window_size = config_info["window_size"]
+        batch_size = config_info["batch_size"]
+        flag_augment_hand_mirroringing = config_info.get("augmentation_hand_mirroring", False)
+        flag_dataset_mirroring = config_info.get("dataset_mirroring", False)
+        flag_dataset_mirroring_add = config_info.get("dataset_mirroring_add", False)
+        validate_folds = config_info.get("validate_folds")
+        rotation_enabled = config_info.get("augmentation_planar_rotation", False)
+        hand_separation = config_info.get("hand_separation", False)
+        if flag_augment_hand_mirroringing or flag_dataset_mirroring or flag_dataset_mirroring_add:
+            mirroring_enabled = True
+        else:
+            mirroring_enabled = False
+
+        # Set up device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"\nUsing device: {device}")
+
+        # Load pretrained model
+        pretrained_ckpt = "mtl_best.mdl"
+
+        # Set up dataset directory
+        if validate_dataset.startswith("DX"):
+            sub_version = validate_dataset.replace("DX", "").upper() or "I"
+            DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+        elif validate_dataset.startswith("FD"):
+            sub_version = validate_dataset.replace("FD", "").upper() or "I"
+            DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+        elif validate_dataset.startswith("OREBA"):
+            DATA_DIR = f"./dataset/Oreba"
+        else:
+            logger.error(f"Invalid dataset: {validate_dataset}")
+            continue
+
+        # Load dataset
+        validation_modes = []
+        if hand_separation:
+            X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
+            Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
+            X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
+            Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
+            X = np.array([np.concatenate([X_L[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object)
+            Y = np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object)
+            validation_modes.extend(
+                [
+                    {"name": "original", "X": X, "Y": Y},
+                    {"name": "left", "X": X_L, "Y": Y_L},
+                    {"name": "right", "X": X_R, "Y": Y_R},
+                ]
+            )
+
+            if mirroring_enabled:
+                X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+                validation_modes.append(
+                    {
+                        "name": "mirrored_left_original_right",
+                        "X": np.array(
+                            [np.concatenate([X_L_mirrored[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object
+                        ),
+                        "Y": np.array(
+                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
+                        ),
+                    }
+                )
+
+            if rotation_enabled:
+                # Apply rotation to 50% of samples
+                random_indices = np.random.choice(len(X_L), size=int(len(X_L) * 0.5), replace=False)
+                X_L_rotated = np.copy(X_L)
+                X_R_rotated = np.copy(X_R)
+                for i in random_indices:
+                    X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
+                    X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
+
+                X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
+                validation_modes.append(
+                    {
+                        "name": "rotated_mirrored_left_original_right",
+                        "X": np.array(
+                            [
+                                np.concatenate([X_L_rotated_mirrored[i], X_R_rotated[i]], axis=0)
+                                for i in range(len(X_L))
+                            ],
+                            dtype=object,
+                        ),
+                        "Y": np.array(
+                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
+                        ),
+                    }
+                )
+        else:
+            X = np.array(pickle.load(open(os.path.join(DATA_DIR, "X.pkl"), "rb")), dtype=object)
+            Y = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y.pkl"), "rb")), dtype=object)
+            validation_modes.append({"name": "original", "X": X, "Y": Y})
+
+        all_stats = {}
+        for mode in validation_modes:
+            logger.info(f"\n--- Validating {mode['name']} ---")
+
+            dataset = IMUDatasetN21(
+                mode["X"], mode["Y"], sequence_length=window_size, downsample_factor=downsample_factor
+            )
+            mode_stats = []
+
+            for fold, validate_subjects in enumerate(tqdm(validate_folds, desc=f"K-Fold ({mode['name']})", leave=True)):
+                checkpoint_path = os.path.join(result_dir, "checkpoint", f"best_model_fold{fold+1}.pth")
+                if not os.path.exists(checkpoint_path):
+                    logger.warning(f"Checkpoint not found for fold {fold+1}, skipping...")
+                    continue
+
+                if model_name == "ResNetMLP":
+                    encoder = ResNetEncoder(
+                        weight_path=pretrained_ckpt,
+                        n_channels=input_dim,
+                        class_num=num_classes,
+                        my_device=device,
+                        freeze_encoder=True,
+                    ).to(device)
+                    feature_dim = encoder.out_features
+                    classifier = MLPClassifier(feature_dim=feature_dim, num_classes=num_classes)
+                    model = ResNetMLP(encoder, classifier).to(device)
+                else:
+                    logger.error(f"Invalid model: {model_name}")
+                    continue
+
+                state_dict = torch.load(checkpoint_path, map_location=device, weights_only=True)
+                model.load_state_dict(state_dict)
+                model.eval()
+
+                validate_indices = [
+                    i for i, subject in enumerate(dataset.subject_indices) if subject in validate_subjects
+                ]
+                validate_loader = DataLoader(
+                    Subset(dataset, validate_indices),
+                    batch_size=batch_size,
+                    shuffle=False,
+                    num_workers=NUM_WORKERS,
+                    pin_memory=True,
+                )
+
+                all_predictions, all_labels = [], []
+
+                with torch.no_grad():
+                    for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
+                        # [B, L, C_in] → [B, C_in, L]
+                        batch_x = batch_x.permute(0, 2, 1).to(device)
+
+                        # forward pass
+                        outputs_list = model(batch_x)
+                        logits = outputs_list[-1] if isinstance(outputs_list, list) else outputs_list
+
+                        # softmax + argmax → per-window predictions
+                        probs = F.softmax(logits, dim=1)
+                        preds_seq = torch.argmax(
+                            probs, dim=1
+                        )  # → [B] if classification head, or [B, L] if segmentation head
+
+                        # determine true label per window by majority vote
+                        y = batch_y.long()  # [B, L]
+                        segment_labels, _ = torch.mode(y, dim=1)  # → [B]
+
+                        # flatten predictions if needed
+                        if preds_seq.ndim == 2:
+                            # segmentation head: [B, L] → flatten to [B * L]
+                            preds_flat = preds_seq.reshape(-1)
+                            true_flat = y.reshape(-1)
+                        else:
+                            # classification head: already [B]
+                            preds_flat = preds_seq
+                            true_flat = segment_labels
+
+                        all_predictions.extend(preds_flat.cpu().numpy())
+                        all_labels.extend(true_flat.cpu().numpy())
+
+                preds_array = np.array(all_predictions)
+                labels_array = np.array(all_labels)
+
+                unique_labels, counts = np.unique(labels_array, return_counts=True)
+                label_distribution = {int(l): int(c) for l, c in zip(unique_labels, counts)}
+                # after computing label_distribution:
+                positive_counts = {l: c for l, c in label_distribution.items() if l > 0}
+                total_positive = sum(positive_counts.values())
+
+                # CASE A: no positives at all (should rarely happen)
+                if total_positive == 0:
+                    # give each class equal weight
+                    label_weight = {l: 1.0 / (num_classes - 1) for l in range(1, num_classes)}
+                else:
+                    # normal: weight = count / total_positive, missing get 0.0
+                    label_weight = {l: positive_counts.get(l, 0) / total_positive for l in range(1, num_classes)}
+
+                # compute per-class confusion & f1
+                metrics_sample = {}
+                for label in range(1, num_classes):
+                    tp = np.sum((preds_array == label) & (labels_array == label))
+                    fp = np.sum((preds_array == label) & (labels_array != label))
+                    fn = np.sum((preds_array != label) & (labels_array == label))
+                    tn = np.sum((preds_array != label) & (labels_array != label))
+                    denom = 2 * tp + fp + fn
+                    f1 = (2 * tp / denom) if denom > 0 else 0.0
+                    metrics_sample[str(label)] = {
+                        "tp": int(tp),
+                        "fp": int(fp),
+                        "fn": int(fn),
+                        "tn": int(tn),
+                        "f1": float(f1),
+                    }
+
+                # now weighted F1 without KeyError
+                weighted_f1_sample = sum(metrics_sample[str(l)]["f1"] * label_weight[l] for l in range(1, num_classes))
+                metrics_sample["weighted_f1"] = float(weighted_f1_sample)
+
+                fold_stat = {
+                    "fold": fold + 1,
+                    "metrics_sample": metrics_sample,
+                    "label_distribution": label_distribution,
+                }
+                mode_stats.append(fold_stat)
+
+            all_stats[mode["name"]] = mode_stats
+
+        # Save all statistics
+        stats_file_npy = os.path.join(result_dir, f"validation_stats_{validate_dataset.lower()}.npy")
+        stats_file_json = os.path.join(result_dir, f"validation_stats_{validate_dataset.lower()}.json")
+        np.save(stats_file_npy, all_stats)
+        with open(stats_file_json, "w") as f_json:
+            json.dump(all_stats, f_json, indent=4)
+        logger.info(f"\nAll validation statistics saved to {stats_file_npy}, {stats_file_json}")
+
+        # Save configuration
+        config_info = {
+            "flag_segment_validation": SEGMENT_VALIDATION,
+            "threshold_list": THRESHOLD_LIST if SEGMENT_VALIDATION else None,
+        }
+        config_save_path = os.path.join(result_dir, "validation_config.json")
+        with open(config_save_path, "w") as f:
+            json.dump(config_info, f, indent=4)
+        logger.info(f"\nValidation configuration saved to {config_save_path}")
