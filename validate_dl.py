@@ -81,7 +81,7 @@ if __name__ == "__main__":
         input_dim = config_info["input_dim"]
         downsample_factor = config_info["downsample_factor"]
         sampling_freq = config_info["sampling_freq"]
-        window_size = config_info["window_size"]
+        window_samples = config_info["window_samples"]
         batch_size = config_info["batch_size"]
         flag_augment_hand_mirroringing = config_info.get("augmentation_hand_mirroring", False)
         flag_dataset_mirroring = config_info.get("dataset_mirroring", False)
@@ -174,7 +174,9 @@ if __name__ == "__main__":
         for mode in validation_modes:
             logger.info(f"\n--- Validating {mode['name']} ---")
 
-            dataset = IMUDataset(mode["X"], mode["Y"], sequence_length=window_size, downsample_factor=downsample_factor)
+            dataset = IMUDataset(
+                mode["X"], mode["Y"], sequence_length=window_samples, downsample_factor=downsample_factor
+            )
             mode_stats = []
 
             for fold, validate_subjects in enumerate(tqdm(validate_folds, desc=f"K-Fold ({mode['name']})", leave=True)):

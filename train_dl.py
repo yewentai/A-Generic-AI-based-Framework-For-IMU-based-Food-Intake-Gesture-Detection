@@ -100,8 +100,8 @@ SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 # ----------------------------------------------------------------------------------------------
 # Dataloader Configuration
 # ----------------------------------------------------------------------------------------------
-WINDOW_LENGTH = 60
-WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+WINDOW_SECONDS = 60
+WINDOW_SAMPLES = SAMPLING_FREQ * WINDOW_SECONDS
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 
@@ -211,13 +211,13 @@ if HAND_SEPERATION:
     # Combine left and right data into a unified dataset
     X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
     Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
 else:
     with open(os.path.join(DATA_DIR, "X.pkl"), "rb") as f:
         X = np.array(pickle.load(f), dtype=object)
     with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
         Y = np.array(pickle.load(f), dtype=object)
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
 
 # ----------------------------------------------------------------------------------------------
 # Augment Dataset
@@ -242,7 +242,7 @@ if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
     fdiii_dataset = IMUDataset(
         X_fdiii,
         Y_fdiii,
-        sequence_length=WINDOW_SIZE,
+        sequence_length=WINDOW_SAMPLES,
         downsample_factor=DOWNSAMPLE_FACTOR,
     )
 
@@ -254,7 +254,7 @@ if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
     oreba_dataset = IMUDataset(
         X_oreba,
         Y_oreba,
-        sequence_length=WINDOW_SIZE,
+        sequence_length=WINDOW_SAMPLES,
         downsample_factor=DOWNSAMPLE_FACTOR,
     )
 
@@ -413,8 +413,8 @@ if local_rank == 0:
         "sampling_freq": SAMPLING_FREQ,
         "data_dir": DATA_DIR,
         # Dataloader Settings
-        "window_length": WINDOW_LENGTH,
-        "window_size": WINDOW_SIZE,
+        "window_seconds": WINDOW_SECONDS,
+        "window_samples": WINDOW_SAMPLES,
         "batch_size": BATCH_SIZE,
         "num_workers": NUM_WORKERS,
         # Model Settings

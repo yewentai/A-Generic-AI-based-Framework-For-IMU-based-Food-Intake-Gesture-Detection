@@ -140,8 +140,8 @@ else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
 # Dataloader Settings
-WINDOW_LENGTH = 60
-WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+WINDOW_SECONDS = 60
+WINDOW_SAMPLES = SAMPLING_FREQ * WINDOW_SECONDS
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 INPUT_DIM = 6
@@ -233,7 +233,7 @@ if local_rank == 0:
     config_dict = {
         "DATASET": DATASET,
         "SAMPLING_FREQ": SAMPLING_FREQ,
-        "WINDOW_LENGTH": WINDOW_LENGTH,
+        "WINDOW_SECONDS": WINDOW_SECONDS,
         "BATCH_SIZE": BATCH_SIZE,
         "NUM_EPOCHS": NUM_EPOCHS,
         "LEARNING_RATE": LEARNING_RATE,
@@ -394,7 +394,7 @@ if local_rank == 0:
         "dataset": DATASET,
         "num_classes": NUM_CLASSES,
         "sampling_freq": SAMPLING_FREQ,
-        "window_size": WINDOW_SIZE,
+        "window_samples": WINDOW_SAMPLES,
         "input_dim": INPUT_DIM,
         "learning_rate": LEARNING_RATE,
         "batch_size": BATCH_SIZE,

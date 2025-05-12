@@ -33,7 +33,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, DistributedSampler, Subset
 from tqdm import tqdm
 
-from components.datasets import IMUDatasetN21, create_balanced_subject_folds, load_predefined_validate_folds
+from components.datasets import IMUDataset, create_balanced_subject_folds, load_predefined_validate_folds
 from components.models.resnet import ResNetEncoder
 from components.models.head import BiLSTMHead, ResNetBiLSTM
 from components.pre_processing import hand_mirroring
@@ -52,9 +52,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ----------------------------------------------------------------------------------------------
 # Dataset Configuration
-# ----------------------------------------------------------------------------------------------
 DATASET = "DXI"
 if DATASET.startswith("DX"):
     SAMPLING_FREQ_ORIGINAL = 64
@@ -83,23 +81,17 @@ else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 
-# ----------------------------------------------------------------------------------------------
 # Dataloader Configuration
-# ----------------------------------------------------------------------------------------------
-WINDOW_LENGTH = 10  # seconds
-WINDOW_SIZE = SAMPLING_FREQ * WINDOW_LENGTH
+WINDOW_SECONDS = 10  # seconds
+WINDOW_SAMPLES = SAMPLING_FREQ * WINDOW_SECONDS
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 
-# ----------------------------------------------------------------------------------------------
 # Model Configuration
-# ----------------------------------------------------------------------------------------------
 MODEL = "ResNetBiLSTM"  # Changed from ResNetMLP to ResNetBiLSTM
 INPUT_DIM = 3  # Only accelerometer data
 
-# ----------------------------------------------------------------------------------------------
 # Training Configuration
-# ----------------------------------------------------------------------------------------------
 LEARNING_RATE = 5e-4
 if DATASET == "FDI":
     NUM_FOLDS = 7
@@ -107,9 +99,7 @@ else:
     NUM_FOLDS = 5
 NUM_EPOCHS = 100
 
-# ----------------------------------------------------------------------------------------------
 # Augmentation Configuration
-# ----------------------------------------------------------------------------------------------
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
 FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
@@ -158,10 +148,7 @@ if local_rank == 0:
     os.makedirs(checkpoint_dir, exist_ok=True)
     training_stats_file = os.path.join(result_dir, "training_stats.npy")
 
-# ----------------------------------------------------------------------------------------------
 # Load Dataset
-# ----------------------------------------------------------------------------------------------
-
 if HAND_SEPERATION:
     with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
         X_L = np.array(pickle.load(f), dtype=object)
@@ -191,13 +178,11 @@ else:
     with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
         Y = np.array(pickle.load(f), dtype=object)
 
-dataset = IMUDatasetN21(
-    X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=[0, 1, 2]
+dataset = IMUDataset(
+    X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=[0, 1, 2]
 )
 
-# ----------------------------------------------------------------------------------------------
 # Training loop over folds
-# ----------------------------------------------------------------------------------------------
 if DATASET == "FDI":
     validate_folds = load_predefined_validate_folds()
 else:
@@ -237,7 +222,7 @@ for fold, validate_subjects in enumerate(validate_folds):
     # ---------------------- Build Sequence Labeling Model ----------------------
     # Create the sequence labeling head
     seq_labeler = BiLSTMHead(
-        feature_dim=feature_dim, seq_length=WINDOW_SIZE, num_classes=NUM_CLASSES, hidden_dim=128
+        feature_dim=feature_dim, seq_length=WINDOW_SAMPLES, num_classes=NUM_CLASSES, hidden_dim=128
     ).to(device)
 
     # Create the full model
@@ -296,16 +281,14 @@ if local_rank == 0:
     config_info = {
         # Dataset Settings
         "dataset": DATASET,
-        "task": TASK,
         "hand_separation": HAND_SEPERATION,
         "num_classes": NUM_CLASSES,
         "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
         "downsample_factor": DOWNSAMPLE_FACTOR,
         "sampling_freq": SAMPLING_FREQ,
-        "data_dir": DATA_DIR,
         # Dataloader Settings
-        "window_length": WINDOW_LENGTH,
-        "window_size": WINDOW_SIZE,
+        "window_seconds": WINDOW_SECONDS,
+        "window_samples": WINDOW_SAMPLES,
         "batch_size": BATCH_SIZE,
         "num_workers": NUM_WORKERS,
         # Model Settings
