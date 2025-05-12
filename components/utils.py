@@ -24,7 +24,7 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
     Args:
         outputs (Tensor): logits of shape [B, C, L].
         targets (Tensor): labels of shape [B, L], long, with ignore_index=-100.
-        smoothing (str): one of ['MSE','L1','HUBER','KL','JS','TV','SEC_DIFF','EMD','SPECTRAL'].
+        smoothing (str): one of ['MSE','L1','HUBER','KL','JS','TV','SEC_DIFF','EMD'].
         max_diff (float): clamp threshold for log-prob differences (only for diff-based).
     Returns:
         ce_loss (Tensor): the CrossEntropyLoss.
@@ -90,12 +90,6 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
         cdf_next = torch.cumsum(p_next, dim=1)
         cdf_prev = torch.cumsum(p_prev, dim=1)
         smooth_loss = (cdf_next - cdf_prev).abs().mean()
-
-    elif smoothing == "SPECTRAL":
-        # Spectral high‐freq penalty: mean power of non‐DC freqs
-        fft = torch.fft.rfft(logp, dim=2)
-        mag2 = fft[..., 1:].abs().pow(2)
-        smooth_loss = mag2.mean()
 
     else:
         raise ValueError(f"Unknown smoothing type '{smoothing}'")

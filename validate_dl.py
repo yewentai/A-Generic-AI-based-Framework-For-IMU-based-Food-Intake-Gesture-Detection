@@ -39,20 +39,16 @@ from components.pre_processing import hand_mirroring, planar_rotation, axis_perm
 
 # --- Configurations ---
 NUM_WORKERS = 4
-SEGMENT_VALIDATION = False
+SEGMENT_VALIDATION = True
 POST_PROCESSING_SMOOTHING = False
 THRESHOLD_LIST = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results"
-    versions = [
-        "DXI_BOTH_MSTCN_HUBER",
-        "DXI_BOTH_MSTCN_L1",
-        "DXI_BOTH_MSTCN_MSE",
-    ]  # Uncomment to manually specify versions
-    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    result_root = "results/smooth"
+    # versions = ["DXI_BOTH_MSTCN_HUBER"]  # Uncomment to manually specify versions
+    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:

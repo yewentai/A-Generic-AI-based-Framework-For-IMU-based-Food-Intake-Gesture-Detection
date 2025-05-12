@@ -2,7 +2,7 @@
 import subprocess
 
 # Define all smoothing types to try
-smoothing_types = ["KL", "JS", "TV", "SEC_DIFF", "EMD", "SPECTRAL"]
+smoothing_types = ["KL", "JS", "TV", "SEC_DIFF", "EMD"]
 
 # Path to your training script
 script_path = "train_dl.py"

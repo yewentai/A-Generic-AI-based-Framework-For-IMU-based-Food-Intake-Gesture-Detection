@@ -80,24 +80,16 @@ def remove_analysis_folders(root):
 
 def rename_files(root):
     """
-    Traverse the directory tree under `root` and rename specific files based on patterns.
+    Traverse the directory tree under `root` and rename files by removing postfixes like '_dxi'
+    or '_fdi' in 'validation_stats_dxi.json', 'validation_stats_dxi.npy',
+    'validation_stats_fdi.json', and 'validation_stats_fdi.npy'.
     """
     for dirpath, dirnames, filenames in os.walk(root):
         for filename in filenames:
-            # Rename validate_rotation.json and .npy
-            if filename == "validation_rotation.npy":
+            if filename.startswith("validation_stats_") and ("_dxi" in filename or "_fdi" in filename):
                 old_file_path = os.path.join(dirpath, filename)
-                new_file_path = os.path.join(dirpath, "validation_stats_rotation.npy")
-                try:
-                    os.rename(old_file_path, new_file_path)
-                    print(f"Renamed file: {old_file_path} to {new_file_path}")
-                except Exception as e:
-                    print(f"Failed to rename file {old_file_path}: {e}")
-
-            # Rename validate_mirror.json and .npy
-            elif filename == "validation_mirroring.npy":
-                old_file_path = os.path.join(dirpath, filename)
-                new_file_path = os.path.join(dirpath, "validation_stats_mirroring.npy")
+                new_file_name = filename.replace("_dxi", "").replace("_fdi", "")
+                new_file_path = os.path.join(dirpath, new_file_name)
                 try:
                     os.rename(old_file_path, new_file_path)
                     print(f"Renamed file: {old_file_path} to {new_file_path}")
@@ -125,15 +117,15 @@ def remove_both_substring(root):
 
 def main():
     # List the top-level directories to scan
-    parent_dirs = ["result"]
+    parent_dirs = ["results"]
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
             # remove_analysis_folders(parent)
             # remove_empty_subdirs(parent)
             # remove_specified_files(parent)
-            # rename_files(parent)
-            remove_both_substring(parent)
+            rename_files(parent)
+            # remove_both_substring(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
 
