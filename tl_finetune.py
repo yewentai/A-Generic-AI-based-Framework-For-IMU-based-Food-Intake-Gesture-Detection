@@ -6,7 +6,7 @@ IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with Sequence Labeling
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-11
+Edited      : 2025-05-12
 Description : This script loads a pre-trained ResNet encoder (via the harnet10
               framework and load_weights function) and attaches a sequence
               labeling head for fine-tuning on a downstream sequence labeling
@@ -38,6 +38,7 @@ from components.models.resnet import ResNetEncoder
 from components.models.head import SequenceLabelingHead, ResNetSeqLabeler
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
+from components.utils import loss_fn
 
 # ==============================================================================================
 #                             Configuration Parameters
@@ -247,7 +248,7 @@ for fold, validate_subjects in enumerate(validate_folds):
 
     # Set up optimizer and loss function
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.CrossEntropyLoss()
 
     # ---------------------- Fine-Tuning Loop ----------------------
     model.train()
@@ -257,29 +258,19 @@ for fold, validate_subjects in enumerate(validate_folds):
         training_loss = 0.0
 
         for batch_x, batch_y in train_loader:
-            # Rearrange dimensions for ResNet encoder
-            # Shape of batch_x: [batch_size, seq_len, channels] -> [batch_size, channels, seq_len]
-            batch_x = batch_x.permute(0, 2, 1).to(device)
-
-            # For sequence labeling, we need all labels, not just one per sequence
-            # Shape of batch_y: [batch_size, seq_len]
-            batch_y = batch_y.long().to(device)
+            batch_x = batch_x.permute(0, 2, 1).to(device)  # → [B, C, L]
+            batch_y = batch_y.long().to(device)  # → [B, L]
 
             optimizer.zero_grad()
+            outputs = model(batch_x)  # → [B, L, num_classes]
 
-            # Forward pass
-            outputs = model(batch_x)  # [batch_size, seq_len, num_classes]
+            # prepare for loss_fn
+            logits_t = outputs.permute(0, 2, 1)  # → [B, num_classes, L]
 
-            # Reshape for loss calculation
-            # outputs: [batch_size, seq_len, num_classes] -> [batch_size * seq_len, num_classes]
-            # batch_y: [batch_size, seq_len] -> [batch_size * seq_len]
-            outputs = outputs.reshape(-1, NUM_CLASSES)
-            batch_y = batch_y.reshape(-1)
+            # get CE + smoothing loss
+            ce_loss, smooth_loss = loss_fn(logits_t, batch_y, smoothing="MSE", max_diff=16.0)
 
-            # Calculate loss
-            loss = criterion(outputs, batch_y)
-
-            # Backward pass and optimization
+            loss = ce_loss + 0.15 * smooth_loss
             loss.backward()
             optimizer.step()
 

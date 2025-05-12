@@ -6,7 +6,7 @@ IMU Fine-Tuned Classifier Validation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-11
+Edited      : 2025-05-12
 Description : This script validates a fine-tuned IMU classifier by recreating
               the exact model architecture used during fine-tuning, loading
               the saved state dictionary, and evaluating the model on a test
@@ -47,7 +47,7 @@ DEBUG_PLOT = False
 if __name__ == "__main__":
     result_root = "result"
     versions = [
-        "DXI_ResNetSeqLabeler",
+        "DXI_ResNetSeqLabeler_3",
     ]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
