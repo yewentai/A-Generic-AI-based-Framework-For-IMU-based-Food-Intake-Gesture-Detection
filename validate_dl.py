@@ -123,8 +123,6 @@ if __name__ == "__main__":
             validation_modes.extend(
                 [
                     {"name": "original", "X": X, "Y": Y},
-                    {"name": "left", "X": X_L, "Y": Y_L},
-                    {"name": "right", "X": X_R, "Y": Y_R},
                 ]
             )
 

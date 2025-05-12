@@ -8,7 +8,7 @@
 #SBATCH --gpus-per-node=2                     # Number of GPUs to request per node (Maximum 4 GPUs)
 #SBATCH --partition=gpu_h100                  # Partition to use (H100 GPUs)
 #SBATCH --time=24:00:00                        # Maximum wall time (Maximum 3 days)
-#SBATCH --output=logs/ddp_train_%j.out        # Standard output and error log file (%j is the job ID)
+#SBATCH --output=logs_hpc/ddp_train_%j.out        # Standard output and error log file (%j is the job ID)
 
 # Load Miniconda
 export PATH=$VSC_DATA/miniconda3/bin:$PATH

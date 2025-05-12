@@ -96,7 +96,6 @@ elif DATASET.startswith("OREBA"):
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
-DATASET_HAND = "BOTH"  # "LEFT" or "RIGHT" or "BOTH"
 
 # ----------------------------------------------------------------------------------------------
 # Dataloader Configuration
@@ -145,7 +144,6 @@ FLAG_AUGMENT_PLANAR_ROTATION = False
 FLAG_AUGMENT_SPATIAL_ORIENTATION = False
 FLAG_DATASET_AUGMENTATION = False
 FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
-FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
 
 # ==============================================================================================
 #                                   Main Training Code
@@ -174,15 +172,13 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = f"{DATASET}_{DATASET_HAND}_{MODEL}_{SMOOTHING}"
+    version_prefix = f"{DATASET}_{MODEL}_{SMOOTHING}"
     if FLAG_AUGMENT_HAND_MIRRORING:
         version_prefix += "_HM"
     if FLAG_DATASET_AUGMENTATION:
         version_prefix += "_DA"
     if FLAG_DATASET_MIRRORING:
         version_prefix += "_DM"
-    if FLAG_DATASET_MIRRORING_ADD:
-        version_prefix += "_DMA"
 
     result_dir = os.path.join("result", version_prefix)
     postfix = 1
@@ -212,25 +208,10 @@ if HAND_SEPERATION:
     if FLAG_DATASET_MIRRORING:
         X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-    if FLAG_DATASET_MIRRORING_ADD:
-        X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-        X_R_mirrored = np.array([hand_mirroring(sample) for sample in X_R], dtype=object)
-        X_L = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_L_mirrored)], dtype=object)
-        X_R = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_R, X_R_mirrored)], dtype=object)
-        Y_L = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_L)], dtype=object)
-        Y_R = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_R, Y_R)], dtype=object)
-
-    if DATASET_HAND == "LEFT":
-        full_dataset = IMUDataset(X_L, Y_L, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-    elif DATASET_HAND == "RIGHT":
-        full_dataset = IMUDataset(X_R, Y_R, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-    elif DATASET_HAND == "BOTH":
-        # Combine left and right data into a unified dataset
-        X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
-        Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-        full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
-    else:
-        raise ValueError(f"Invalid DATASET_HAND value: {DATASET_HAND}")
+    # Combine left and right data into a unified dataset
+    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
+    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
 else:
     with open(os.path.join(DATA_DIR, "X.pkl"), "rb") as f:
         X = np.array(pickle.load(f), dtype=object)
@@ -426,7 +407,6 @@ if local_rank == 0:
         "dataset": DATASET,
         "task": TASK,
         "hand_separation": HAND_SEPERATION,
-        "hand": DATASET_HAND,
         "num_classes": NUM_CLASSES,
         "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
         "downsample_factor": DOWNSAMPLE_FACTOR,
@@ -453,7 +433,6 @@ if local_rank == 0:
         "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
         "dataset_augmentation": FLAG_DATASET_AUGMENTATION,
         "dataset_mirroring": FLAG_DATASET_MIRRORING,
-        "dataset_mirroring_add": FLAG_DATASET_MIRRORING_ADD,
         # Model-specific parameters
         **({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN} if MODEL == "CNN_LSTM" else {}),
         **(
