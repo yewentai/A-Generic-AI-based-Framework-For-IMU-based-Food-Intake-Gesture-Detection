@@ -11,14 +11,12 @@ Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
               3. Configurable model architectures (CNN-LSTM, TCN, MSTCN)
-              4. Flexible dataset handling (DX/FD/Oreba) with hand-specific inputs
-              5. Optional augmentation strategies and dataset merging (FDIII/Oreba)
-              6. Detailed logging, fold-wise statistics, and checkpoint saving
+              4. Flexible dataset handling (DX/FD) with hand-specific inputs
+              5. Detailed logging, fold-wise statistics, and checkpoint saving
 
               Tips: Use --distributed flag for distributed training mode.
 ===============================================================================
 """
-
 
 # Standard library imports
 import os
@@ -32,7 +30,7 @@ from datetime import datetime
 import numpy as np
 import torch
 import torch.distributed as dist
-from torch.utils.data import DataLoader, Subset, ConcatDataset, DistributedSampler
+from torch.utils.data import DataLoader, Subset, DistributedSampler
 from tqdm import tqdm
 
 # Local imports
@@ -40,6 +38,7 @@ from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM
 from components.models.tcn import TCN, MSTCN
+from components.models.accnet import AccNet
 from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
@@ -77,7 +76,6 @@ if DATASET.startswith("DX"):
     sub_version = DATASET.replace("DX", "").upper() or "I"
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
-    HAND_SEPERATION = True
 elif DATASET.startswith("FD"):
     SAMPLING_FREQ_ORIGINAL = 64
     DOWNSAMPLE_FACTOR = 4
@@ -85,14 +83,6 @@ elif DATASET.startswith("FD"):
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
     TASK = "multiclass"
-    HAND_SEPERATION = True
-elif DATASET.startswith("OREBA"):
-    SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 4
-    NUM_CLASSES = 3
-    DATA_DIR = "./dataset/Oreba"
-    TASK = "multiclass"
-    HAND_SEPERATION = False
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
@@ -108,7 +98,7 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 # Model Configuration
 # ----------------------------------------------------------------------------------------------
-MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
+MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN, AccNet
 INPUT_DIM = 6
 if MODEL in ["TCN", "MSTCN"]:
     KERNEL_SIZE = 3
@@ -195,68 +185,22 @@ if local_rank == 0:
 # Load Dataset
 # ----------------------------------------------------------------------------------------------
 
-if HAND_SEPERATION:
-    with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
-        X_L = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
-        Y_L = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
-        X_R = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
-        Y_R = np.array(pickle.load(f), dtype=object)
+with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
+    X_L = np.array(pickle.load(f), dtype=object)
+with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
+    Y_L = np.array(pickle.load(f), dtype=object)
+with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
+    X_R = np.array(pickle.load(f), dtype=object)
+with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
+    Y_R = np.array(pickle.load(f), dtype=object)
 
-    if FLAG_DATASET_MIRRORING:
-        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+if FLAG_DATASET_MIRRORING:
+    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-    # Combine left and right data into a unified dataset
-    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
-    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
-else:
-    with open(os.path.join(DATA_DIR, "X.pkl"), "rb") as f:
-        X = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
-        Y = np.array(pickle.load(f), dtype=object)
-    full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
-
-# ----------------------------------------------------------------------------------------------
-# Augment Dataset
-# ----------------------------------------------------------------------------------------------
-
-fdiii_dataset = None
-oreba_dataset = None
-if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
-    fdiii_dir = "./dataset/FD/FD-III"
-    with open(os.path.join(fdiii_dir, "X_L.pkl"), "rb") as f:
-        X_L_fdiii = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(fdiii_dir, "Y_L.pkl"), "rb") as f:
-        Y_L_fdiii = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(fdiii_dir, "X_R.pkl"), "rb") as f:
-        X_R_fdiii = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(fdiii_dir, "Y_R.pkl"), "rb") as f:
-        Y_R_fdiii = np.array(pickle.load(f), dtype=object)
-    if FLAG_DATASET_MIRRORING:
-        X_L_fdiii = np.array([hand_mirroring(sample) for sample in X_L_fdiii], dtype=object)
-    X_fdiii = np.concatenate([X_L_fdiii, X_R_fdiii], axis=0)
-    Y_fdiii = np.concatenate([Y_L_fdiii, Y_R_fdiii], axis=0)
-    fdiii_dataset = IMUDataset(
-        X_fdiii,
-        Y_fdiii,
-        sequence_length=WINDOW_SAMPLES,
-        downsample_factor=DOWNSAMPLE_FACTOR,
-    )
-
-    oreba_dir = "./dataset/Oreba"
-    with open(os.path.join(oreba_dir, "X.pkl"), "rb") as f:
-        X_oreba = np.array(pickle.load(f), dtype=object)
-    with open(os.path.join(oreba_dir, "Y.pkl"), "rb") as f:
-        Y_oreba = np.array(pickle.load(f), dtype=object)
-    oreba_dataset = IMUDataset(
-        X_oreba,
-        Y_oreba,
-        sequence_length=WINDOW_SAMPLES,
-        downsample_factor=DOWNSAMPLE_FACTOR,
-    )
+# Combine left and right data into a unified dataset
+X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
+full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
 
 # ----------------------------------------------------------------------------------------------
 # Training loop over folds
@@ -269,11 +213,7 @@ training_statistics = []
 for fold, validate_subjects in enumerate(validate_folds):
     # Prepare training data
     train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
-    if DATASET == "FDI" and FLAG_DATASET_AUGMENTATION:
-        base_train_dataset = Subset(full_dataset, train_indices)
-        train_dataset = ConcatDataset([base_train_dataset, fdiii_dataset, oreba_dataset])
-    else:
-        train_dataset = Subset(full_dataset, train_indices)
+    train_dataset = Subset(full_dataset, train_indices)
 
     # Setup dataloader
     train_sampler = (
@@ -406,7 +346,6 @@ if local_rank == 0:
         # Dataset Settings
         "dataset": DATASET,
         "task": TASK,
-        "hand_separation": HAND_SEPERATION,
         "num_classes": NUM_CLASSES,
         "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
         "downsample_factor": DOWNSAMPLE_FACTOR,

@@ -35,13 +35,13 @@ from components.models.cnnlstm import CNNLSTM
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
-from components.pre_processing import hand_mirroring, planar_rotation
+from components.pre_processing import hand_mirroring, planar_rotation, axis_permutation, spatial_orientation
 
 # --- Configurations ---
 NUM_WORKERS = 4
 SEGMENT_VALIDATION = False
-if SEGMENT_VALIDATION:
-    THRESHOLD_LIST = [0.1, 0.25, 0.5, 0.75]
+POST_PROCESSING_SMOOTHING = False
+THRESHOLD_LIST = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 DEBUG_PLOT = False
 
 
@@ -83,16 +83,11 @@ if __name__ == "__main__":
         sampling_freq = config_info["sampling_freq"]
         window_samples = config_info["window_samples"]
         batch_size = config_info["batch_size"]
-        flag_augment_hand_mirroringing = config_info.get("augmentation_hand_mirroring", False)
-        flag_dataset_mirroring = config_info.get("dataset_mirroring", False)
-        flag_dataset_mirroring_add = config_info.get("dataset_mirroring_add", False)
         validate_folds = config_info.get("validate_folds")
-        rotation_enabled = config_info.get("augmentation_planar_rotation", False)
-        hand_separation = config_info.get("hand_separation", False)
-        if flag_augment_hand_mirroringing or flag_dataset_mirroring or flag_dataset_mirroring_add:
-            mirroring_enabled = True
-        else:
-            mirroring_enabled = False
+        mirroring_enabled = config_info.get("dataset_mirroring", False)
+        planar_rotation_enabled = config_info.get("augmentation_planar_rotation", False)
+        axis_permutation_enabled = config_info.get("axis_permutation", False)
+        spatial_orientation_enabled = config_info.get("spatial_orientation", False)
 
         # Set up device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -113,62 +108,69 @@ if __name__ == "__main__":
 
         # Load dataset
         validation_modes = []
-        if hand_separation:
-            X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
-            Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
-            X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
-            Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
-            X = np.array([np.concatenate([X_L[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object)
-            Y = np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object)
-            validation_modes.extend(
-                [
-                    {"name": "original", "X": X, "Y": Y},
-                ]
+        X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
+        Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
+        X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
+        Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
+        X = np.array([np.concatenate([X_L[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object)
+        Y = np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object)
+        validation_modes.append(
+            {
+                "name": "original",
+                "X": X,
+                "Y": Y,
+            }
+        )
+        if mirroring_enabled:
+            X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
+            validation_modes.append(
+                {
+                    "name": "mirrored_left_original_right",
+                    "X": np.array(
+                        [np.concatenate([X_L_mirrored[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object
+                    ),
+                    "Y": np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object),
+                }
             )
-
-            if mirroring_enabled:
-                X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-                validation_modes.append(
-                    {
-                        "name": "mirrored_left_original_right",
-                        "X": np.array(
-                            [np.concatenate([X_L_mirrored[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object
-                        ),
-                        "Y": np.array(
-                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
-                        ),
-                    }
-                )
-
-            if rotation_enabled:
-                # Apply rotation to 50% of samples
-                random_indices = np.random.choice(len(X_L), size=int(len(X_L) * 0.5), replace=False)
-                X_L_rotated = np.copy(X_L)
-                X_R_rotated = np.copy(X_R)
-                for i in random_indices:
-                    X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
-                    X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
-
-                X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
-                validation_modes.append(
-                    {
-                        "name": "rotated_mirrored_left_original_right",
-                        "X": np.array(
-                            [
-                                np.concatenate([X_L_rotated_mirrored[i], X_R_rotated[i]], axis=0)
-                                for i in range(len(X_L))
-                            ],
-                            dtype=object,
-                        ),
-                        "Y": np.array(
-                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
-                        ),
-                    }
-                )
-        else:
-            X = np.array(pickle.load(open(os.path.join(DATA_DIR, "X.pkl"), "rb")), dtype=object)
-            Y = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y.pkl"), "rb")), dtype=object)
-            validation_modes.append({"name": "original", "X": X, "Y": Y})
+        if planar_rotation_enabled:
+            # Apply rotation to 50% of samples
+            random_indices = np.random.choice(len(X), size=int(len(X) * 0.5), replace=False)
+            X_rotated = np.copy(X)
+            for i in random_indices:
+                X_rotated[i], Y[i] = planar_rotation(X[i], Y[i])
+            validation_modes.append(
+                {
+                    "name": "planar_rotated",
+                    "X": X_rotated,
+                    "Y": Y,
+                }
+            )
+        if axis_permutation_enabled:
+            # Apply axis permutation to 50% of samples
+            random_indices = np.random.choice(len(X), size=int(len(X) * 0.5), replace=False)
+            X_permuted = np.copy(X)
+            for i in random_indices:
+                X_permuted[i], Y[i] = axis_permutation(X[i], Y[i])
+            validation_modes.append(
+                {
+                    "name": "axis_permuted",
+                    "X": X_permuted,
+                    "Y": Y,
+                }
+            )
+        if spatial_orientation_enabled:
+            # Apply spatial orientation to 50% of samples
+            random_indices = np.random.choice(len(X), size=int(len(X) * 0.5), replace=False)
+            X_oriented = np.copy(X)
+            for i in random_indices:
+                X_oriented[i], Y[i] = spatial_orientation(X[i], Y[i])
+            validation_modes.append(
+                {
+                    "name": "spatial_oriented",
+                    "X": X_oriented,
+                    "Y": Y,
+                }
+            )
 
         all_stats = {}
         for mode in validation_modes:
@@ -231,38 +233,22 @@ if __name__ == "__main__":
                     pin_memory=True,
                 )
 
-                # Compatable with MSTCN in MSTCN.py
-                # all_predictions, all_labels = [], []
-                # with torch.no_grad():
-                #     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
-                #         batch_x = batch_x.permute(0, 2, 1).to(device)
-                #         outputs = model(batch_x)
-                #         logits = outputs[:, -1, :, :] if outputs.ndim == 4 else outputs
-                #         probs = F.softmax(logits, dim=1)
-                #         preds = torch.argmax(probs, dim=1)
-                #         all_predictions.extend(preds.view(-1).cpu().numpy())
-                #         all_labels.extend(batch_y.view(-1).cpu().numpy())
-
                 all_predictions, all_labels = [], []
 
                 with torch.no_grad():
                     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
                         # [B, L, C_in] → [B, C_in, L]
                         batch_x = batch_x.permute(0, 2, 1).to(device)
-
                         # forward pass: now returns List[Tensor] for MSTCN
                         outputs_list = model(batch_x)
-
                         # pick the last stage's logits
                         if isinstance(outputs_list, list):
                             logits = outputs_list[-1]  # -> [B, num_classes, L]
                         else:
                             logits = outputs_list  # for single-stage TCN
-
                         # softmax + argmax over class-dim
                         probs = F.softmax(logits, dim=1)  # [B, C, L]
                         preds = torch.argmax(probs, dim=1)  # [B, L]
-
                         # flatten and store
                         all_predictions.extend(preds.reshape(-1).cpu().numpy())
                         all_labels.extend(batch_y.reshape(-1).cpu().numpy())
@@ -297,13 +283,14 @@ if __name__ == "__main__":
 
                 metrics_segment_all = None
                 if SEGMENT_VALIDATION:
-                    processed_preds = post_process_predictions(preds_array, sampling_freq)
+                    if POST_PROCESSING_SMOOTHING:
+                        preds_array = post_process_predictions(preds_array, sampling_freq)
                     metrics_segment_all = {}
                     for threshold in THRESHOLD_LIST:
                         metrics_segment = {}
                         for label in range(1, num_classes):
                             fn, fp, tp = segment_evaluation(
-                                processed_preds,
+                                preds_array,
                                 labels_array,
                                 class_label=label,
                                 threshold=threshold,
