@@ -24,6 +24,7 @@ import logging
 import os
 import pickle
 from datetime import datetime
+from fractions import Fraction
 
 import numpy as np
 import torch
@@ -56,16 +57,16 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------------------------------
 DATASET = "DXI"
 if DATASET.startswith("DX"):
-    NUM_CLASSES = 2
     SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 2
+    DOWNSAMPLE_FACTOR = Fraction(32, 15)
+    NUM_CLASSES = 2
     sub_version = DATASET.replace("DX", "").upper() or "I"
     DATA_DIR = f"./dataset/DX/DX-{sub_version}"
     TASK = "binary"
     HAND_SEPERATION = True
 elif DATASET.startswith("FD"):
     SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 2
+    DOWNSAMPLE_FACTOR = Fraction(32, 15)
     NUM_CLASSES = 3
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
@@ -73,7 +74,7 @@ elif DATASET.startswith("FD"):
     HAND_SEPERATION = True
 elif DATASET.startswith("OREBA"):
     SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 2
+    DOWNSAMPLE_FACTOR = Fraction(32, 15)
     NUM_CLASSES = 3
     DATA_DIR = "./dataset/Oreba"
     TASK = "multiclass"
@@ -190,7 +191,9 @@ else:
     with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
         Y = np.array(pickle.load(f), dtype=object)
 
-dataset = IMUDatasetN21(X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR)
+dataset = IMUDatasetN21(
+    X, Y, sequence_length=WINDOW_SIZE, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=[0, 1, 2]
+)
 
 # ----------------------------------------------------------------------------------------------
 # Training loop over folds

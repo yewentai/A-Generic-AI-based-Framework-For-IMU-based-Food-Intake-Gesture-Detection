@@ -49,7 +49,6 @@ from components.augmentation import (
 )
 from components.datasets import (
     IMUDataset,
-    IMUDatasetBalanced,
     create_balanced_subject_folds,
     load_predefined_validate_folds,
 )
