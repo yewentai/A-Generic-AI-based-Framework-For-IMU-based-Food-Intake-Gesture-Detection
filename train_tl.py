@@ -28,7 +28,6 @@ from datetime import datetime
 import numpy as np
 import torch
 import torch.distributed as dist
-import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, DistributedSampler, Subset
 from tqdm import tqdm
@@ -113,11 +112,6 @@ NUM_EPOCHS = 100
 FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
 FLAG_DATASET_MIRRORING_ADD = False  # If True, add mirrored data to the dataset
-
-# ==============================================================================================
-#                            New Sequence Labeling Components
-# ==============================================================================================
-
 
 # ==============================================================================================
 #                                   Main Training Code

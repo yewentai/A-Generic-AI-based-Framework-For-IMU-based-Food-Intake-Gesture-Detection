@@ -28,10 +28,87 @@ from datetime import datetime
 from tqdm import tqdm
 import logging
 import argparse
+from scipy import signal
+from torch.utils.data import Dataset
 
-from components.datasets import IMUDatasetSegment
 from components.checkpoint import save_generator, save_discriminator
 from components.models.gan import Generator, Discriminator
+
+
+class IMUDatasetSegment(Dataset):
+    def __init__(self, X, Y, downsample_factor=1, apply_antialias=True, min_length=5):
+        """
+        Dataset that splits IMU data into variable-length segments where the class label is constant.
+
+        Parameters:
+            X (list of np.ndarray): IMU data for each subject, each of shape (N, 6)
+            Y (list of np.ndarray): Label arrays for each subject, each of shape (N,)
+            downsample_factor (int): Downsampling factor (default 1 = no downsampling)
+            apply_antialias (bool): Whether to apply anti-aliasing filter before downsampling.
+            min_length (int): Minimum segment length to keep.
+        """
+        self.data = []
+        self.labels = []
+        self.subject_indices = []
+
+        for subject_idx, (imu_data, label_seq) in enumerate(zip(X, Y)):
+            if downsample_factor > 1:
+                imu_data = self.downsample(imu_data, downsample_factor, apply_antialias)
+                label_seq = label_seq[::downsample_factor]
+
+            imu_data = self.normalize(imu_data)
+            segments = self.segment_by_class(imu_data, label_seq, min_length)
+
+            for imu_segment, label in segments:
+                self.data.append(imu_segment)
+                self.labels.append(label)
+                self.subject_indices.append(subject_idx)
+
+    def segment_by_class(self, imu_data, label_seq, min_length):
+        """
+        Cut sequences into segments where label is constant.
+
+        Returns:
+            List of tuples: [(imu_segment, label), ...]
+        """
+        segments = []
+        current_label = label_seq[0]
+        start = 0
+
+        for i in range(1, len(label_seq)):
+            if label_seq[i] != current_label:
+                if i - start >= min_length:
+                    segments.append((imu_data[start:i], current_label))
+                start = i
+                current_label = label_seq[i]
+
+        # Add last segment
+        if len(label_seq) - start >= min_length:
+            segments.append((imu_data[start:], current_label))
+
+        return segments
+
+    def downsample(self, data, factor, apply_antialias=True):
+        if apply_antialias:
+            nyquist = 0.5 * data.shape[0]
+            cutoff = (0.5 / factor) * nyquist
+            b, a = signal.butter(4, cutoff / nyquist, btype="low")
+            data = signal.filtfilt(b, a, data, axis=0)
+        return data[::factor, :]
+
+    def normalize(self, data):
+        mean = np.mean(data, axis=0, keepdims=True)
+        std = np.std(data, axis=0, keepdims=True)
+        return (data - mean) / (std + 1e-5)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        imu = torch.tensor(self.data[idx], dtype=torch.float32)  # Shape: (T, 6)
+        label = torch.tensor(self.labels[idx], dtype=torch.long)  # Single class label
+        return imu, label
+
 
 # ==============================================================================================
 #                             Configuration Parameters
