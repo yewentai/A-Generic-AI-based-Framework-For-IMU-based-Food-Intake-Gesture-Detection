@@ -93,6 +93,7 @@ INPUT_DIM = 3  # Only accelerometer data
 
 # Training Configuration
 LEARNING_RATE = 5e-4
+LAMBDA_COEF = 0.15
 if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
@@ -252,7 +253,7 @@ for fold, validate_subjects in enumerate(validate_folds):
             # get CE + smoothing loss
             ce_loss, smooth_loss = loss_fn(logits_t, batch_y, smoothing="MSE", max_diff=16.0)
 
-            loss = ce_loss + 0.15 * smooth_loss
+            loss = ce_loss + LAMBDA_COEF * smooth_loss
             loss.backward()
             optimizer.step()
 
@@ -279,37 +280,29 @@ if local_rank == 0:
     logger.info(f"Training completed in {datetime.now() - overall_start}")
     # Save configuration
     config_info = {
-        # Dataset Settings
         "dataset": DATASET,
         "hand_separation": HAND_SEPERATION,
         "num_classes": NUM_CLASSES,
         "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
         "downsample_factor": DOWNSAMPLE_FACTOR,
         "sampling_freq": SAMPLING_FREQ,
-        # Dataloader Settings
         "window_seconds": WINDOW_SECONDS,
         "window_samples": WINDOW_SAMPLES,
         "batch_size": BATCH_SIZE,
-        "num_workers": NUM_WORKERS,
-        # Model Settings
         "model": MODEL,
         "input_dim": INPUT_DIM,
-        # Training Settings
         "learning_rate": LEARNING_RATE,
         "num_folds": NUM_FOLDS,
         "num_epochs": NUM_EPOCHS,
-        # Augmentation flags
         "augmentation_hand_mirroring": FLAG_AUGMENT_HAND_MIRRORING,
         "dataset_mirroring": FLAG_DATASET_MIRRORING,
         "dataset_mirroring_add": FLAG_DATASET_MIRRORING_ADD,
-        # Validation configuration
         "validate_folds": validate_folds,
     }
 
     config_file = os.path.join(result_dir, "training_config.json")
     with open(config_file, "w") as f:
         json.dump(config_info, f, indent=4)
-    logger.info(f"Configuration saved to {config_file}")
 
 if args.distributed:
     dist.destroy_process_group()

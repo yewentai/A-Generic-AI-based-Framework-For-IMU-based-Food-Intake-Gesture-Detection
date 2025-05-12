@@ -110,7 +110,6 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN
 INPUT_DIM = 6
-LAMBDA_COEF = 0.15
 if MODEL in ["TCN", "MSTCN"]:
     KERNEL_SIZE = 3
     NUM_LAYERS = 9
@@ -129,6 +128,7 @@ else:
 # Training Configuration
 # ----------------------------------------------------------------------------------------------
 LEARNING_RATE = 5e-4
+LAMBDA_COEF = 0.15
 if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
@@ -180,7 +180,7 @@ if local_rank == 0:
     if FLAG_DATASET_MIRRORING:
         version_prefix += "_DM"
 
-    result_dir = os.path.join("results", version_prefix)
+    result_dir = os.path.join("results/smooth", version_prefix)
     postfix = 1
     original_result_dir = result_dir
     while os.path.exists(result_dir):

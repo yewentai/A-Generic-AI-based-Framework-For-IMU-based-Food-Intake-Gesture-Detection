@@ -2,10 +2,10 @@
 import subprocess
 
 # Define all smoothing types to try
-smoothing_types = ["MSE", "L1", "HUBER", "KL", "JS", "TV", "SEC_DIFF", "EMD", "SPECTRAL"]
+smoothing_types = ["KL", "JS", "TV", "SEC_DIFF", "EMD", "SPECTRAL"]
 
 # Path to your training script
-script_path = "dl_train.py"
+script_path = "train_dl.py"
 
 # Whether to use distributed training
 use_distributed = False  # Set to True if needed
