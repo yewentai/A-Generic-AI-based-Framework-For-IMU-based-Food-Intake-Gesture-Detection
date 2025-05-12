@@ -45,7 +45,7 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "result"
+    result_root = "results"
     versions = [
         "DXI_ResNetSeqLabeler_3",
     ]  # Uncomment to manually specify versions

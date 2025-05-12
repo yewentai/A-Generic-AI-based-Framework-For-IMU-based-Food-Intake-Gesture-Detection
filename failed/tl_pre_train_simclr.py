@@ -155,7 +155,7 @@ def main():
 
     # ---------------------- Save Pre-Trained Model ----------------------
     version_prefix = datetime.now().strftime("%Y%m%d%H%M")
-    save_dir = os.path.join("result", version_prefix)
+    save_dir = os.path.join("results", version_prefix)
     os.makedirs(save_dir, exist_ok=True)
     checkpoint_path = os.path.join(save_dir, "pretrained_simclr_tcn.pth")
     torch.save(simclr_model.state_dict(), checkpoint_path)

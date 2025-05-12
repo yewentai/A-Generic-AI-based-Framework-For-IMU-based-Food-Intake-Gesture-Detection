@@ -217,7 +217,7 @@ if local_rank == 0:
     overall_start = datetime.now()
     logger.info(f"Training started at: {overall_start}")
     version_prefix = datetime.now().strftime("%Y%m%d%H%M")[:12]
-    result_dir = os.path.join("result", version_prefix)
+    result_dir = os.path.join("results", version_prefix)
     os.makedirs(result_dir, exist_ok=True)
     checkpoint_dir = os.path.join(result_dir, "checkpoint")
     os.makedirs(checkpoint_dir, exist_ok=True)

@@ -6,7 +6,7 @@ Project Directory Cleanup Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-12
 Description : This script recursively scans target project directories to:
               - Remove empty subdirectories
               - Delete all 'analysis' folders and their contents
@@ -107,12 +107,12 @@ def rename_files(root):
 
 def main():
     # List the top-level directories to scan
-    parent_dirs = ["./result"]
+    parent_dirs = ["results"]
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
             # remove_analysis_folders(parent)
-            remove_empty_subdirs(parent)
+            # remove_empty_subdirs(parent)
             # remove_specified_files(parent)
             # rename_files(parent)
         else:

@@ -46,7 +46,7 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "result"
+    result_root = "results"
     versions = [
         "DXI_BOTH_MSTCN_HUBER",
         "DXI_BOTH_MSTCN_L1",

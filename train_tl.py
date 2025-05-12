@@ -147,7 +147,7 @@ if local_rank == 0:
     if FLAG_DATASET_MIRRORING_ADD:
         version_prefix += "_DMA"
 
-    result_dir = os.path.join("result", version_prefix)
+    result_dir = os.path.join("results", version_prefix)
     postfix = 1
     original_result_dir = result_dir
     while os.path.exists(result_dir):

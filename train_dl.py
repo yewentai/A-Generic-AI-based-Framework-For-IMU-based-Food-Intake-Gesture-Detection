@@ -174,13 +174,13 @@ if local_rank == 0:
     # Create result directory
     version_prefix = f"{DATASET}_{MODEL}_{SMOOTHING}"
     if FLAG_AUGMENT_HAND_MIRRORING:
-        version_prefix += "_HM"
+        version_prefix += "_AM"
     if FLAG_DATASET_AUGMENTATION:
         version_prefix += "_DA"
     if FLAG_DATASET_MIRRORING:
         version_prefix += "_DM"
 
-    result_dir = os.path.join("result", version_prefix)
+    result_dir = os.path.join("results", version_prefix)
     postfix = 1
     original_result_dir = result_dir
     while os.path.exists(result_dir):

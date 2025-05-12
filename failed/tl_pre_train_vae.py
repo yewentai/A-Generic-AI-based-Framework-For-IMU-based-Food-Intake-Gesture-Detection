@@ -110,7 +110,7 @@ def main():
 
     # Initialize save directory
     version_prefix = datetime.now().strftime("%Y%m%d%H%M")
-    save_dir = os.path.join("result", version_prefix)
+    save_dir = os.path.join("results", version_prefix)
     os.makedirs(save_dir, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
