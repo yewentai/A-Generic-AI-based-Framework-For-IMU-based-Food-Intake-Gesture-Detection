@@ -50,17 +50,21 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
     # Select smoothing
     if smoothing == "MSE":
         smooth_loss = diff.clamp(-max_diff, max_diff).pow(2).mean()
+        coefficient = 0.27
 
     elif smoothing == "L1":
         smooth_loss = diff.clamp(-max_diff, max_diff).abs().mean()
+        coefficient = 0.21
 
     elif smoothing == "HUBER":
         # smooth_l1: L2 for small, L1 for large
         smooth_loss = F.smooth_l1_loss(log_next, log_prev, reduction="mean")
+        coefficient = 0.48
 
     elif smoothing == "KL":
         # KL( P_{t+1} || P_t )
         smooth_loss = F.kl_div(log_next, log_prev.exp(), reduction="batchmean")
+        coefficient = 0.52
 
     elif smoothing == "JS":
         # Jensen–Shannon divergence
@@ -72,16 +76,19 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
             F.kl_div(log_next, m.detach(), reduction="batchmean")
             + F.kl_div(log_prev, m.detach(), reduction="batchmean")
         )
+        coefficient = 0.59
 
     elif smoothing == "TV":
         # Total Variation: sum over classes, mean over batch+time
         smooth_loss = diff.abs().sum(dim=1).mean()
+        coefficient = 0.19
 
     elif smoothing == "SEC_DIFF":
         # Second‐order difference: penalize change of slope
         d1 = diff  # [B,C,L-1]
         d2 = d1[:, :, 1:] - d1[:, :, :-1]  # [B,C,L-2]
         smooth_loss = d2.pow(2).mean()
+        coefficient = 0.32
 
     elif smoothing == "EMD":
         # 1D EMD via L1 of CDF differences
@@ -90,11 +97,12 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
         cdf_next = torch.cumsum(p_next, dim=1)
         cdf_prev = torch.cumsum(p_prev, dim=1)
         smooth_loss = (cdf_next - cdf_prev).abs().mean()
+        coefficient = 9.0
 
     else:
         raise ValueError(f"Unknown smoothing type '{smoothing}'")
 
-    return ce_loss, smooth_loss
+    return ce_loss, coefficient * smooth_loss
 
 
 def MSTCN_Loss(logits_list, targets, smoothing="MSE", max_diff=16.0):

@@ -25,6 +25,7 @@ import pickle
 import logging
 import argparse
 from datetime import datetime
+from fractions import Fraction
 
 # Third-party imports
 import numpy as np
@@ -39,6 +40,8 @@ from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM
 from components.models.tcn import TCN, MSTCN
 from components.models.accnet import AccNet
+from components.models.resnet import ResNetEncoder
+from components.models.head import BiLSTMHead, ResNetBiLSTM
 from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
@@ -98,8 +101,7 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 # Model Configuration
 # ----------------------------------------------------------------------------------------------
-MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN, AccNet
-INPUT_DIM = 6
+MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN, AccNet, ResNetBiLSTM
 if MODEL in ["TCN", "MSTCN"]:
     KERNEL_SIZE = 3
     NUM_LAYERS = 9
@@ -108,17 +110,26 @@ if MODEL in ["TCN", "MSTCN"]:
     CAUSAL = False
     if MODEL == "MSTCN":
         NUM_STAGES = 2
-elif MODEL == "CNN_LSTM":
+elif MODEL in ["CNN_LSTM", "AccNet"]:
     CONV_FILTERS = (32, 64, 128)
+elif MODEL in ["ResNetBiLSTM", "CNN_LSTM"]:
     LSTM_HIDDEN = 128
 else:
     raise ValueError(f"Invalid model: {MODEL}")
+
+if MODEL in ["CNN_LSTM", "TCN", "MSTCN"]:
+    INPUT_DIM = 6
+elif MODEL in ["AccNet", "ResNetBiLSTM"]:
+    INPUT_DIM = 3
+else:
+    raise ValueError(f"Invalid model: {MODEL}")
+
 
 # ----------------------------------------------------------------------------------------------
 # Training Configuration
 # ----------------------------------------------------------------------------------------------
 LEARNING_RATE = 5e-4
-LAMBDA_COEF = 0.15
+LAMBDA_COEF = 1
 if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
@@ -132,7 +143,6 @@ FLAG_AUGMENT_HAND_MIRRORING = False
 FLAG_AUGMENT_AXIS_PERMUTATION = False
 FLAG_AUGMENT_PLANAR_ROTATION = False
 FLAG_AUGMENT_SPATIAL_ORIENTATION = False
-FLAG_DATASET_AUGMENTATION = False
 FLAG_DATASET_MIRRORING = False  # If True, mirror the left hand data
 
 # ==============================================================================================
@@ -163,14 +173,18 @@ if local_rank == 0:
 
     # Create result directory
     version_prefix = f"{DATASET}_{MODEL}_S-{SMOOTHING}"
-    if FLAG_AUGMENT_HAND_MIRRORING:
-        version_prefix += "_AM"
-    if FLAG_DATASET_AUGMENTATION:
-        version_prefix += "_DA"
     if FLAG_DATASET_MIRRORING:
         version_prefix += "_DM"
+    if FLAG_AUGMENT_HAND_MIRRORING:
+        version_prefix += "_AM"
+    if FLAG_AUGMENT_AXIS_PERMUTATION:
+        version_prefix += "_AP"
+    if FLAG_AUGMENT_PLANAR_ROTATION:
+        version_prefix += "_AR"
+    if FLAG_AUGMENT_SPATIAL_ORIENTATION:
+        version_prefix += "_AS"
 
-    result_dir = os.path.join("results/smooth", version_prefix)
+    result_dir = os.path.join(f"results/smooth/{DATASET}_normalized", version_prefix)
     postfix = 1
     original_result_dir = result_dir
     while os.path.exists(result_dir):
@@ -200,7 +214,12 @@ if FLAG_DATASET_MIRRORING:
 # Combine left and right data into a unified dataset
 X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
 Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
+if MODEL in ["AccNet", "ResNetBiLSTM"]:
+    dataset = IMUDataset(
+        X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=Fraction(32, 15), selected_channels=[0, 1, 2]
+    )
+else:
+    dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
 
 # ----------------------------------------------------------------------------------------------
 # Training loop over folds
@@ -208,12 +227,12 @@ full_dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_facto
 if DATASET == "FDI":
     validate_folds = load_predefined_validate_folds()
 else:
-    validate_folds = create_balanced_subject_folds(full_dataset, num_folds=NUM_FOLDS)
+    validate_folds = create_balanced_subject_folds(dataset, num_folds=NUM_FOLDS)
 training_statistics = []
 for fold, validate_subjects in enumerate(validate_folds):
     # Prepare training data
-    train_indices = [i for i, s in enumerate(full_dataset.subject_indices) if s not in validate_subjects]
-    train_dataset = Subset(full_dataset, train_indices)
+    train_indices = [i for i, s in enumerate(dataset.subject_indices) if s not in validate_subjects]
+    train_dataset = Subset(dataset, train_indices)
 
     # Setup dataloader
     train_sampler = (
@@ -229,21 +248,11 @@ for fold, validate_subjects in enumerate(validate_folds):
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
-
-    model = {"TCN": TCN, "MSTCN": MSTCN, "CNN_LSTM": CNNLSTM}[MODEL](
-        **(
-            {
-                "num_stages": NUM_STAGES,
-                "num_layers": NUM_LAYERS,
-                "num_classes": NUM_CLASSES,
-                "input_dim": INPUT_DIM,
-                "num_filters": NUM_FILTERS,
-                "kernel_size": KERNEL_SIZE,
-                "dropout": DROPOUT,
-            }
-            if MODEL == "MSTCN"
-            else (
+    if MODEL in ["TCN", "MSTCN", "CNN_LSTM"]:
+        model = {"TCN": TCN, "MSTCN": MSTCN, "CNN_LSTM": CNNLSTM, "AccNet": AccNet}[MODEL](
+            **(
                 {
+                    "num_stages": NUM_STAGES,
                     "num_layers": NUM_LAYERS,
                     "num_classes": NUM_CLASSES,
                     "input_dim": INPUT_DIM,
@@ -251,16 +260,57 @@ for fold, validate_subjects in enumerate(validate_folds):
                     "kernel_size": KERNEL_SIZE,
                     "dropout": DROPOUT,
                 }
-                if MODEL == "TCN"
-                else {
-                    "input_channels": INPUT_DIM,
-                    "conv_filters": CONV_FILTERS,
-                    "lstm_hidden": LSTM_HIDDEN,
-                    "num_classes": NUM_CLASSES,
-                }
+                if MODEL == "MSTCN"
+                else (
+                    {
+                        "num_layers": NUM_LAYERS,
+                        "num_classes": NUM_CLASSES,
+                        "input_dim": INPUT_DIM,
+                        "num_filters": NUM_FILTERS,
+                        "kernel_size": KERNEL_SIZE,
+                        "dropout": DROPOUT,
+                    }
+                    if MODEL == "TCN"
+                    else (
+                        {
+                            "input_channels": INPUT_DIM,
+                            "conv_filters": CONV_FILTERS,
+                            "lstm_hidden": LSTM_HIDDEN,
+                            "num_classes": NUM_CLASSES,
+                        }
+                        if MODEL == "CNN_LSTM"
+                        else {
+                            "num_classes": NUM_CLASSES,
+                            "input_channels": INPUT_DIM,
+                            "conv_filters": CONV_FILTERS,
+                            "kernel_size": KERNEL_SIZE,
+                        }
+                    )
+                )
             )
-        )
-    ).to(device)
+        ).to(device)
+    elif MODEL == "ResNetBiLSTM":
+        # 1) build encoder (random init or from checkpoint)
+        encoder = ResNetEncoder(
+            weight_path=None,
+            n_channels=INPUT_DIM,
+            class_num=NUM_CLASSES,
+            my_device=device,
+            freeze_encoder=False,
+        ).to(device)
+
+        # 2) build sequence-labeling head
+        seq_head = BiLSTMHead(
+            feature_dim=encoder.out_features,  # e.g. 1024
+            seq_length=WINDOW_SAMPLES,
+            num_classes=NUM_CLASSES,
+            hidden_dim=LSTM_HIDDEN,
+        ).to(device)
+
+        # 3) combine into the full model
+        model = ResNetBiLSTM(encoder, seq_head).to(device)
+    else:
+        raise ValueError(f"Invalid model: {MODEL}")
 
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank])
@@ -370,7 +420,6 @@ if local_rank == 0:
         "augmentation_axis_permutation": FLAG_AUGMENT_AXIS_PERMUTATION,
         "augmentation_planar_rotation": FLAG_AUGMENT_PLANAR_ROTATION,
         "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
-        "dataset_augmentation": FLAG_DATASET_AUGMENTATION,
         "dataset_mirroring": FLAG_DATASET_MIRRORING,
         # Model-specific parameters
         **({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN} if MODEL == "CNN_LSTM" else {}),

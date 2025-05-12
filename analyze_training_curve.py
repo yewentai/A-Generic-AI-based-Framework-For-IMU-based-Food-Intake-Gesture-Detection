@@ -14,65 +14,102 @@ Description : This script plots fold-wise training loss curves (total, cross-ent
 ===============================================================================
 """
 
-
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from tabulate import tabulate  # make sure to install with: pip install tabulate
 
-if __name__ == "__main__":
-    result_root = "results"
-    versions = ["202504151704"]  # Specify the version to analyze
-    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
-    versions.sort()
+
+def plot_loss_curves(result_root):
+    versions = sorted(d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d)))
 
     for version in versions:
         result_dir = os.path.join(result_root, version)
-        train_file = "train_stats.npy"
+        stats_path = os.path.join(result_dir, "training_stats.npy")
         loss_curve_plot_dir = os.path.join(result_dir, "loss_curve")
         os.makedirs(loss_curve_plot_dir, exist_ok=True)
 
-        loss_curve_plot_dir = os.path.join(result_dir, "loss_curve")
-        os.makedirs(loss_curve_plot_dir, exist_ok=True)
+        if not os.path.exists(stats_path):
+            print(f"  [!] No training_stats.npy found for version {version}, skipping.")
+            continue
 
-        # Find corresponding training stats file
-        train_stats_file = os.path.join(result_dir, train_file)
+        training_stats = np.load(stats_path, allow_pickle=True).tolist()
+        folds = sorted(set(entry["fold"] for entry in training_stats))
 
-        if os.path.exists(train_stats_file):
-            train_stats = np.load(train_stats_file, allow_pickle=True).tolist()
-            folds = sorted(set(entry["fold"] for entry in train_stats))
+        for fold in folds:
+            # collect stats for this fold
+            stats_fold = [e for e in training_stats if e["fold"] == fold]
+            epochs = sorted(set(e["epoch"] for e in stats_fold))
 
-            for fold in folds:
-                stats_fold = [entry for entry in train_stats if entry["fold"] == fold]
-                epochs = sorted(set(entry["epoch"] for entry in stats_fold))
+            loss_per_epoch = {epoch: [] for epoch in epochs}
+            loss_ce_per_epoch = {epoch: [] for epoch in epochs}
+            loss_smooth_per_epoch = {epoch: [] for epoch in epochs}
 
-                loss_per_epoch = {epoch: [] for epoch in epochs}
-                loss_ce_per_epoch = {epoch: [] for epoch in epochs}
-                loss_smooth_per_epoch = {epoch: [] for epoch in epochs}
+            for entry in stats_fold:
+                ep = entry["epoch"]
+                loss_per_epoch[ep].append(entry["train_loss"])
+                loss_ce_per_epoch[ep].append(entry["train_loss_ce"])
+                loss_smooth_per_epoch[ep].append(entry["train_loss_smooth"])
 
-                for entry in stats_fold:
-                    epoch = entry["epoch"]
-                    loss_per_epoch[epoch].append(entry["train_loss"])
-                    loss_ce_per_epoch[epoch].append(entry["train_loss_ce"])
-                    loss_smooth_per_epoch[epoch].append(entry["train_loss_smooth"])
+            mean_loss = [np.mean(loss_per_epoch[e]) for e in epochs]
+            mean_ce = [np.mean(loss_ce_per_epoch[e]) for e in epochs]
+            mean_sm = [np.mean(loss_smooth_per_epoch[e]) for e in epochs]
 
-                mean_loss = [np.mean(loss_per_epoch[e]) for e in epochs]
-                mean_ce = [np.mean(loss_ce_per_epoch[e]) for e in epochs]
-                mean_smooth = [np.mean(loss_smooth_per_epoch[e]) for e in epochs]
+            plt.figure(figsize=(10, 6))
+            plt.plot(epochs, mean_loss, label="Total Loss")
+            plt.plot(epochs, mean_ce, label="Cross Entropy Loss", linestyle="--")
+            plt.plot(epochs, mean_sm, label="Smooth Loss", linestyle=":")
+            plt.yscale("log")
 
-                plt.figure(figsize=(10, 6))
-                plt.plot(epochs, mean_loss, label="Total Loss", color="blue")
-                plt.plot(epochs, mean_ce, label="Cross Entropy Loss", linestyle="--", color="red")
-                plt.plot(epochs, mean_smooth, label="Smooth Loss", linestyle=":", color="green")
-                plt.yscale("log")
+            plt.title(f"Training Loss Over Epochs (Version {version}, Fold {fold})")
+            plt.xlabel("Epoch")
+            plt.ylabel("Loss (log scale)")
+            plt.grid(True, which="both", linestyle="--", alpha=0.6)
+            plt.legend()
+            plt.tight_layout()
 
-                plt.title(f"Training Loss Over Epochs (Fold {fold})")
-                plt.xlabel("Epoch")
-                plt.ylabel("Loss (Log Scale)")
-                plt.grid(True, which="both", linestyle="--", alpha=0.6)
-                plt.legend()
-                plt.tight_layout()
-                plt.savefig(
-                    os.path.join(loss_curve_plot_dir, f"train_loss_fold{fold}.png"),
-                    dpi=300,
-                )
-                plt.close()
+            out_path = os.path.join(loss_curve_plot_dir, f"train_loss_fold{fold}.png")
+            plt.savefig(out_path, dpi=300)
+            plt.close()
+        print(f"[+] Plotted loss curves for version {version}")
+
+
+def summarize_losses(result_root):
+    versions = sorted(d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d)))
+
+    summary = []
+    for version in versions:
+        stats_path = os.path.join(result_root, version, "training_stats.npy")
+        if not os.path.exists(stats_path):
+            continue
+
+        stats = np.load(stats_path, allow_pickle=True).tolist()
+        all_ce = np.array([e["train_loss_ce"] for e in stats])
+        all_smooth = np.array([e["train_loss_smooth"] for e in stats])
+
+        mean_ce = all_ce.mean()
+        mean_smooth = all_smooth.mean()
+        ratio = mean_ce / mean_smooth if mean_smooth != 0 else np.nan
+
+        summary.append(
+            {
+                "Version": version,
+                "Mean CE Loss": mean_ce,
+                "Mean Smooth Loss": mean_smooth,
+                "CE Ratio/Smooth": ratio,
+            }
+        )
+
+    print("\nQuantitative comparison of CE vs. Smooth loss by version:\n")
+    print(tabulate(summary, headers="keys", tablefmt="github", floatfmt=".4f"))
+
+
+if __name__ == "__main__":
+    # root directory containing per-version subdirectories
+    result_root = "results/smooth/DXI"
+
+    print("== Plotting loss curves ==")
+    plot_loss_curves(result_root)
+
+    print("\n== Summarizing CE vs. Smooth losses ==")
+    summarize_losses(result_root)

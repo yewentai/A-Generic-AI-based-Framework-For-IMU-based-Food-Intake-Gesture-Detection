@@ -61,8 +61,8 @@ if __name__ == "__main__":
         print("No data to plot.")
         exit(0)
 
-    # Use consistent colors for each version
-    colors = color_palette("husl", len(all_version_metrics))
+    # Use a color palette with higher contrast for better visibility
+    colors = color_palette("tab10", len(all_version_metrics))
     plt.figure(figsize=(10, 6))
 
     # Determine common threshold axis
@@ -70,13 +70,37 @@ if __name__ == "__main__":
     sample_version = next(iter(all_version_metrics))
     thresholds = [float(t) for t in all_version_metrics[sample_version].keys()]
 
-    markers = ["o", "s", "D", "^", "v", "<", ">", "p", "*", "h", "H", "+", "x", "X", "d"]  # List of markers
+    markers = [
+        "o",
+        "s",
+        "D",
+        "^",
+        "v",
+        "P",
+        "X",
+        "*",
+        "h",
+        "H",
+        "p",
+        "d",
+        "8",
+        ">",
+        "<",
+    ]  # List of more distinct markers
     for idx, (version, seg_dict) in enumerate(all_version_metrics.items()):
         means = [np.nanmean(seg_dict[str(t)]) for t in thresholds]
         stds = [np.nanstd(seg_dict[str(t)]) for t in thresholds]
         marker = markers[idx % len(markers)]  # Cycle through markers if more versions than markers
         plt.errorbar(
-            thresholds, means, yerr=stds, label=version, marker=marker, linewidth=1, alpha=0.8, color=colors[idx]
+            thresholds,
+            means,
+            yerr=stds,
+            label=version,
+            marker=marker,
+            markersize=3,
+            linewidth=0.75,
+            alpha=0.8,
+            color=colors[idx],
         )
 
     plt.xlabel("Segmentation Threshold")

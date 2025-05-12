@@ -87,13 +87,12 @@ WINDOW_SAMPLES = SAMPLING_FREQ * WINDOW_SECONDS
 BATCH_SIZE = 64
 NUM_WORKERS = 16
 
-# Model Configuration
-MODEL = "ResNetBiLSTM"  # Changed from ResNetMLP to ResNetBiLSTM
-INPUT_DIM = 3  # Only accelerometer data
-
 # Training Configuration
+FREEZE_ENCODER = False  # If True, freeze the encoder weights, only train the head
+MODEL = "ResNetBiLSTM_FTHead" if FREEZE_ENCODER else "ResNetBiLSTM_FTFull"
+INPUT_DIM = 3  # Only accelerometer data
 LEARNING_RATE = 5e-4
-LAMBDA_COEF = 0.15
+LAMBDA_COEF = 1
 if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
@@ -216,7 +215,11 @@ for fold, validate_subjects in enumerate(validate_folds):
 
     # Create the encoder with desired parameters
     encoder = ResNetEncoder(
-        weight_path=pretrained_ckpt, n_channels=INPUT_DIM, class_num=NUM_CLASSES, my_device=device, freeze_encoder=False
+        weight_path=pretrained_ckpt,
+        n_channels=INPUT_DIM,
+        class_num=NUM_CLASSES,
+        my_device=device,
+        freeze_encoder=FREEZE_ENCODER,
     ).to(device)
     feature_dim = encoder.out_features
 
