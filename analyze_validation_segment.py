@@ -70,10 +70,14 @@ if __name__ == "__main__":
     sample_version = next(iter(all_version_metrics))
     thresholds = [float(t) for t in all_version_metrics[sample_version].keys()]
 
+    markers = ["o", "s", "D", "^", "v", "<", ">", "p", "*", "h", "H", "+", "x", "X", "d"]  # List of markers
     for idx, (version, seg_dict) in enumerate(all_version_metrics.items()):
         means = [np.nanmean(seg_dict[str(t)]) for t in thresholds]
         stds = [np.nanstd(seg_dict[str(t)]) for t in thresholds]
-        plt.errorbar(thresholds, means, yerr=stds, label=version, marker="o", linewidth=1, alpha=0.8, color=colors[idx])
+        marker = markers[idx % len(markers)]  # Cycle through markers if more versions than markers
+        plt.errorbar(
+            thresholds, means, yerr=stds, label=version, marker=marker, linewidth=1, alpha=0.8, color=colors[idx]
+        )
 
     plt.xlabel("Segmentation Threshold")
     plt.ylabel("Weighted F1 Score")
