@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=16                  # Number of CPU tasks (or processes) to run per node (Maximum 72 cores)
 #SBATCH --gpus-per-node=2                     # Number of GPUs to request per node (Maximum 4 GPUs)
 #SBATCH --partition=gpu_h100                  # Partition to use (H100 GPUs)
-#SBATCH --time=24:00:00                        # Maximum wall time (Maximum 3 days)
+#SBATCH --time=01:40:00                        # Maximum wall time (Maximum 3 days)
 #SBATCH --output=logs_hpc/ddp_train_%j.out        # Standard output and error log file (%j is the job ID)
 
 # Load Miniconda
@@ -25,7 +25,7 @@ export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1
 
 # Launch the training script with torchrun for DDP support
-for smoothing in MSE HUBER KL JS TV SEC_DIFF EMD SPECTRAL; do
+for smoothing in L1; do
     echo -e "\n--- Running with smoothing: $smoothing ---\n"
     torchrun --nproc_per_node=2 dl_train.py --distributed --smoothing $smoothing
 done

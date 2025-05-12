@@ -34,7 +34,7 @@ from components.models.resnet import ResNetEncoder
 from components.models.head import MLPClassifier, ResNetMLP
 from components.datasets import IMUDatasetN21
 from components.pre_processing import hand_mirroring, planar_rotation
-from components.models.head import SequenceLabelingHead, ResNetSeqLabeler
+from components.models.head import BiLSTMHead, ResNetBiLSTM
 
 # --- Configurations ---
 NUM_WORKERS = 4
@@ -47,7 +47,7 @@ DEBUG_PLOT = False
 if __name__ == "__main__":
     result_root = "results"
     versions = [
-        "DXI_ResNetSeqLabeler_3",
+        "DXI_ResNetBiLSTM_3",
     ]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
@@ -197,11 +197,11 @@ if __name__ == "__main__":
                 if model_name == "ResNetMLP":
                     classifier = MLPClassifier(feature_dim=feature_dim, num_classes=num_classes)
                     model = ResNetMLP(encoder, classifier).to(device)
-                elif model_name == "ResNetSeqLabeler":
-                    seq_labeler = SequenceLabelingHead(
+                elif model_name == "ResNetBiLSTM":
+                    seq_labeler = BiLSTMHead(
                         feature_dim=feature_dim, seq_length=window_size, num_classes=num_classes, hidden_dim=128
                     ).to(device)
-                    model = ResNetSeqLabeler(encoder, seq_labeler).to(device)
+                    model = ResNetBiLSTM(encoder, seq_labeler).to(device)
                 else:
                     logger.error(f"Invalid model: {model_name}")
                     continue

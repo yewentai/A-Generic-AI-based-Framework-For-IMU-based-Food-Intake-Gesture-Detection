@@ -172,7 +172,7 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = f"{DATASET}_{MODEL}_{SMOOTHING}"
+    version_prefix = f"{DATASET}_{MODEL}_S-{SMOOTHING}"
     if FLAG_AUGMENT_HAND_MIRRORING:
         version_prefix += "_AM"
     if FLAG_DATASET_AUGMENTATION:

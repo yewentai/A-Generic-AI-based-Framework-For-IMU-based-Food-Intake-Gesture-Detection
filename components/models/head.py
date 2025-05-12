@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 
-class SequenceLabelingHead(nn.Module):
+class BiLSTMHead(nn.Module):
     """
     A more flexible sequence labeling head that upsamples features to match the original
     sequence length, then applies per-frame classification.
@@ -11,7 +11,7 @@ class SequenceLabelingHead(nn.Module):
     """
 
     def __init__(self, feature_dim, seq_length, num_classes, hidden_dim=128):
-        super(SequenceLabelingHead, self).__init__()
+        super(BiLSTMHead, self).__init__()
         self.feature_dim = feature_dim
         self.seq_length = seq_length
         self.num_classes = num_classes
@@ -56,13 +56,13 @@ class SequenceLabelingHead(nn.Module):
         return logits
 
 
-class ResNetSeqLabeler(nn.Module):
+class ResNetBiLSTM(nn.Module):
     """
     Combines a ResNet encoder with a sequence labeling head for frame-level prediction.
     """
 
     def __init__(self, encoder, seq_labeler):
-        super(ResNetSeqLabeler, self).__init__()
+        super(ResNetBiLSTM, self).__init__()
         self.encoder = encoder
         self.seq_labeler = seq_labeler
 

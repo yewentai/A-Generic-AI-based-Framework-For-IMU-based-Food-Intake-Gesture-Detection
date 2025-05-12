@@ -26,7 +26,7 @@ from seaborn import color_palette
 if __name__ == "__main__":
     result_root = "results"
     versions = [
-        "DXI_ResNetSeqLabeler_3",
+        "DXI_ResNetBiLSTM_3",
     ]  # Uncomment to manually specify versions
     # versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 

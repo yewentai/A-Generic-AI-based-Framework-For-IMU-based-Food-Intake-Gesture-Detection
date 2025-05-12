@@ -35,7 +35,7 @@ from tqdm import tqdm
 
 from components.datasets import IMUDatasetN21, create_balanced_subject_folds, load_predefined_validate_folds
 from components.models.resnet import ResNetEncoder
-from components.models.head import SequenceLabelingHead, ResNetSeqLabeler
+from components.models.head import BiLSTMHead, ResNetBiLSTM
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.utils import loss_fn
@@ -94,7 +94,7 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 # Model Configuration
 # ----------------------------------------------------------------------------------------------
-MODEL = "ResNetSeqLabeler"  # Changed from ResNetMLP to ResNetSeqLabeler
+MODEL = "ResNetBiLSTM"  # Changed from ResNetMLP to ResNetBiLSTM
 INPUT_DIM = 3  # Only accelerometer data
 
 # ----------------------------------------------------------------------------------------------
@@ -236,12 +236,12 @@ for fold, validate_subjects in enumerate(validate_folds):
 
     # ---------------------- Build Sequence Labeling Model ----------------------
     # Create the sequence labeling head
-    seq_labeler = SequenceLabelingHead(
+    seq_labeler = BiLSTMHead(
         feature_dim=feature_dim, seq_length=WINDOW_SIZE, num_classes=NUM_CLASSES, hidden_dim=128
     ).to(device)
 
     # Create the full model
-    model = ResNetSeqLabeler(encoder, seq_labeler).to(device)
+    model = ResNetBiLSTM(encoder, seq_labeler).to(device)
 
     # Set up optimizer and loss function
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)

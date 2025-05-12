@@ -105,9 +105,27 @@ def rename_files(root):
                     print(f"Failed to rename file {old_file_path}: {e}")
 
 
+def remove_both_substring(root):
+    """
+    Traverse the directory tree under `root` and remove all occurrences
+    of 'BOTH_' within directory names.
+    """
+    for dirpath, dirnames, _ in os.walk(root, topdown=False):
+        for dirname in dirnames:
+            if "BOTH_" in dirname:
+                old_path = os.path.join(dirpath, dirname)
+                new_name = dirname.replace("BOTH_", "")
+                new_path = os.path.join(dirpath, new_name)
+                try:
+                    os.rename(old_path, new_path)
+                    print(f"Renamed directory: {old_path} to {new_path}")
+                except Exception as e:
+                    print(f"Failed to rename directory {old_path}: {e}")
+
+
 def main():
     # List the top-level directories to scan
-    parent_dirs = ["results"]
+    parent_dirs = ["result"]
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
@@ -115,6 +133,7 @@ def main():
             # remove_empty_subdirs(parent)
             # remove_specified_files(parent)
             # rename_files(parent)
+            remove_both_substring(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
 
