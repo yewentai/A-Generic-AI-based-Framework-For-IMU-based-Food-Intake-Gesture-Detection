@@ -6,7 +6,7 @@ IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with Sequence Labeling
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script loads a pre-trained ResNet encoder (via the harnet10
               framework and load_weights function) and attaches a sequence
               labeling head for fine-tuning on a downstream sequence labeling
@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 
 # Dataset Configuration
 DATASET = "DXI"
+SELECTED_CHANNELS = [0, 1, 2]
 if DATASET.startswith("DX"):
     SAMPLING_FREQ_ORIGINAL = 64
     DOWNSAMPLE_FACTOR = Fraction(32, 15)
@@ -88,7 +89,7 @@ BATCH_SIZE = 64
 NUM_WORKERS = 16
 
 # Training Configuration
-FREEZE_ENCODER = False  # If True, freeze the encoder weights, only train the head
+FREEZE_ENCODER = True  # If True, freeze the encoder weights, only train the head
 MODEL = "ResNetBiLSTM_FTHead" if FREEZE_ENCODER else "ResNetBiLSTM_FTFull"
 INPUT_DIM = 3  # Only accelerometer data
 LEARNING_RATE = 5e-4
@@ -179,7 +180,7 @@ else:
         Y = np.array(pickle.load(f), dtype=object)
 
 dataset = IMUDataset(
-    X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=[0, 1, 2]
+    X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=SELECTED_CHANNELS
 )
 
 # Training loop over folds
@@ -288,6 +289,7 @@ if local_rank == 0:
         "num_classes": NUM_CLASSES,
         "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
         "downsample_factor": DOWNSAMPLE_FACTOR,
+        "selected_channels": SELECTED_CHANNELS,
         "sampling_freq": SAMPLING_FREQ,
         "window_seconds": WINDOW_SECONDS,
         "window_samples": WINDOW_SAMPLES,

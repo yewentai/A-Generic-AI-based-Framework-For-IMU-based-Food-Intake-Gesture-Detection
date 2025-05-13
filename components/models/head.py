@@ -1,3 +1,23 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+IMU BiLSTM Model Script
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-05-13
+Description : This script defines a BiLSTM model for processing IMU data. The model
+              consists of a feature projection layer, followed by a series of
+              bi-directional LSTM layers to capture temporal dependencies. The output
+              of the LSTM is then projected to the number of classes for per-frame
+              classification. This architecture is designed to handle sequence labeling
+              tasks, where each time step in the input sequence is associated with a
+              corresponding class label.
+===============================================================================
+"""
+
+
 import torch.nn as nn
 
 

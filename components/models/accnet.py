@@ -6,7 +6,7 @@ IMU AccNet Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script defines the AccNet model for processing accelerometer
               data from IMU sensors. AccNet is designed as a lightweight convolutional
               network that serves as an encoder to extract compact feature representations
@@ -27,66 +27,54 @@ class AccNet(nn.Module):
     def __init__(
         self,
         num_classes: int = 3,
-        input_channels: int = 6,
+        input_channels: int = 3,
         conv_filters: tuple = (32, 64, 128),
         kernel_size: int = 3,
         padding: int = 1,
         pool_kernel_size: int = 2,
-        adaptive_pool_output_size: int = 1,
     ):
         """
-        Initialize the configurable AccNet model.
-
-        Parameters:
-            num_classes (int): Number of output classes.
-            input_channels (int): Number of input channels.
-            conv_filters (tuple): Number of filters for each conv layer.
-            kernel_size (int): Convolutional kernel size (applied to all convs).
-            padding (int): Padding size for convolutional layers.
-            pool_kernel_size (int): Kernel size for max-pooling.
-            adaptive_pool_output_size (int): Output size for adaptive pooling.
+        Sequence-labeling AccNet with temporal upsampling:
+        Processes accelerometer sequences and outputs per-timestep logits
+        matching the original input length.
         """
         super(AccNet, self).__init__()
 
-        # Convolutional blocks
-        self.conv1 = nn.Conv1d(
-            in_channels=input_channels, out_channels=conv_filters[0], kernel_size=kernel_size, padding=padding
-        )
+        # Convolutional blocks with pooling
+        self.conv1 = nn.Conv1d(input_channels, conv_filters[0], kernel_size, padding=padding)
         self.bn1 = nn.BatchNorm1d(conv_filters[0])
-
-        self.conv2 = nn.Conv1d(
-            in_channels=conv_filters[0], out_channels=conv_filters[1], kernel_size=kernel_size, padding=padding
-        )
+        self.conv2 = nn.Conv1d(conv_filters[0], conv_filters[1], kernel_size, padding=padding)
         self.bn2 = nn.BatchNorm1d(conv_filters[1])
-
-        self.conv3 = nn.Conv1d(
-            in_channels=conv_filters[1], out_channels=conv_filters[2], kernel_size=kernel_size, padding=padding
-        )
+        self.conv3 = nn.Conv1d(conv_filters[1], conv_filters[2], kernel_size, padding=padding)
         self.bn3 = nn.BatchNorm1d(conv_filters[2])
 
-        # Pooling layers
         self.pool = nn.MaxPool1d(kernel_size=pool_kernel_size)
-        self.adaptive_pool = nn.AdaptiveAvgPool1d(adaptive_pool_output_size)
 
-        # Fully connected classification layer
-        self.fc = nn.Linear(conv_filters[2], num_classes)
+        # 1x1 convolution to map features to class logits
+        self.classifier = nn.Conv1d(conv_filters[2], num_classes, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass for the AccNet model.
-
         Args:
-            x (torch.Tensor): Input of shape (B, input_channels, sequence_length).
-
+            x: Tensor of shape (B, input_channels, seq_len)
         Returns:
-            torch.Tensor: Logits tensor of shape (B, num_classes).
+            out: Tensor of shape (B, num_classes, seq_len)
         """
-        x = self.pool(F.relu(self.bn1(self.conv1(x))))  # -> (B, conv_filters[0], L/2)
-        x = self.pool(F.relu(self.bn2(self.conv2(x))))  # -> (B, conv_filters[1], L/4)
-        x = self.pool(F.relu(self.bn3(self.conv3(x))))  # -> (B, conv_filters[2], L/8)
+        # Preserve original length
+        original_len = x.size(2)
 
-        x = self.adaptive_pool(x)  # -> (B, conv_filters[2], 1)
-        x = x.squeeze(-1)  # -> (B, conv_filters[2])
+        # Conv + pool stages
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.pool(x)  # length -> L/2
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.pool(x)  # length -> L/4
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = self.pool(x)  # length -> L/8
 
-        x = self.fc(x)  # -> (B, num_classes)
-        return x
+        # Map to class logits at reduced resolution
+        out = self.classifier(x)  # -> (B, num_classes, L/8)
+
+        # Upsample logits back to original temporal resolution
+        out = F.interpolate(out, size=original_len, mode="linear", align_corners=False)
+
+        return out

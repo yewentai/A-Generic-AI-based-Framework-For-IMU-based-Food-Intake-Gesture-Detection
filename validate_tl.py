@@ -6,7 +6,7 @@ IMU Fine-Tuned Classifier Validation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script validates a fine-tuned IMU classifier by recreating
               the exact model architecture used during fine-tuning, loading
               the saved state dictionary, and evaluating the model on a test
@@ -77,6 +77,7 @@ if __name__ == "__main__":
         model_name = config_info["model"]
         input_dim = config_info["input_dim"]
         downsample_factor = config_info["downsample_factor"]
+        selected_channels = config_info["selected_channels"]
         sampling_freq = config_info["sampling_freq"]
         window_samples = config_info["window_samples"]
         batch_size = config_info["batch_size"]
@@ -177,7 +178,11 @@ if __name__ == "__main__":
             logger.info(f"\n--- Validating {mode['name']} ---")
 
             dataset = IMUDataset(
-                mode["X"], mode["Y"], sequence_length=window_samples, downsample_factor=downsample_factor
+                mode["X"],
+                mode["Y"],
+                sequence_length=window_samples,
+                downsample_factor=downsample_factor,
+                selected_channels=selected_channels,
             )
             mode_stats = []
 

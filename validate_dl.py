@@ -32,6 +32,7 @@ from torch.utils.data import DataLoader, Subset
 # Local imports
 from components.models.tcn import TCN, MSTCN
 from components.models.cnnlstm import CNNLSTM
+from components.models.accnet import AccNet
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
@@ -46,8 +47,8 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/smooth/DXI_normalized"
-    # versions = ["DXI_BOTH_MSTCN_HUBER"]  # Uncomment to manually specify versions
+    result_root = "results/DXI"
+    # versions = ["DXI_MSTCN", "DXI_MSTCN_AM"]  # Uncomment to manually specify versions
     versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -76,6 +77,7 @@ if __name__ == "__main__":
         model_name = config_info["model"]
         input_dim = config_info["input_dim"]
         downsample_factor = config_info["downsample_factor"]
+        selected_channels = config_info["selected_channels"]
         sampling_freq = config_info["sampling_freq"]
         window_samples = config_info["window_samples"]
         batch_size = config_info["batch_size"]
@@ -173,7 +175,11 @@ if __name__ == "__main__":
             logger.info(f"\n--- Validating {mode['name']} ---")
 
             dataset = IMUDataset(
-                mode["X"], mode["Y"], sequence_length=window_samples, downsample_factor=downsample_factor
+                mode["X"],
+                mode["Y"],
+                sequence_length=window_samples,
+                downsample_factor=downsample_factor,
+                selected_channels=selected_channels,
             )
             mode_stats = []
 
@@ -209,6 +215,13 @@ if __name__ == "__main__":
                         lstm_hidden=config_info["lstm_hidden"],
                         num_classes=num_classes,
                     ).to(device)
+                elif model_name == "AccNet":
+                    model = AccNet(
+                        num_classes=num_classes,
+                        input_channels=input_dim,
+                        conv_filters=config_info["conv_filters"],
+                        kernel_size=config_info["kernel_size"],
+                    ).to(device)
                 else:
                     logger.error(f"Invalid model: {model_name}")
                     continue
@@ -235,7 +248,7 @@ if __name__ == "__main__":
                     for batch_x, batch_y in tqdm(validate_loader, desc=f"Fold {fold+1}", leave=False):
                         # [B, L, C_in] → [B, C_in, L]
                         batch_x = batch_x.permute(0, 2, 1).to(device)
-                        # forward pass: now returns List[Tensor] for MSTCN
+                        batch_y = batch_y.to(device)
                         outputs_list = model(batch_x)
                         # pick the last stage's logits
                         if isinstance(outputs_list, list):

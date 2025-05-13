@@ -6,7 +6,7 @@ Project Directory Cleanup Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script recursively scans target project directories to:
               - Remove empty subdirectories
               - Delete all 'analysis' folders and their contents
@@ -19,6 +19,7 @@ Description : This script recursively scans target project directories to:
 
 
 import os
+import json
 
 
 def remove_empty_subdirs(root):
@@ -115,17 +116,58 @@ def remove_both_substring(root):
                     print(f"Failed to rename directory {old_path}: {e}")
 
 
+def update_training_configs(root):
+    """
+    Traverse the directory tree under `root` and ensure every training_config.json
+    has a 'selected_channels' field. Models in CNN_LSTM, TCN, MSTCN get channels [0-5].
+    Models in AccNet, ResNetBiLSTM get channels [0-2].
+    """
+    for dirpath, _, filenames in os.walk(root):
+        if "training_config.json" in filenames:
+            file_path = os.path.join(dirpath, "training_config.json")
+            try:
+                with open(file_path, "r") as f:
+                    cfg = json.load(f)
+            except Exception as e:
+                print(f"Failed to load {file_path}: {e}")
+                continue
+
+            if "selected_channels" not in cfg:
+                model_name = cfg.get("model", os.path.basename(dirpath))
+                # Determine channels based on model category
+                if any(key in model_name for key in ["CNN_LSTM", "TCN", "MSTCN"]):
+                    cfg["selected_channels"] = list(range(6))
+                elif any(
+                    key in model_name
+                    for key in ["AccNet", "ResNetBiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]
+                ):
+                    cfg["selected_channels"] = list(range(3))
+                else:
+                    # Unknown model type; skip
+                    continue
+
+                # Write updated config back
+                try:
+                    with open(file_path, "w") as f:
+                        json.dump(cfg, f, indent=4)
+                    print(f"Updated selected_channels in {file_path}")
+                except Exception as e:
+                    print(f"Failed to write {file_path}: {e}")
+
+
 def main():
     # List the top-level directories to scan
     parent_dirs = ["results"]
     for parent in parent_dirs:
         if os.path.exists(parent):
             print(f"Scanning directory: {parent}")
+            # Uncomment the operations you want to perform:
             # remove_analysis_folders(parent)
             # remove_empty_subdirs(parent)
             # remove_specified_files(parent)
-            rename_files(parent)
+            # rename_files(parent)
             # remove_both_substring(parent)
+            update_training_configs(parent)
         else:
             print(f"Directory '{parent}' does not exist.")
 

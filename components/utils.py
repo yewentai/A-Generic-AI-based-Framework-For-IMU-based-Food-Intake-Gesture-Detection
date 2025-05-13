@@ -4,10 +4,10 @@ Loss Functions and Temporal Smoothing Utilities
 ------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script provides utility functions for computing temporal smoothing losses
               for sequence models such as MSTCN. It supports various smoothing strategies
-              (e.g., MSE, L1, Huber, KL, JS, TV, etc.) and includes a deep-supervised loss
+              (e.g., MSE, L1, Huber, JS, TV, etc.) and includes a deep-supervised loss
               wrapper for multi-stage predictions. These functions are designed to enhance
               model performance by penalizing abrupt temporal changes in predictions.
 ================================================================================================
@@ -17,14 +17,14 @@ import torch
 import torch.nn.functional as F
 
 
-def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
+def loss_fn(outputs, targets, smoothing="L1", max_diff=16.0):
     """
     Compute loss: cross-entropy + various temporal smoothing penalties.
 
     Args:
         outputs (Tensor): logits of shape [B, C, L].
         targets (Tensor): labels of shape [B, L], long, with ignore_index=-100.
-        smoothing (str): one of ['MSE','L1','HUBER','KL','JS','TV','SEC_DIFF','EMD'].
+        smoothing (str): one of ['MSE','L1','HUBER','JS','TV','SEC_DIFF','EMD'].
         max_diff (float): clamp threshold for log-prob differences (only for diff-based).
     Returns:
         ce_loss (Tensor): the CrossEntropyLoss.
@@ -50,21 +50,16 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
     # Select smoothing
     if smoothing == "MSE":
         smooth_loss = diff.clamp(-max_diff, max_diff).pow(2).mean()
-        coefficient = 0.27
+        coefficient = 0.5
 
     elif smoothing == "L1":
         smooth_loss = diff.clamp(-max_diff, max_diff).abs().mean()
-        coefficient = 0.21
+        coefficient = 0.3
 
     elif smoothing == "HUBER":
         # smooth_l1: L2 for small, L1 for large
         smooth_loss = F.smooth_l1_loss(log_next, log_prev, reduction="mean")
-        coefficient = 0.48
-
-    elif smoothing == "KL":
-        # KL( P_{t+1} || P_t )
-        smooth_loss = F.kl_div(log_next, log_prev.exp(), reduction="batchmean")
-        coefficient = 0.52
+        coefficient = 0.5
 
     elif smoothing == "JS":
         # Jensen–Shannon divergence
@@ -76,19 +71,19 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
             F.kl_div(log_next, m.detach(), reduction="batchmean")
             + F.kl_div(log_prev, m.detach(), reduction="batchmean")
         )
-        coefficient = 0.59
+        coefficient = 1.0
 
     elif smoothing == "TV":
         # Total Variation: sum over classes, mean over batch+time
         smooth_loss = diff.abs().sum(dim=1).mean()
-        coefficient = 0.19
+        coefficient = 0.2
 
     elif smoothing == "SEC_DIFF":
         # Second‐order difference: penalize change of slope
         d1 = diff  # [B,C,L-1]
         d2 = d1[:, :, 1:] - d1[:, :, :-1]  # [B,C,L-2]
         smooth_loss = d2.pow(2).mean()
-        coefficient = 0.32
+        coefficient = 0.5
 
     elif smoothing == "EMD":
         # 1D EMD via L1 of CDF differences
@@ -97,7 +92,7 @@ def loss_fn(outputs, targets, smoothing="MSE", max_diff=16.0):
         cdf_next = torch.cumsum(p_next, dim=1)
         cdf_prev = torch.cumsum(p_prev, dim=1)
         smooth_loss = (cdf_next - cdf_prev).abs().mean()
-        coefficient = 9.0
+        coefficient = 15.0
 
     else:
         raise ValueError(f"Unknown smoothing type '{smoothing}'")

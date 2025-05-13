@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -40,8 +40,7 @@ from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM
 from components.models.tcn import TCN, MSTCN
 from components.models.accnet import AccNet
-from components.models.resnet import ResNetEncoder
-from components.models.head import BiLSTMHead, ResNetBiLSTM
+from components.models.resnet_bilstm import ResNetEncoder, BiLSTMHead, ResNetBiLSTM
 from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
@@ -101,9 +100,10 @@ NUM_WORKERS = 16
 # ----------------------------------------------------------------------------------------------
 # Model Configuration
 # ----------------------------------------------------------------------------------------------
-MODEL = "MSTCN"  # Options: CNN_LSTM, TCN, MSTCN, AccNet, ResNetBiLSTM
-if MODEL in ["TCN", "MSTCN"]:
+MODEL = "TCN"  # Options: CNN_LSTM, TCN, MSTCN, AccNet, ResNetBiLSTM
+if MODEL in ["TCN", "MSTCN", "AccNet"]:
     KERNEL_SIZE = 3
+if MODEL in ["TCN", "MSTCN"]:
     NUM_LAYERS = 9
     NUM_FILTERS = 128
     DROPOUT = 0.3
@@ -124,12 +124,17 @@ elif MODEL in ["AccNet", "ResNetBiLSTM"]:
 else:
     raise ValueError(f"Invalid model: {MODEL}")
 
+if MODEL in ["AccNet", "ResNetBiLSTM"]:
+    SELECTED_CHANNELS = [0, 1, 2]  # Only use accelerometer data for these models
+else:
+    SELECTED_CHANNELS = [0, 1, 2, 3, 4, 5]
+
 
 # ----------------------------------------------------------------------------------------------
 # Training Configuration
 # ----------------------------------------------------------------------------------------------
 LEARNING_RATE = 5e-4
-LAMBDA_COEF = 1
+LAMBDA_COEF = 0.2
 if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
@@ -172,7 +177,7 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = f"{DATASET}_{MODEL}_S-{SMOOTHING}"
+    version_prefix = f"{DATASET}_{MODEL}"
     if FLAG_DATASET_MIRRORING:
         version_prefix += "_DM"
     if FLAG_AUGMENT_HAND_MIRRORING:
@@ -184,7 +189,7 @@ if local_rank == 0:
     if FLAG_AUGMENT_SPATIAL_ORIENTATION:
         version_prefix += "_AS"
 
-    result_dir = os.path.join(f"results/smooth/{DATASET}_normalized", version_prefix)
+    result_dir = os.path.join(f"results", version_prefix)
     postfix = 1
     original_result_dir = result_dir
     while os.path.exists(result_dir):
@@ -214,12 +219,10 @@ if FLAG_DATASET_MIRRORING:
 # Combine left and right data into a unified dataset
 X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
 Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
-if MODEL in ["AccNet", "ResNetBiLSTM"]:
-    dataset = IMUDataset(
-        X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=Fraction(32, 15), selected_channels=[0, 1, 2]
-    )
-else:
-    dataset = IMUDataset(X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR)
+dataset = IMUDataset(
+    X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=Fraction(32, 15), selected_channels=SELECTED_CHANNELS
+)
+
 
 # ----------------------------------------------------------------------------------------------
 # Training loop over folds
@@ -248,7 +251,7 @@ for fold, validate_subjects in enumerate(validate_folds):
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
-    if MODEL in ["TCN", "MSTCN", "CNN_LSTM"]:
+    if MODEL in ["TCN", "MSTCN", "CNN_LSTM", "AccNet"]:
         model = {"TCN": TCN, "MSTCN": MSTCN, "CNN_LSTM": CNNLSTM, "AccNet": AccNet}[MODEL](
             **(
                 {
@@ -290,24 +293,24 @@ for fold, validate_subjects in enumerate(validate_folds):
             )
         ).to(device)
     elif MODEL == "ResNetBiLSTM":
-        # 1) build encoder (random init or from checkpoint)
         encoder = ResNetEncoder(
-            weight_path=None,
-            n_channels=INPUT_DIM,
-            class_num=NUM_CLASSES,
-            my_device=device,
-            freeze_encoder=False,
+            in_channels=INPUT_DIM,
         ).to(device)
 
-        # 2) build sequence-labeling head
+        # figure out the encoder's actual output size
+        with torch.no_grad():
+            dummy = torch.zeros(1, INPUT_DIM, WINDOW_SAMPLES, device=device)
+            flat_feats = encoder(dummy)
+            feature_dim = flat_feats.shape[1]  # e.g. 4096
+
+        # now build the head with the correct feature_dim
         seq_head = BiLSTMHead(
-            feature_dim=encoder.out_features,  # e.g. 1024
+            feature_dim=feature_dim,
             seq_length=WINDOW_SAMPLES,
             num_classes=NUM_CLASSES,
             hidden_dim=LSTM_HIDDEN,
         ).to(device)
 
-        # 3) combine into the full model
         model = ResNetBiLSTM(encoder, seq_head).to(device)
     else:
         raise ValueError(f"Invalid model: {MODEL}")
@@ -378,10 +381,6 @@ for fold, validate_subjects in enumerate(validate_folds):
                 "train_loss_smooth": training_loss_smooth / len(train_loader),
             }
             training_statistics.append(stats)
-            if epoch % 5 == 0:
-                logger.info(
-                    f"[Rank {local_rank}] Epoch {epoch+1}/{NUM_EPOCHS} - Loss: {avg_loss:.4f}, CE: {training_loss_ce / len(train_loader):.4f}, smooth: {training_loss_smooth / len(train_loader):.4f}"
-                )
 
 # ==============================================================================================
 #                                   Save final results
@@ -399,6 +398,7 @@ if local_rank == 0:
         "num_classes": NUM_CLASSES,
         "sampling_freq_original": SAMPLING_FREQ_ORIGINAL,
         "downsample_factor": DOWNSAMPLE_FACTOR,
+        "selected_channels": SELECTED_CHANNELS,
         "sampling_freq": SAMPLING_FREQ,
         "data_dir": DATA_DIR,
         # Dataloader Settings
@@ -422,31 +422,19 @@ if local_rank == 0:
         "augmentation_spatial_orientation": FLAG_AUGMENT_SPATIAL_ORIENTATION,
         "dataset_mirroring": FLAG_DATASET_MIRRORING,
         # Model-specific parameters
-        **({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN} if MODEL == "CNN_LSTM" else {}),
-        **(
-            {
-                "num_layers": NUM_LAYERS,
-                "num_filters": NUM_FILTERS,
-                "kernel_size": KERNEL_SIZE,
-                "dropout": DROPOUT,
-                "causal": CAUSAL,
-            }
-            if MODEL in ["TCN", "MSTCN"]
-            else {}
-        ),
-        **({"num_stages": NUM_STAGES} if MODEL == "MSTCN" else {}),
+        "conv_filters": CONV_FILTERS if MODEL in ["CNN_LSTM", "AccNet"] else None,
+        "lstm_hidden": LSTM_HIDDEN if MODEL in ["CNN_LSTM", "ResNetBiLSTM"] else None,
+        "num_layers": NUM_LAYERS if MODEL in ["TCN", "MSTCN"] else None,
+        "num_filters": NUM_FILTERS if MODEL in ["TCN", "MSTCN"] else None,
+        "kernel_size": KERNEL_SIZE if MODEL in ["TCN", "MSTCN", "AccNet"] else None,
+        "dropout": DROPOUT if MODEL in ["TCN", "MSTCN"] else None,
+        "causal": CAUSAL if MODEL in ["TCN", "MSTCN"] else None,
+        "num_stages": NUM_STAGES if MODEL == "MSTCN" else None,
+        "hidden_dim": LSTM_HIDDEN if MODEL == "ResNetBiLSTM" else None,
+        "seq_length": WINDOW_SAMPLES if MODEL == "ResNetBiLSTM" else None,
         # Validation configuration
         "validate_folds": validate_folds,
     }
-
-    if MODEL == "CNN_LSTM":
-        config_info.update({"conv_filters": CONV_FILTERS, "lstm_hidden": LSTM_HIDDEN})
-    elif MODEL in ["TCN", "MSTCN"]:
-        config_info.update(
-            {"num_layers": NUM_LAYERS, "num_filters": NUM_FILTERS, "kernel_size": KERNEL_SIZE, "dropout": DROPOUT}
-        )
-        if MODEL == "MSTCN":
-            config_info["num_stages"] = NUM_STAGES
 
     config_file = os.path.join(result_dir, "training_config.json")
     with open(config_file, "w") as f:
