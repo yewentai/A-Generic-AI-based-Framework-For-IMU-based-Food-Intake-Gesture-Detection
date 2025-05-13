@@ -1,0 +1,6 @@
+{
+    "dataset": "DXI",
+    "hand_separation": true,
+    "num_classes": 2,
+    "sampling_freq_original": 64,
+    "downsample_factor": 

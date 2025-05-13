@@ -31,10 +31,9 @@ from torch.utils.data import DataLoader, Subset
 
 # Local imports
 from components.models.resnet import ResNetEncoder
-from components.models.head import MLPClassifier, ResNetMLP
+from components.models.head import BiLSTMHead, ResNetBiLSTM
 from components.datasets import IMUDataset
 from components.pre_processing import hand_mirroring, planar_rotation
-from components.models.head import BiLSTMHead, ResNetBiLSTM
 
 # --- Configurations ---
 NUM_WORKERS = 4
@@ -81,23 +80,11 @@ if __name__ == "__main__":
         sampling_freq = config_info["sampling_freq"]
         window_samples = config_info["window_samples"]
         batch_size = config_info["batch_size"]
-        flag_augment_hand_mirroringing = config_info.get("augmentation_hand_mirroring", False)
-        flag_dataset_mirroring = config_info.get("dataset_mirroring", False)
-        flag_dataset_mirroring_add = config_info.get("dataset_mirroring_add", False)
         validate_folds = config_info.get("validate_folds")
-        rotation_enabled = config_info.get("augmentation_planar_rotation", False)
-        hand_separation = config_info.get("hand_separation", False)
-        if flag_augment_hand_mirroringing or flag_dataset_mirroring or flag_dataset_mirroring_add:
-            mirroring_enabled = True
-        else:
-            mirroring_enabled = False
 
         # Set up device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"\nUsing device: {device}")
-
-        # Load pretrained model
-        pretrained_ckpt = "mtl_best.mdl"
 
         # Set up dataset directory
         if validate_dataset.startswith("DX"):
@@ -112,66 +99,24 @@ if __name__ == "__main__":
             logger.error(f"Invalid dataset: {validate_dataset}")
             continue
 
+        # Load pretrained model
+        pretrained_ckpt = "mtl_best.mdl"
+
         # Load dataset
         validation_modes = []
-        if hand_separation:
-            X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
-            Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
-            X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
-            Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
-            X = np.array([np.concatenate([X_L[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object)
-            Y = np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object)
-            validation_modes.extend(
-                [
-                    {"name": "original", "X": X, "Y": Y},
-                    {"name": "left", "X": X_L, "Y": Y_L},
-                    {"name": "right", "X": X_R, "Y": Y_R},
-                ]
-            )
-
-            if mirroring_enabled:
-                X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-                validation_modes.append(
-                    {
-                        "name": "mirrored_left_original_right",
-                        "X": np.array(
-                            [np.concatenate([X_L_mirrored[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object
-                        ),
-                        "Y": np.array(
-                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
-                        ),
-                    }
-                )
-
-            if rotation_enabled:
-                # Apply rotation to 50% of samples
-                random_indices = np.random.choice(len(X_L), size=int(len(X_L) * 0.5), replace=False)
-                X_L_rotated = np.copy(X_L)
-                X_R_rotated = np.copy(X_R)
-                for i in random_indices:
-                    X_L_rotated[i], Y_L[i] = planar_rotation(X_L[i], Y_L[i])
-                    X_R_rotated[i], Y_R[i] = planar_rotation(X_R[i], Y_R[i])
-
-                X_L_rotated_mirrored = np.array([hand_mirroring(sample) for sample in X_L_rotated], dtype=object)
-                validation_modes.append(
-                    {
-                        "name": "rotated_mirrored_left_original_right",
-                        "X": np.array(
-                            [
-                                np.concatenate([X_L_rotated_mirrored[i], X_R_rotated[i]], axis=0)
-                                for i in range(len(X_L))
-                            ],
-                            dtype=object,
-                        ),
-                        "Y": np.array(
-                            [np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object
-                        ),
-                    }
-                )
-        else:
-            X = np.array(pickle.load(open(os.path.join(DATA_DIR, "X.pkl"), "rb")), dtype=object)
-            Y = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y.pkl"), "rb")), dtype=object)
-            validation_modes.append({"name": "original", "X": X, "Y": Y})
+        X_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_L.pkl"), "rb")), dtype=object)
+        Y_L = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb")), dtype=object)
+        X_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "X_R.pkl"), "rb")), dtype=object)
+        Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
+        X = np.array([np.concatenate([X_L[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object)
+        Y = np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object)
+        validation_modes.append(
+            {
+                "name": "original",
+                "X": X,
+                "Y": Y,
+            }
+        )
 
         all_stats = {}
         for mode in validation_modes:
@@ -199,10 +144,7 @@ if __name__ == "__main__":
                     freeze_encoder=True,
                 ).to(device)
                 feature_dim = encoder.out_features
-                if model_name == "ResNetMLP":
-                    classifier = MLPClassifier(feature_dim=feature_dim, num_classes=num_classes)
-                    model = ResNetMLP(encoder, classifier).to(device)
-                elif model_name == "ResNetBiLSTM":
+                if model_name == "ResNetBiLSTM":
                     seq_labeler = BiLSTMHead(
                         feature_dim=feature_dim, seq_length=window_samples, num_classes=num_classes, hidden_dim=128
                     ).to(device)
