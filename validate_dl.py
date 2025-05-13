@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original, left, and right hand-based validation modes
               2. Optional data augmentation: hand mirroring and planar rotation
@@ -46,7 +46,7 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/smooth"
+    result_root = "results/smooth/DXI_normalized"
     # versions = ["DXI_BOTH_MSTCN_HUBER"]  # Uncomment to manually specify versions
     versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
@@ -312,8 +312,8 @@ if __name__ == "__main__":
             all_stats[mode["name"]] = mode_stats
 
         # Save all statistics
-        stats_file_npy = os.path.join(result_dir, f"validation_stats_{validate_dataset.lower()}.npy")
-        stats_file_json = os.path.join(result_dir, f"validation_stats_{validate_dataset.lower()}.json")
+        stats_file_npy = os.path.join(result_dir, "validation_stats.npy")
+        stats_file_json = os.path.join(result_dir, "validation_stats.json")
         np.save(stats_file_npy, all_stats)
         with open(stats_file_json, "w") as f_json:
             json.dump(all_stats, f_json, indent=4)

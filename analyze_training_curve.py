@@ -6,7 +6,7 @@ IMU Training Loss Curve Plotter
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-13
 Description : This script plots fold-wise training loss curves (total, cross-entropy,
               and smooth losses) for a specified experiment version. It loads training
               statistics from a .npy file and generates log-scale plots for visual
@@ -106,7 +106,7 @@ def summarize_losses(result_root):
 
 if __name__ == "__main__":
     # root directory containing per-version subdirectories
-    result_root = "results/smooth/DXI"
+    result_root = "results/smooth/DXI_normalized"
 
     print("== Plotting loss curves ==")
     plot_loss_curves(result_root)
