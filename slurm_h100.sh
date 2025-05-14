@@ -25,7 +25,5 @@ export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1
 
 # Launch the training script with torchrun for DDP support
-for smoothing in L1; do
-    echo -e "\n--- Running with smoothing: $smoothing ---\n"
-    torchrun --nproc_per_node=2 dl_train.py --distributed --smoothing $smoothing
-done
+torchrun --nproc_per_node=2 train.py --distributed
+

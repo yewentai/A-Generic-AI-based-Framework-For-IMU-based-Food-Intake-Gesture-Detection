@@ -6,7 +6,7 @@ IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-13
+Edited      : 2025-05-14
 Description : Plot segment-wise F1 scores at different thresholds for all versions
 ===============================================================================
 """
@@ -19,7 +19,7 @@ from seaborn import color_palette
 
 if __name__ == "__main__":
     # List all versions to compare
-    result_root = "results/smooth/DXI_normalized"
+    result_root = "results/DXI"
     versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
     # Dictionary to collect segment-wise metrics per version

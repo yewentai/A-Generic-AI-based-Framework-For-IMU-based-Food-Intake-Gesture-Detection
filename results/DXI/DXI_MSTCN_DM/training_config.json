@@ -3,7 +3,7 @@
     "task": "binary",
     "num_classes": 2,
     "sampling_freq_original": 64,
-    "downsample_factor": 4,
+    "downsample_factor": 4.0,
     "selected_channels": [
         0,
         1,

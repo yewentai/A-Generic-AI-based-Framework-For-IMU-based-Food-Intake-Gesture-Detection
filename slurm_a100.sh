@@ -25,4 +25,4 @@ export NCCL_DEBUG=INFO
 export CUDA_LAUNCH_BLOCKING=1
 
 # Launch the training script with torchrun for DDP (Distributed Data Parallel) support
-torchrun dl_train.py --distributed
+torchrun train.py --distributed

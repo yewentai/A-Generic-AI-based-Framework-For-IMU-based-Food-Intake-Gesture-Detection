@@ -6,7 +6,7 @@ IMU ResNet Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-14
 Description : This module defines various components of a ResNet-based model
               architecture, including classifiers, projection heads, residual
               blocks, and downsampling layers. These components are designed
@@ -26,7 +26,7 @@ def load_weights(weight_path, model, my_device="cpu", name_start_idx=2, is_dist=
     # only need to change weights name when the
     # model is trained in a distributed manner
 
-    pretrained_dict = torch.load(weight_path, map_location=my_device)
+    pretrained_dict = torch.load(weight_path, map_location=my_device, weights_only=True)
     pretrained_dict_v2 = copy.deepcopy(pretrained_dict)  # v2 has the right para names
 
     if is_dist:

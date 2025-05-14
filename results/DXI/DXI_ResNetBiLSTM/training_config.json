@@ -3,21 +3,20 @@
     "task": "binary",
     "num_classes": 2,
     "sampling_freq_original": 64,
-    "downsample_factor": 4,
+    "downsample_factor": 2.1333333333333333,
     "selected_channels": [
         0,
         1,
         2
     ],
-    "sampling_freq": 16,
+    "sampling_freq": 30,
     "data_dir": "./dataset/DX/DX-I",
-    "window_seconds": 60,
-    "window_samples": 960,
+    "window_seconds": 10,
+    "window_samples": 300,
     "batch_size": 64,
     "num_workers": 16,
     "model": "ResNetBiLSTM",
     "input_dim": 3,
-    "lstm_hidden": 128,
     "smoothing": "L1",
     "lambda_coef": 0.2,
     "learning_rate": 0.0005,
@@ -28,6 +27,16 @@
     "augmentation_planar_rotation": false,
     "augmentation_spatial_orientation": false,
     "dataset_mirroring": false,
+    "conv_filters": null,
+    "lstm_hidden": 128,
+    "num_layers": null,
+    "num_filters": null,
+    "kernel_size": null,
+    "dropout": null,
+    "causal": null,
+    "num_stages": null,
+    "hidden_dim": 128,
+    "seq_length": 300,
     "validate_folds": [
         [
             0
@@ -44,13 +53,13 @@
         [
             7,
             8,
-            12
+            12,
+            4
         ],
         [
             10,
             2,
-            5,
-            4
+            5
         ]
     ]
 }

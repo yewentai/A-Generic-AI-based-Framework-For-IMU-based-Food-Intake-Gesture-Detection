@@ -49,8 +49,8 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/DXI"
-    versions = ["DXI_ResNetBiLSTM_FTFull", "DXI_ResNetBiLSTM_FTHead"]  # Uncomment to manually specify versions
+    result_root = "results/FDI"
+    versions = ["FDI_MSTCN_DM"]  # Uncomment to manually specify versions
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -84,10 +84,10 @@ if __name__ == "__main__":
         window_samples = config_info["window_samples"]
         batch_size = config_info["batch_size"]
         validate_folds = config_info.get("validate_folds")
-        mirroring_enabled = config_info.get("dataset_mirroring", False)
+        dataset_mirroring_enabled = config_info.get("dataset_mirroring", False)
         planar_rotation_enabled = config_info.get("augmentation_planar_rotation", False)
-        axis_permutation_enabled = config_info.get("axis_permutation", False)
-        spatial_orientation_enabled = config_info.get("spatial_orientation", False)
+        axis_permutation_enabled = config_info.get("augmentation_axis_permutation", False)
+        spatial_orientation_enabled = config_info.get("augmentation_spatial_orientation", False)
 
         # Set up device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -124,11 +124,11 @@ if __name__ == "__main__":
                 "Y": Y,
             }
         )
-        if mirroring_enabled:
+        if dataset_mirroring_enabled:
             X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
             validation_modes.append(
                 {
-                    "name": "mirrored_left_original_right",
+                    "name": "hand_mirrored",
                     "X": np.array(
                         [np.concatenate([X_L_mirrored[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object
                     ),
