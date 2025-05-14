@@ -49,9 +49,9 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/FDI"
-    versions = ["FDI_MSTCN_DM"]  # Uncomment to manually specify versions
-    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    result_root = "results/new"
+    # versions = ["FDI_MSTCN_DM"]  # Uncomment to manually specify versions
+    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
@@ -288,11 +288,10 @@ if __name__ == "__main__":
                         batch_x = batch_x.permute(0, 2, 1).to(device)
                         batch_y = batch_y.to(device)
                         outputs_list = model(batch_x)
-                        # pick the last stage's logits
-                        if isinstance(outputs_list, list):
-                            logits = outputs_list[-1]  # -> [B, num_classes, L]
+                        if isinstance(outputs_list, torch.Tensor) and outputs_list.ndim == 4:
+                            logits = outputs_list[:, -1, :, :]  # [B, C, L]
                         else:
-                            logits = outputs_list  # for single-stage TCN
+                            logits = outputs_list  # Fallback for other models
                         # softmax + argmax over class-dim
                         probs = F.softmax(logits, dim=1)  # [B, C, L]
                         preds = torch.argmax(probs, dim=1)  # [B, L]

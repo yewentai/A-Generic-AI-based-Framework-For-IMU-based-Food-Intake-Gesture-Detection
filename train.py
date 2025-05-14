@@ -52,7 +52,7 @@ from components.models.accnet import AccNet
 from components.models.cnnlstm import CNNLSTM
 from components.models.resnet import ResNet
 from components.models.resnet_bilstm import BiLSTMHead, ResNetBiLSTM, ResNetCopy
-from components.models.tcn import MSTCN, TCN
+from components.models.tcn import TCN, MSTCN
 from components.pre_processing import hand_mirroring
 from components.utils import loss_fn
 
@@ -140,7 +140,7 @@ PRETRAINED_CKPT = "mtl_best.mdl" if os.path.exists("mtl_best.mdl") else None
 # ----------------------------------------------------------------------------------------------
 # Dataset and DatalLoader Configuration
 # ----------------------------------------------------------------------------------------------
-DATASET = "DXI"  # Options: "DXI", "DXII", "FDI", "FDII", "OREBA"
+DATASET = args.dataset  # Options: DXI, DXII, FDI, FDII, OREBA
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
     SAMPLING_FREQ_ORIGINAL = 64
@@ -153,7 +153,7 @@ elif DATASET.startswith("FD"):
     sub_version = DATASET.replace("FD", "").upper() or "I"
     DATA_DIR = f"./dataset/FD/FD-{sub_version}"
     TASK = "multiclass"
-elif DATASET.startswith("OREBA"):
+elif DATASET == "OREBA":
     SAMPLING_FREQ_ORIGINAL = 64
     NUM_CLASSES = 3
     DATA_DIR = "./dataset/Oreba"
@@ -187,8 +187,8 @@ SMOOTHING = args.smoothing
 if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
-    NUM_FOLDS = 5
-NUM_EPOCHS = 100
+    NUM_FOLDS = 4
+NUM_EPOCHS = 10
 
 # ----------------------------------------------------------------------------------------------
 # Augmentation Configuration
@@ -246,22 +246,31 @@ if local_rank == 0:
 # ----------------------------------------------------------------------------------------------
 # Load Dataset
 # ----------------------------------------------------------------------------------------------
+if DATASET == "OREBA":
+    # Load Oreba dataset
+    with open(os.path.join(DATA_DIR, "X.pkl"), "rb") as f:
+        X = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
+        Y = np.array(pickle.load(f), dtype=object)
+    dataset = IMUDataset(
+        X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=SELECTED_CHANNELS
+    )
+else:
+    with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
+        X_L = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
+        Y_L = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
+        X_R = np.array(pickle.load(f), dtype=object)
+    with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
+        Y_R = np.array(pickle.load(f), dtype=object)
 
-with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
-    X_L = np.array(pickle.load(f), dtype=object)
-with open(os.path.join(DATA_DIR, "Y_L.pkl"), "rb") as f:
-    Y_L = np.array(pickle.load(f), dtype=object)
-with open(os.path.join(DATA_DIR, "X_R.pkl"), "rb") as f:
-    X_R = np.array(pickle.load(f), dtype=object)
-with open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb") as f:
-    Y_R = np.array(pickle.load(f), dtype=object)
+    if FLAG_DATASET_MIRRORING:
+        X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
 
-if FLAG_DATASET_MIRRORING:
-    X_L = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
-
-# Combine left and right data into a unified dataset
-X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
-Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
+    # Combine left and right data into a unified dataset
+    X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
+    Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
 dataset = IMUDataset(
     X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=SELECTED_CHANNELS
 )
@@ -395,7 +404,7 @@ for fold, validate_subjects in enumerate(validate_folds):
             # Shape of batch_y: [batch_size, seq_len]
             # Optionally apply data augmentation
             if FLAG_AUGMENT_HAND_MIRRORING:
-                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y, 1, True)
+                batch_x, batch_y = augment_hand_mirroring(batch_x, batch_y, 0.5, True)
             if FLAG_AUGMENT_AXIS_PERMUTATION:
                 batch_x, batch_y = augment_axis_permutation(batch_x, batch_y, 0.5, True)
             if FLAG_AUGMENT_PLANAR_ROTATION:
@@ -405,7 +414,7 @@ for fold, validate_subjects in enumerate(validate_folds):
             # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
             # Shape of batch_x: [batch_size, channels, seq_len]
             batch_x = batch_x.permute(0, 2, 1).to(device)
-            batch_y = batch_y.long().to(device)
+            batch_y = batch_y.to(device)
 
             optimizer.zero_grad()
             outputs = model(batch_x)

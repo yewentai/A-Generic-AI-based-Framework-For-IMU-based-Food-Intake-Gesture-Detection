@@ -106,7 +106,7 @@ def summarize_losses(result_root):
 
 if __name__ == "__main__":
     # root directory containing per-version subdirectories
-    result_root = "results/smooth/DXI_normalized"
+    result_root = "results/DXI"
 
     print("== Plotting loss curves ==")
     plot_loss_curves(result_root)
