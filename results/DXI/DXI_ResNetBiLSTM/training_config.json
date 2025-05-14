@@ -17,6 +17,7 @@
     "num_workers": 16,
     "model": "ResNetBiLSTM",
     "input_dim": 3,
+    "lstm_hidden": 128,
     "smoothing": "L1",
     "lambda_coef": 0.2,
     "learning_rate": 0.0005,

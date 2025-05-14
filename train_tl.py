@@ -6,7 +6,7 @@ IMU Fine-Tuning Script Using Pre-Trained ResNet Encoder with Sequence Labeling
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-13
+Edited      : 2025-05-14
 Description : This script loads a pre-trained ResNet encoder (via the harnet10
               framework and load_weights function) and attaches a sequence
               labeling head for fine-tuning on a downstream sequence labeling
@@ -35,7 +35,7 @@ from tqdm import tqdm
 
 from components.datasets import IMUDataset, create_balanced_subject_folds, load_predefined_validate_folds
 from components.models.resnet import ResNetEncoder
-from components.models.head import BiLSTMHead, ResNetBiLSTM
+from components.models.resnet_bilstm import BiLSTMHead, ResNetBiLSTM
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
 from components.utils import loss_fn
@@ -251,11 +251,8 @@ for fold, validate_subjects in enumerate(validate_folds):
             optimizer.zero_grad()
             outputs = model(batch_x)  # → [B, L, num_classes]
 
-            # prepare for loss_fn
-            logits_t = outputs.permute(0, 2, 1)  # → [B, num_classes, L]
-
             # get CE + smoothing loss
-            ce_loss, smooth_loss = loss_fn(logits_t, batch_y, smoothing="MSE", max_diff=16.0)
+            ce_loss, smooth_loss = loss_fn(outputs, batch_y, smoothing="MSE", max_diff=16.0)
 
             loss = ce_loss + LAMBDA_COEF * smooth_loss
             loss.backward()

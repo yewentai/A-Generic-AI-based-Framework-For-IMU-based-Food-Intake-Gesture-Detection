@@ -6,7 +6,7 @@ IMU Fine-Tuned Classifier Validation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-13
+Edited      : 2025-05-14
 Description : This script validates a fine-tuned IMU classifier by recreating
               the exact model architecture used during fine-tuning, loading
               the saved state dictionary, and evaluating the model on a test
@@ -31,7 +31,7 @@ from torch.utils.data import DataLoader, Subset
 
 # Local imports
 from components.models.resnet import ResNetEncoder
-from components.models.head import BiLSTMHead, ResNetBiLSTM
+from components.models.resnet_bilstm import BiLSTMHead, ResNetBiLSTM
 from components.datasets import IMUDataset
 from components.pre_processing import hand_mirroring, planar_rotation
 

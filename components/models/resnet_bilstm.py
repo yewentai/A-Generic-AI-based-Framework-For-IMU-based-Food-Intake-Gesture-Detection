@@ -96,7 +96,7 @@ class ResNetFeatureExtractor(nn.Module):
         return self.layers(x)
 
 
-class ResNetEncoder(nn.Module):
+class ResNet(nn.Module):
     """
     Wraps a ResNetFeatureExtractor and returns flattened features.
     """
@@ -148,7 +148,7 @@ class ResNetBiLSTM(nn.Module):
     Combines ResNet encoder with BiLSTM head for end-to-end frame-level classification.
     """
 
-    def __init__(self, encoder: ResNetEncoder, head: BiLSTMHead):
+    def __init__(self, encoder, head):
         super().__init__()
         self.encoder = encoder
         self.head = head

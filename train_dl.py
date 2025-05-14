@@ -6,7 +6,7 @@ MSTCN IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-13
+Edited      : 2025-05-14
 Description : This script trains MSTCN models on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -40,7 +40,7 @@ from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM
 from components.models.tcn import TCN, MSTCN
 from components.models.accnet import AccNet
-from components.models.resnet_bilstm import ResNetEncoder, BiLSTMHead, ResNetBiLSTM
+from components.models.resnet_bilstm import ResNet, BiLSTMHead, ResNetBiLSTM
 from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
@@ -293,7 +293,7 @@ for fold, validate_subjects in enumerate(validate_folds):
             )
         ).to(device)
     elif MODEL == "ResNetBiLSTM":
-        encoder = ResNetEncoder(
+        encoder = ResNet(
             in_channels=INPUT_DIM,
         ).to(device)
 

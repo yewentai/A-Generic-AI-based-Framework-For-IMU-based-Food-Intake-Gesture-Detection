@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-05-13
+Edited      : 2025-05-14
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original, left, and right hand-based validation modes
               2. Optional data augmentation: hand mirroring and planar rotation
@@ -33,6 +33,8 @@ from torch.utils.data import DataLoader, Subset
 from components.models.tcn import TCN, MSTCN
 from components.models.cnnlstm import CNNLSTM
 from components.models.accnet import AccNet
+from components.models.resnet_bilstm import ResNet, BiLSTMHead, ResNetBiLSTM
+from components.models.resnet import ResNetEncoder
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
@@ -48,8 +50,8 @@ DEBUG_PLOT = False
 
 if __name__ == "__main__":
     result_root = "results/DXI"
-    # versions = ["DXI_MSTCN", "DXI_MSTCN_AM"]  # Uncomment to manually specify versions
-    versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
+    versions = ["DXI_ResNetBiLSTM_FTFull", "DXI_ResNetBiLSTM_FTHead"]  # Uncomment to manually specify versions
+    # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
     for version in versions:
@@ -103,6 +105,9 @@ if __name__ == "__main__":
         else:
             logger.error(f"Invalid dataset: {validate_dataset}")
             continue
+
+        # Load pretrained model
+        pretrained_ckpt = "mtl_best.mdl"
 
         # Load dataset
         validation_modes = []
@@ -222,6 +227,39 @@ if __name__ == "__main__":
                         conv_filters=config_info["conv_filters"],
                         kernel_size=config_info["kernel_size"],
                     ).to(device)
+                elif model_name == "ResNetBiLSTM":
+                    encoder = ResNet(
+                        in_channels=input_dim,
+                    ).to(device)
+
+                    # figure out the encoder's actual output size
+                    with torch.no_grad():
+                        dummy = torch.zeros(1, input_dim, window_samples, device=device)
+                        flat_feats = encoder(dummy)
+                        feature_dim = flat_feats.shape[1]  # e.g. 4096
+
+                    # now build the head with the correct feature_dim
+                    seq_head = BiLSTMHead(
+                        feature_dim=feature_dim,
+                        seq_length=window_samples,
+                        num_classes=num_classes,
+                        hidden_dim=config_info["lstm_hidden"],
+                    ).to(device)
+                    model = ResNetBiLSTM(encoder, seq_head).to(device)
+                elif model_name in ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
+                    encoder = ResNetEncoder(
+                        weight_path=pretrained_ckpt,
+                        n_channels=input_dim,
+                        class_num=num_classes,
+                        my_device=device,
+                        freeze_encoder=True,
+                    ).to(device)
+                    feature_dim = encoder.out_features
+                    seq_labeler = BiLSTMHead(
+                        feature_dim=feature_dim, seq_length=window_samples, num_classes=num_classes, hidden_dim=128
+                    ).to(device)
+                    model = ResNetBiLSTM(encoder, seq_labeler).to(device)
+
                 else:
                     logger.error(f"Invalid model: {model_name}")
                     continue
