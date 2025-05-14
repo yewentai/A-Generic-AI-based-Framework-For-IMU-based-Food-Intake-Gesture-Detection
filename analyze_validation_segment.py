@@ -20,7 +20,7 @@ from seaborn import color_palette
 
 if __name__ == "__main__":
     # List all versions to compare
-    result_root = "results/new"
+    result_root = "results/DXI"
     versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
     # Dictionary to collect segment-wise metrics per version

@@ -38,7 +38,7 @@ from components.models.resnet import ResNet
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
-from components.pre_processing import hand_mirroring, planar_rotation, axis_permutation, spatial_orientation
+from components.pre_processing import hand_mirroring, planar_rotation, axis_permutation
 
 # --- Configurations ---
 NUM_WORKERS = 4
@@ -49,8 +49,8 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/new"
-    # versions = ["FDI_MSTCN_DM"]  # Uncomment to manually specify versions
+    result_root = "results/DXI"
+    # versions = ["DXI_MSTCN"]
     versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -87,7 +87,6 @@ if __name__ == "__main__":
         dataset_mirroring_enabled = config_info.get("dataset_mirroring", False)
         planar_rotation_enabled = config_info.get("augmentation_planar_rotation", False)
         axis_permutation_enabled = config_info.get("augmentation_axis_permutation", False)
-        spatial_orientation_enabled = config_info.get("augmentation_spatial_orientation", False)
 
         # Set up device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -117,13 +116,6 @@ if __name__ == "__main__":
         Y_R = np.array(pickle.load(open(os.path.join(DATA_DIR, "Y_R.pkl"), "rb")), dtype=object)
         X = np.array([np.concatenate([X_L[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object)
         Y = np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object)
-        validation_modes.append(
-            {
-                "name": "original",
-                "X": X,
-                "Y": Y,
-            }
-        )
         if dataset_mirroring_enabled:
             X_L_mirrored = np.array([hand_mirroring(sample) for sample in X_L], dtype=object)
             validation_modes.append(
@@ -133,6 +125,14 @@ if __name__ == "__main__":
                         [np.concatenate([X_L_mirrored[i], X_R[i]], axis=0) for i in range(len(X_L))], dtype=object
                     ),
                     "Y": np.array([np.concatenate([Y_L[i], Y_R[i]], axis=0) for i in range(len(Y_L))], dtype=object),
+                }
+            )
+        else:
+            validation_modes.append(
+                {
+                    "name": "original",
+                    "X": X,
+                    "Y": Y,
                 }
             )
         if planar_rotation_enabled:
@@ -158,19 +158,6 @@ if __name__ == "__main__":
                 {
                     "name": "axis_permuted",
                     "X": X_permuted,
-                    "Y": Y,
-                }
-            )
-        if spatial_orientation_enabled:
-            # Apply spatial orientation to 50% of samples
-            random_indices = np.random.choice(len(X), size=int(len(X) * 0.5), replace=False)
-            X_oriented = np.copy(X)
-            for i in random_indices:
-                X_oriented[i], Y[i] = spatial_orientation(X[i], Y[i])
-            validation_modes.append(
-                {
-                    "name": "spatial_oriented",
-                    "X": X_oriented,
                     "Y": Y,
                 }
             )
@@ -288,10 +275,11 @@ if __name__ == "__main__":
                         batch_x = batch_x.permute(0, 2, 1).to(device)
                         batch_y = batch_y.to(device)
                         outputs_list = model(batch_x)
-                        if isinstance(outputs_list, torch.Tensor) and outputs_list.ndim == 4:
-                            logits = outputs_list[:, -1, :, :]  # [B, C, L]
+                        # pick the last stage's logits
+                        if isinstance(outputs_list, list):
+                            logits = outputs_list[-1]  # -> [B, num_classes, L]
                         else:
-                            logits = outputs_list  # Fallback for other models
+                            logits = outputs_list  # for single-stage TCN
                         # softmax + argmax over class-dim
                         probs = F.softmax(logits, dim=1)  # [B, C, L]
                         preds = torch.argmax(probs, dim=1)  # [B, L]

@@ -188,7 +188,7 @@ if DATASET == "FDI":
     NUM_FOLDS = 7
 else:
     NUM_FOLDS = 4
-NUM_EPOCHS = 10
+NUM_EPOCHS = 100
 
 # ----------------------------------------------------------------------------------------------
 # Augmentation Configuration

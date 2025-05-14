@@ -22,8 +22,8 @@ import matplotlib.pyplot as plt
 from seaborn import color_palette
 
 if __name__ == "__main__":
-    result_root = "results/new"
-    # versions = ["DXI_MSTCN_DM"]
+    result_root = "results/DXI"
+    # versions = ["DXI_MSTCN"]
     versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
     for version in versions:
