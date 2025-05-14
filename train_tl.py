@@ -34,7 +34,7 @@ from torch.utils.data import DataLoader, DistributedSampler, Subset
 from tqdm import tqdm
 
 from components.datasets import IMUDataset, create_balanced_subject_folds, load_predefined_validate_folds
-from components.models.resnet import ResNetEncoder
+from components.models.resnet import seq_head
 from components.models.resnet_bilstm import BiLSTMHead, ResNetBiLSTM
 from components.pre_processing import hand_mirroring
 from components.checkpoint import save_best_model
@@ -215,7 +215,7 @@ for fold, validate_subjects in enumerate(validate_folds):
     pretrained_ckpt = "mtl_best.mdl"
 
     # Create the encoder with desired parameters
-    encoder = ResNetEncoder(
+    encoder = seq_head(
         weight_path=pretrained_ckpt,
         n_channels=INPUT_DIM,
         class_num=NUM_CLASSES,

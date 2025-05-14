@@ -374,7 +374,7 @@ class Resnet(nn.Module):
         return y
 
 
-class ResNetEncoder(nn.Module):
+class ResNet(nn.Module):
     def __init__(self, weight_path=None, n_channels=3, class_num=2, my_device="cpu", freeze_encoder=False):
         """
         Loads the pre-trained ResNet model, removes its classifier head, and
@@ -387,7 +387,7 @@ class ResNetEncoder(nn.Module):
             my_device (str): Device for loading the weights.
             freeze_encoder (bool): If True, freeze encoder weights.
         """
-        super(ResNetEncoder, self).__init__()
+        super(ResNet, self).__init__()
         # Create the ResNet model with is_eva=True to use the two-layer FC head in pre-training.
         # (The classifier head will be discarded.)
         self.resnet = Resnet(

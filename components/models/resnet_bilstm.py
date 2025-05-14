@@ -96,7 +96,7 @@ class ResNetFeatureExtractor(nn.Module):
         return self.layers(x)
 
 
-class ResNet(nn.Module):
+class ResNetCopy(nn.Module):
     """
     Wraps a ResNetFeatureExtractor and returns flattened features.
     """

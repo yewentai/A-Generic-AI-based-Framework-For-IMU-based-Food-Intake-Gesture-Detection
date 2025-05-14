@@ -40,7 +40,8 @@ from components.checkpoint import save_best_model
 from components.models.cnnlstm import CNNLSTM
 from components.models.tcn import TCN, MSTCN
 from components.models.accnet import AccNet
-from components.models.resnet_bilstm import ResNet, BiLSTMHead, ResNetBiLSTM
+from components.models.resnet import ResNet
+from components.models.resnet_bilstm import ResNetCopy, BiLSTMHead, ResNetBiLSTM
 from components.utils import loss_fn
 from components.augmentation import (
     augment_hand_mirroring,
@@ -67,40 +68,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ----------------------------------------------------------------------------------------------
-# Dataset Configuration
-# ----------------------------------------------------------------------------------------------
-DATASET = "DXI"
-if DATASET.startswith("DX"):
-    NUM_CLASSES = 2
-    SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 4
-    sub_version = DATASET.replace("DX", "").upper() or "I"
-    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
-    TASK = "binary"
-elif DATASET.startswith("FD"):
-    SAMPLING_FREQ_ORIGINAL = 64
-    DOWNSAMPLE_FACTOR = 4
-    NUM_CLASSES = 3
-    sub_version = DATASET.replace("FD", "").upper() or "I"
-    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
-    TASK = "multiclass"
-else:
-    raise ValueError(f"Invalid dataset: {DATASET}")
-SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
-
-# ----------------------------------------------------------------------------------------------
-# Dataloader Configuration
-# ----------------------------------------------------------------------------------------------
-WINDOW_SECONDS = 60
-WINDOW_SAMPLES = SAMPLING_FREQ * WINDOW_SECONDS
-BATCH_SIZE = 64
-NUM_WORKERS = 16
 
 # ----------------------------------------------------------------------------------------------
 # Model Configuration
 # ----------------------------------------------------------------------------------------------
-MODEL = "TCN"  # Options: CNN_LSTM, TCN, MSTCN, AccNet, ResNetBiLSTM
+MODEL = "DXI_ResNetBiLSTM_FTFull"  # Options: CNN_LSTM, TCN, MSTCN, AccNet, ResNetBiLSTM, DXI_ResNetBiLSTM_FTFull, DXI_ResNetBiLSTM_FTHead
 if MODEL in ["TCN", "MSTCN", "AccNet"]:
     KERNEL_SIZE = 3
 if MODEL in ["TCN", "MSTCN"]:
@@ -114,21 +86,54 @@ elif MODEL in ["CNN_LSTM", "AccNet"]:
     CONV_FILTERS = (32, 64, 128)
 elif MODEL in ["ResNetBiLSTM", "CNN_LSTM"]:
     LSTM_HIDDEN = 128
+elif MODEL in ["DXI_ResNetBiLSTM_FTFull", "DXI_ResNetBiLSTM_FTHead"]:
+    FREEZE_ENCODER = True if MODEL == "ResNetBiLSTMFTHead" else False
 else:
     raise ValueError(f"Invalid model: {MODEL}")
 
-if MODEL in ["CNN_LSTM", "TCN", "MSTCN"]:
-    INPUT_DIM = 6
-elif MODEL in ["AccNet", "ResNetBiLSTM"]:
+# Path to the pre-trained ResNet weights
+pretrained_ckpt = "mtl_best.mdl"
+
+# ----------------------------------------------------------------------------------------------
+# Dataset Configuration
+# ----------------------------------------------------------------------------------------------
+DATASET = "DXI"  # Options: "DXI", "DXII", "FDI", "FDII", "OREBA"
+if DATASET.startswith("DX"):
+    NUM_CLASSES = 2
+    SAMPLING_FREQ_ORIGINAL = 64
+    sub_version = DATASET.replace("DX", "").upper() or "I"
+    DATA_DIR = f"./dataset/DX/DX-{sub_version}"
+    TASK = "binary"
+elif DATASET.startswith("FD"):
+    SAMPLING_FREQ_ORIGINAL = 64
+    NUM_CLASSES = 3
+    sub_version = DATASET.replace("FD", "").upper() or "I"
+    DATA_DIR = f"./dataset/FD/FD-{sub_version}"
+    TASK = "multiclass"
+elif DATASET.startswith("OREBA"):
+    SAMPLING_FREQ_ORIGINAL = 64
+    NUM_CLASSES = 3
+    DATA_DIR = "./dataset/Oreba"
+    TASK = "multiclass"
+else:
+    raise ValueError(f"Invalid dataset: {DATASET}")
+
+if MODEL in ["AccNet", "ResNetBiLSTM", "DXI_ResNetBiLSTM_FTFull", "DXI_ResNetBiLSTM_FTHead"]:
     INPUT_DIM = 3
+    SELECTED_CHANNELS = [0, 1, 2]  # Only use accelerometer data for these models
+    WINDOW_SECONDS = 10
+    DOWNSAMPLE_FACTOR = Fraction(32, 15)
+elif MODEL in ["CNN_LSTM", "TCN", "MSTCN"]:
+    INPUT_DIM = 6
+    SELECTED_CHANNELS = [0, 1, 2, 3, 4, 5]
+    WINDOW_SECONDS = 60
+    DOWNSAMPLE_FACTOR = 4
 else:
     raise ValueError(f"Invalid model: {MODEL}")
-
-if MODEL in ["AccNet", "ResNetBiLSTM"]:
-    SELECTED_CHANNELS = [0, 1, 2]  # Only use accelerometer data for these models
-else:
-    SELECTED_CHANNELS = [0, 1, 2, 3, 4, 5]
-
+SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
+WINDOW_SAMPLES = SAMPLING_FREQ * WINDOW_SECONDS
+BATCH_SIZE = 64
+NUM_WORKERS = 16
 
 # ----------------------------------------------------------------------------------------------
 # Training Configuration
@@ -140,6 +145,7 @@ if DATASET == "FDI":
 else:
     NUM_FOLDS = 5
 NUM_EPOCHS = 100
+
 
 # ----------------------------------------------------------------------------------------------
 # Augmentation Configuration
@@ -293,7 +299,7 @@ for fold, validate_subjects in enumerate(validate_folds):
             )
         ).to(device)
     elif MODEL == "ResNetBiLSTM":
-        encoder = ResNet(
+        encoder = ResNetCopy(
             in_channels=INPUT_DIM,
         ).to(device)
 
@@ -311,6 +317,22 @@ for fold, validate_subjects in enumerate(validate_folds):
             hidden_dim=LSTM_HIDDEN,
         ).to(device)
 
+        model = ResNetBiLSTM(encoder, seq_head).to(device)
+    elif MODEL in ["DXI_ResNetBiLSTM_FTFull", "DXI_ResNetBiLSTM_FTHead"]:
+        encoder = ResNet(
+            weight_path=pretrained_ckpt,
+            n_channels=INPUT_DIM,
+            class_num=NUM_CLASSES,
+            my_device=device,
+            freeze_encoder=FREEZE_ENCODER,
+        ).to(device)
+        feature_dim = encoder.out_features
+
+        seq_head = BiLSTMHead(
+            feature_dim=feature_dim, seq_length=WINDOW_SAMPLES, num_classes=NUM_CLASSES, hidden_dim=128
+        ).to(device)
+
+        # Create the full model
         model = ResNetBiLSTM(encoder, seq_head).to(device)
     else:
         raise ValueError(f"Invalid model: {MODEL}")
@@ -346,10 +368,11 @@ for fold, validate_subjects in enumerate(validate_folds):
             # Rearrange dimensions because CNN in PyTorch expect the channel dimension to be the second dimension (index 1)
             # Shape of batch_x: [batch_size, channels, seq_len]
             batch_x = batch_x.permute(0, 2, 1).to(device)
-            batch_y = batch_y.to(device)
+            batch_y = batch_y.long().to(device)
 
             optimizer.zero_grad()
             outputs = model(batch_x)
+
             if MODEL == "MSTCN":
                 ce_loss = 0.0
                 smooth_loss = 0.0
@@ -360,6 +383,7 @@ for fold, validate_subjects in enumerate(validate_folds):
                 # ce_loss, smooth_loss = MSTCN_Loss(outputs, batch_y)
             else:
                 ce_loss, smooth_loss = loss_fn(outputs, batch_y, smoothing=SMOOTHING)
+
             loss = ce_loss + LAMBDA_COEF * smooth_loss
             loss.backward()
             optimizer.step()
