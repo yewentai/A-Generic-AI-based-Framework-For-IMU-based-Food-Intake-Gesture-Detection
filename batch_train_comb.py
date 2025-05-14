@@ -11,7 +11,10 @@ script_path = "train.py"
 
 # Define only the combinations you want to run
 combinations = [
-    {"dataset": "DXI", "model": "MSTCN", "augmentation": "None", "smoothing": "L1"},
+    {"dataset": "OREBA", "model": "MSTCN", "augmentation": "None", "smoothing": "L1"},
+    {"dataset": "OREBA", "model": "MSTCN", "augmentation": "AM", "smoothing": "L1"},
+    {"dataset": "OREBA", "model": "MSTCN", "augmentation": "DM", "smoothing": "L1"},
+    {"dataset": "OREBA", "model": "ResNetBiLSTM_FTFull", "augmentation": "None", "smoothing": "L1"},
     # Add more specific combos here
 ]
 

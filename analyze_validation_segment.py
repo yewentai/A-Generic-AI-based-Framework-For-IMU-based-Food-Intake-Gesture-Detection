@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Training Result Analysis Script
+IMU Training Result Analysis Script (Sorted Legend)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Edited      : 2025-05-14
 Description : Plot segment-wise F1 scores at different thresholds for all versions
+              with legend sorted by average F1 score
 ===============================================================================
 """
 
@@ -56,20 +57,26 @@ if __name__ == "__main__":
 
         all_version_metrics[version] = seg_metrics
 
-    # Plot all versions on the same figure
+    # Check if data exists
     if not all_version_metrics:
         print("No data to plot.")
         exit(0)
 
-    # Use a color palette with higher contrast for better visibility
-    colors = color_palette("tab10", len(all_version_metrics))
-    plt.figure(figsize=(10, 6))
-
-    # Determine common threshold axis
-    # Assume all versions share the same thresholds as the first entry
+    # Determine common threshold axis (assumes all versions share same thresholds)
     sample_version = next(iter(all_version_metrics))
     thresholds = [float(t) for t in all_version_metrics[sample_version].keys()]
 
+    # Compute average mean F1 per version for sorting
+    avg_metrics = {}
+    for version, seg_dict in all_version_metrics.items():
+        means = [np.nanmean(seg_dict[str(t)]) for t in thresholds]
+        avg_metrics[version] = np.nanmean(means)
+
+    # Sort versions by descending average F1 score
+    sorted_versions = sorted(all_version_metrics.keys(), key=lambda v: avg_metrics[v], reverse=True)
+
+    # Prepare plot
+    colors = color_palette("tab10", len(sorted_versions))
     markers = [
         "o",
         "s",
@@ -86,33 +93,38 @@ if __name__ == "__main__":
         "8",
         ">",
         "<",
-    ]  # List of more distinct markers
-    for idx, (version, seg_dict) in enumerate(all_version_metrics.items()):
+    ]  # Distinct markers
+
+    plt.figure(figsize=(10, 6))
+
+    # Plot in sorted order
+    for idx, version in enumerate(sorted_versions):
+        seg_dict = all_version_metrics[version]
         means = [np.nanmean(seg_dict[str(t)]) for t in thresholds]
         stds = [np.nanstd(seg_dict[str(t)]) for t in thresholds]
-        marker = markers[idx % len(markers)]  # Cycle through markers if more versions than markers
+        marker = markers[idx % len(markers)]
         plt.errorbar(
             thresholds,
             means,
             yerr=stds,
-            label=version,
+            label=f"{version} (avg: {avg_metrics[version]:.3f})",
             marker=marker,
-            markersize=3,
-            linewidth=0.75,
+            markersize=4,
+            linewidth=1.0,
             alpha=0.8,
             color=colors[idx],
         )
 
     plt.xlabel("Segmentation Threshold")
     plt.ylabel("Weighted F1 Score")
-    plt.title("Segment-wise F1 Scores Across Thresholds for All Versions")
+    plt.title("Segment-wise F1 Scores Across Thresholds (Sorted by Avg F1)")
     plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend(loc="best", fontsize=8)
+    plt.legend(loc="best", fontsize=8, title="Version (Avg F1)")
     plt.tight_layout()
 
     # Save plot
-    out_file = os.path.join(result_root, "all_versions_f1_segment_thresholds.png")
+    out_file = os.path.join(result_root, "all_versions_f1_segment_thresholds_sorted.png")
     plt.savefig(out_file, dpi=300)
     plt.close()
 
-    print(f"Saved combined segment-wise F1 plot: {out_file}")
+    print(f"Saved sorted segment-wise F1 plot: {out_file}")
