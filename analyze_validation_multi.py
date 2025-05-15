@@ -21,7 +21,7 @@ from seaborn import color_palette
 
 if __name__ == "__main__":
     # Base directory for results
-    result_root = "results/DXI"
+    result_root = "results/smooth/DXI"
 
     # Find all version directories
     raw_versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
@@ -121,27 +121,3 @@ if __name__ == "__main__":
     plt.savefig(out_file_seg, dpi=300)
     plt.close()
     print(f"Saved sorted segment-wise F1 plot: {out_file_seg}")
-
-    # --- Sample-wise Plot ---
-    # Compute average and std sample-wise F1 per version
-    avg_sample = {v: np.nanmean(vals) for v, vals in all_version_sample_metrics.items()}
-    std_sample = {v: np.nanstd(vals) for v, vals in all_version_sample_metrics.items()}
-
-    # Sort by descending sample-wise average F1
-    sorted_sample_versions = sorted(all_version_sample_metrics.keys(), key=lambda v: avg_sample[v], reverse=True)
-
-    # Plot sample-wise performance
-    plt.figure(figsize=(10, 6))
-    means = [avg_sample[v] for v in sorted_sample_versions]
-    stds = [std_sample[v] for v in sorted_sample_versions]
-    x = np.arange(len(sorted_sample_versions))
-    plt.errorbar(x, means, yerr=stds, fmt="o", markersize=6, linewidth=1.0, alpha=0.8)
-    plt.xticks(x, sorted_sample_versions, rotation=45, ha="right")
-    plt.ylabel("Weighted Sample-wise F1 Score")
-    plt.title("Sample-wise F1 Scores Across Versions")
-    plt.grid(True, axis="y", linestyle="--", alpha=0.5)
-    plt.tight_layout()
-    out_file_smp = os.path.join(result_root, "DXI_models_samplewise.png")
-    plt.savefig(out_file_smp, dpi=300)
-    plt.close()
-    print(f"Saved sorted sample-wise F1 plot: {out_file_smp}")

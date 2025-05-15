@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from seaborn import color_palette
 
 if __name__ == "__main__":
-    result_root = "results/DXI"
+    result_root = "results/smooth/DXI"
     # versions = ["DXI_MSTCN"]
     versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 

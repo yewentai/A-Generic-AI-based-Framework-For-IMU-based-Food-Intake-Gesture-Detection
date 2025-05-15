@@ -11,12 +11,7 @@ script_path = "train.py"
 
 # Define only the combinations you want to run
 combinations = [
-    {"dataset": "DXI", "model": "CNN_LSTM", "augmentation": "None", "smoothing": "L1"},
-    {"dataset": "DXI", "model": "TCN", "augmentation": "None", "smoothing": "L1"},
-    {"dataset": "DXI", "model": "AccNet", "augmentation": "None", "smoothing": "L1"},
-    {"dataset": "DXI", "model": "MSTCN", "augmentation": "AP", "smoothing": "L1"},
-    {"dataset": "DXI", "model": "MSTCN", "augmentation": "AR", "smoothing": "L1"},
-    {"dataset": "DXI", "model": "MSTCN", "augmentation": "AS", "smoothing": "L1"},
+    {"dataset": "DXI", "model": "MSTCN", "augmentation": "None", "smoothing": "L1"},
     # Add more specific combos here
 ]
 
