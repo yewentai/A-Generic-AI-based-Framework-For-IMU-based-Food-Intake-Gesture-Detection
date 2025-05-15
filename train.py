@@ -6,7 +6,7 @@ IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-14
+Edited      : 2025-05-15
 Description : This script trains various models (CNN-LSTM, TCN, MSTCN, ResNetBiLSTM)
               on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
@@ -68,7 +68,7 @@ parser.add_argument(
     "--dataset",
     type=str,
     default="DXI",
-    choices=["DXI", "DXII", "FDI", "FDII", "OREBA"],
+    choices=["DXI", "DXII", "FDI", "FDII"],
     help="Dataset to use for training",
 )
 parser.add_argument(
@@ -140,7 +140,7 @@ PRETRAINED_CKPT = "mtl_best.mdl" if os.path.exists("mtl_best.mdl") else None
 # ----------------------------------------------------------------------------------------------
 # Dataset and DatalLoader Configuration
 # ----------------------------------------------------------------------------------------------
-DATASET = args.dataset  # Options: DXI, DXII, FDI, FDII, OREBA
+DATASET = args.dataset  # Options: DXI, DXII, FDI, FDII
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
     SAMPLING_FREQ_ORIGINAL = 64

@@ -4,16 +4,15 @@ import subprocess
 script_path = "train.py"
 
 # === Available Options ===
-# Datasets:        "DXI", "DXII", "FDI", "FDII", "OREBA"
+# Datasets:        "DXI", "DXII", "FDI", "FDII"
 # Models:          "CNN_LSTM", "TCN", "MSTCN", "AccNet", "ResNetBiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"
 # Augmentations:   "None", "AM", "AP", "AR", "AS", "DM"
 # Smoothing types: "MSE", "L1", "HUBER", "JS", "TV", "SEC_DIFF", "EMD"
 
 # Define only the combinations you want to run
 combinations = [
-    {"dataset": "DXI", "model": "ResNetBiLSTM_FTFull", "augmentation": "None", "smoothing": "L1"},
-    {"dataset": "DXI", "model": "ResNetBiLSTM_FTHead", "augmentation": "None", "smoothing": "L1"},
-    {"dataset": "DXI", "model": "ResNetBiLSTM", "augmentation": "None", "smoothing": "L1"},
+    {"dataset": "DXI", "model": "MSTCN", "augmentation": "AM", "smoothing": "L1"},
+    {"dataset": "DXI", "model": "MSTCN", "augmentation": "DM", "smoothing": "L1"},
     # Add more specific combos here
 ]
 

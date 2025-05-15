@@ -6,7 +6,7 @@ IMU Training Result Analysis Script (Sorted Legend)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-14
+Edited      : 2025-05-15
 Description : Plot segment-wise F1 scores at different thresholds for all versions
               with legend sorted by average F1 score
 ===============================================================================
@@ -30,6 +30,9 @@ if __name__ == "__main__":
         result_dir = os.path.join(result_root, version)
         config_file = os.path.join(result_dir, "validation_config.json")
         stats_file = os.path.join(result_dir, "validation_stats.npy")
+        # Rename version if it contains 'DXI_'
+        if "DXI_" in version:
+            version = version.split("DXI_")[-1]
 
         # Skip if required files are missing
         if not os.path.exists(config_file) or not os.path.exists(stats_file):
@@ -107,7 +110,7 @@ if __name__ == "__main__":
             thresholds,
             means,
             yerr=stds,
-            label=f"{version} (avg: {avg_metrics[version]:.3f})",
+            label=f"{version}",
             marker=marker,
             markersize=4,
             linewidth=1.0,
@@ -117,13 +120,13 @@ if __name__ == "__main__":
 
     plt.xlabel("Segmentation Threshold")
     plt.ylabel("Weighted F1 Score")
-    plt.title("Segment-wise F1 Scores Across Thresholds (Sorted by Avg F1)")
+    plt.title("Segment-wise F1 Scores Across Thresholds")
     plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend(loc="best", fontsize=8, title="Version (Avg F1)")
+    plt.legend(loc="best", fontsize=8, title="Models")
     plt.tight_layout()
 
     # Save plot
-    out_file = os.path.join(result_root, "all_versions_f1_segment_thresholds_sorted.png")
+    out_file = os.path.join(result_root, "DXI_models.png")
     plt.savefig(out_file, dpi=300)
     plt.close()
 

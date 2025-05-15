@@ -5,7 +5,7 @@ import subprocess
 script_path = "train.py"
 
 # === Settings ===
-# options: "DXI", "DXII", "FDI", "FDII", "OREBA"
+# options: "DXI", "DXII", "FDI", "FDII"
 datasets = ["DXI"]
 # options:"CNN_LSTM", "TCN", "MSTCN", "AccNet", "ResNetBiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"
 models = ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]
