@@ -7,7 +7,7 @@ IMU Training Script (Single and Distributed Combined)
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Edited      : 2025-05-15
-Description : This script trains various models (CNN-LSTM, TCN, MSTCN, ResNetBiLSTM)
+Description : This script trains various models (CNN-LSTM, TCN, MSTCN, ResNet_BiLSTM)
               on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
               2. Cross-validation across subject folds
@@ -51,7 +51,7 @@ from components.datasets import (
 from components.models.accnet import AccNet
 from components.models.cnnlstm import CNNLSTM
 from components.models.resnet import ResNet
-from components.models.resnet_bilstm import BiLSTMHead, ResNetBiLSTM, ResNetCopy
+from components.models.resnet_bilstm import BiLSTMHead, ResNet_BiLSTM, ResNetCopy
 from components.models.tcn import TCN, MSTCN
 from components.pre_processing import hand_mirroring
 from components.utils import loss_fn
@@ -80,7 +80,7 @@ parser.add_argument(
         "TCN",
         "MSTCN",
         "AccNet",
-        "ResNetBiLSTM",
+        "ResNet_BiLSTM",
         "ResNetBiLSTM_FTFull",
         "ResNetBiLSTM_FTHead",
     ],
@@ -108,7 +108,7 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------------------------------
 # Model Configuration
 # ----------------------------------------------------------------------------------------------
-MODEL = args.model  # Options: CNN_LSTM, TCN, MSTCN, AccNet, ResNetBiLSTM, ResNetBiLSTM_FTFull, ResNetBiLSTM_FTHead
+MODEL = args.model  # Options: CNN_LSTM, TCN, MSTCN, AccNet, ResNet_BiLSTM, ResNetBiLSTM_FTFull, ResNetBiLSTM_FTHead
 if MODEL == "TCN":
     KERNEL_SIZE = 3
     NUM_LAYERS = 9
@@ -128,7 +128,7 @@ elif MODEL == "AccNet":
 elif MODEL == "CNN_LSTM":
     CONV_FILTERS = (32, 64, 128)
     LSTM_HIDDEN = 128
-elif MODEL == "ResNetBiLSTM":
+elif MODEL == "ResNet_BiLSTM":
     LSTM_HIDDEN = 128
 elif MODEL in ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
     FREEZE_ENCODER = True if MODEL.endswith("FTHead") else False
@@ -161,7 +161,7 @@ elif DATASET == "OREBA":
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
-if MODEL in ["AccNet", "ResNetBiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
+if MODEL in ["AccNet", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
     INPUT_DIM = 3
     SELECTED_CHANNELS = [0, 1, 2]  # Only use accelerometer data for these models
     WINDOW_SECONDS = 10
@@ -344,7 +344,7 @@ for fold, validate_subjects in enumerate(validate_folds):
                 )
             )
         ).to(device)
-    elif MODEL == "ResNetBiLSTM":
+    elif MODEL == "ResNet_BiLSTM":
         encoder = ResNetCopy(
             in_channels=INPUT_DIM,
         ).to(device)
@@ -363,7 +363,7 @@ for fold, validate_subjects in enumerate(validate_folds):
             hidden_dim=LSTM_HIDDEN,
         ).to(device)
 
-        model = ResNetBiLSTM(encoder, seq_head).to(device)
+        model = ResNet_BiLSTM(encoder, seq_head).to(device)
     elif MODEL in ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
         encoder = ResNet(
             weight_path=PRETRAINED_CKPT,
@@ -379,7 +379,7 @@ for fold, validate_subjects in enumerate(validate_folds):
         ).to(device)
 
         # Create the full model
-        model = ResNetBiLSTM(encoder, seq_head).to(device)
+        model = ResNet_BiLSTM(encoder, seq_head).to(device)
     else:
         raise ValueError(f"Invalid model: {MODEL}")
 
@@ -494,15 +494,15 @@ if local_rank == 0:
         "dataset_mirroring": FLAG_DATASET_MIRRORING,
         # Model-specific parameters
         "conv_filters": CONV_FILTERS if MODEL in ["CNN_LSTM", "AccNet"] else None,
-        "lstm_hidden": LSTM_HIDDEN if MODEL in ["CNN_LSTM", "ResNetBiLSTM"] else None,
+        "lstm_hidden": LSTM_HIDDEN if MODEL in ["CNN_LSTM", "ResNet_BiLSTM"] else None,
         "num_layers": NUM_LAYERS if MODEL in ["TCN", "MSTCN"] else None,
         "num_filters": NUM_FILTERS if MODEL in ["TCN", "MSTCN"] else None,
         "kernel_size": KERNEL_SIZE if MODEL in ["TCN", "MSTCN", "AccNet"] else None,
         "dropout": DROPOUT if MODEL in ["TCN", "MSTCN"] else None,
         "causal": CAUSAL if MODEL in ["TCN", "MSTCN"] else None,
         "num_stages": NUM_STAGES if MODEL == "MSTCN" else None,
-        "hidden_dim": LSTM_HIDDEN if MODEL == "ResNetBiLSTM" else None,
-        "seq_length": WINDOW_SAMPLES if MODEL == "ResNetBiLSTM" else None,
+        "hidden_dim": LSTM_HIDDEN if MODEL == "ResNet_BiLSTM" else None,
+        "seq_length": WINDOW_SAMPLES if MODEL == "ResNet_BiLSTM" else None,
         # Validation configuration
         "validate_folds": validate_folds,
     }

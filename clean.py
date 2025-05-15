@@ -6,7 +6,7 @@ Project Directory Cleanup Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-14
+Edited      : 2025-05-15
 Description : This script recursively scans target project directories to:
               - Remove empty subdirectories
               - Delete all 'analysis' folders and their contents
@@ -120,7 +120,7 @@ def update_training_configs(root):
     """
     Traverse the directory tree under `root` and ensure every training_config.json
     has a 'selected_channels' field. Models in CNN_LSTM, TCN, MSTCN get channels [0-5].
-    Models in AccNet, ResNetBiLSTM get channels [0-2].
+    Models in AccNet, ResNet_BiLSTM get channels [0-2].
     """
     for dirpath, _, filenames in os.walk(root):
         if "training_config.json" in filenames:
@@ -139,7 +139,7 @@ def update_training_configs(root):
                     cfg["selected_channels"] = list(range(6))
                 elif any(
                     key in model_name
-                    for key in ["AccNet", "ResNetBiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]
+                    for key in ["AccNet", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]
                 ):
                     cfg["selected_channels"] = list(range(3))
                 else:

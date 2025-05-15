@@ -33,7 +33,7 @@ from torch.utils.data import DataLoader, Subset
 from components.models.tcn import TCN, MSTCN
 from components.models.cnnlstm import CNNLSTM
 from components.models.accnet import AccNet
-from components.models.resnet_bilstm import ResNetCopy, BiLSTMHead, ResNetBiLSTM
+from components.models.resnet_bilstm import ResNetCopy, BiLSTMHead, ResNet_BiLSTM
 from components.models.resnet import ResNet
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
@@ -214,7 +214,7 @@ if __name__ == "__main__":
                         conv_filters=config_info["conv_filters"],
                         kernel_size=config_info["kernel_size"],
                     ).to(device)
-                elif model_name == "ResNetBiLSTM":
+                elif model_name == "ResNet_BiLSTM":
                     encoder = ResNetCopy(
                         in_channels=input_dim,
                     ).to(device)
@@ -232,7 +232,7 @@ if __name__ == "__main__":
                         num_classes=num_classes,
                         hidden_dim=config_info["lstm_hidden"],
                     ).to(device)
-                    model = ResNetBiLSTM(encoder, seq_head).to(device)
+                    model = ResNet_BiLSTM(encoder, seq_head).to(device)
                 elif model_name in ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
                     encoder = ResNet(
                         weight_path=pretrained_ckpt,
@@ -245,7 +245,7 @@ if __name__ == "__main__":
                     seq_labeler = BiLSTMHead(
                         feature_dim=feature_dim, seq_length=window_samples, num_classes=num_classes, hidden_dim=128
                     ).to(device)
-                    model = ResNetBiLSTM(encoder, seq_labeler).to(device)
+                    model = ResNet_BiLSTM(encoder, seq_labeler).to(device)
 
                 else:
                     logger.error(f"Invalid model: {model_name}")

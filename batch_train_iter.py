@@ -7,7 +7,7 @@ script_path = "train.py"
 # === Settings ===
 # options: "DXI", "DXII", "FDI", "FDII"
 datasets = ["DXI"]
-# options:"CNN_LSTM", "TCN", "MSTCN", "AccNet", "ResNetBiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"
+# options:"CNN_LSTM", "TCN", "MSTCN", "AccNet", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"
 models = ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]
 # options: "None", "HandMirroring", "AxisPermutation", "PlanarRotation", "SpatialOrientation"
 augmentations = ["None"]

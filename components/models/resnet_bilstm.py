@@ -143,7 +143,7 @@ class BiLSTMHead(nn.Module):
         return logits
 
 
-class ResNetBiLSTM(nn.Module):
+class ResNet_BiLSTM(nn.Module):
     """
     Combines ResNet encoder with BiLSTM head for end-to-end frame-level classification.
     """
