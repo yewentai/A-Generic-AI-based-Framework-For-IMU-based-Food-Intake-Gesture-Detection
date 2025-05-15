@@ -6,7 +6,7 @@ IMU Raw Data Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-15
 Description : This script analyzes raw IMU data from various datasets, performing:
               1. Subject-wise and per-label statistics and segment analysis
               2. Timeline visualization for activity labels across subjects
@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 # Configuration
-DATASET = "Oreba"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
+DATASET = "DXI"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
 
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
@@ -161,38 +161,57 @@ def basic_statistics(Y):
 
 def plot_segment_length_distribution_by_label(Y):
     """
-    For each non-zero label (1 and 2), plot the distribution of segment lengths.
-    Each label gets its own histogram plot.
+    Plot the distribution of segment lengths for labels 1 and 2 (if present) in a single histogram,
+    using high-contrast colors and some transparency.
+    Handles datasets that may only have label 1.
     """
+    # Dynamically detect which labels are present (excluding 0)
+    present_labels = sorted([lab for lab in np.unique(np.concatenate(Y)) if lab != 0])
+    if not present_labels:
+        return
+
     # Initialize a dictionary to hold segment lengths per label
-    segment_lengths_per_label = {1: [], 2: []}
+    segment_lengths_per_label = {lab: [] for lab in present_labels}
 
     # Collect segment lengths
     for labels in Y:
         segments_dict = segment_by_label(labels)
-        for label in [1, 2]:
+        for label in present_labels:
             for start_idx, end_idx in segments_dict[label]:
                 length_in_seconds = (end_idx - start_idx) / SAMPLING_FREQ
                 segment_lengths_per_label[label].append(length_in_seconds)
 
-    # Create a plot for each label
-    for label, lengths in segment_lengths_per_label.items():
-        if not lengths:
-            continue  # Skip if no segments for this label
+    # Prepare data
+    all_lengths = []
+    for lab in present_labels:
+        all_lengths.extend(segment_lengths_per_label[lab])
+    if not all_lengths:
+        return
 
-        bin_width = 0.1  # seconds
-        max_length = max(lengths)
-        bins = np.arange(0, max_length + bin_width, bin_width)
+    # Determine bins based on combined data
+    bin_width = 0.1  # seconds
+    max_length = max(all_lengths)
+    bins = np.arange(0, max_length + bin_width, bin_width)
 
-        plt.figure(figsize=(10, 6))
-        plt.hist(lengths, bins=bins, color="skyblue", edgecolor="black")
-        plt.title(f"Segment Length Distribution - Label {label}")
-        plt.xlabel("Segment Length (seconds)")
-        plt.ylabel("Count")
-        plt.grid(axis="y", linestyle="--", alpha=0.7)
+    plt.figure(figsize=(10, 6))
+    color_map = {1: "royalblue", 2: "orangered", 3: "seagreen"}
+    for lab in present_labels:
+        plt.hist(
+            segment_lengths_per_label[lab],
+            bins=bins,
+            color=color_map.get(lab, None),
+            edgecolor="black",
+            alpha=0.6,
+            label=f"Label {lab}",
+        )
+    plt.title(f"Segment Length Distribution - Labels {', '.join(str(lab) for lab in present_labels)}")
+    plt.xlabel("Segment Length (seconds)")
+    plt.ylabel("Count")
+    plt.legend()
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
 
-        plt.savefig(os.path.join(SAVE_DIR, f"segment_length_distribution_label{label}.png"), dpi=300)
-        plt.close()
+    plt.savefig(os.path.join(SAVE_DIR, "segment_length_distribution_labels.png"), dpi=300)
+    plt.close()
 
 
 def plot_shortest_segments(X, Y):
@@ -455,9 +474,9 @@ def main():
     # Load and analyze both sides together
     X, Y = load_data()
     # basic_statistics(Y)
-    plot_all_subjects_labels(Y)
+    # plot_all_subjects_labels(Y)
     # plot_sample_distribution(Y)
-    # plot_segment_length_distribution_by_label(Y)
+    plot_segment_length_distribution_by_label(Y)
     # plot_longest_segments(X, Y)
     # plot_shortest_segments(X, Y)
 

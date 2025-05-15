@@ -33,8 +33,8 @@ if __name__ == "__main__":
     for raw_version in raw_versions:
         # Determine display name
         display_version = raw_version
-        if "DXI_" in raw_version:
-            display_version = raw_version.split("DXI_")[-1]
+        if "S-" in raw_version:
+            display_version = raw_version.split("S-")[-1]
 
         # Paths to config and stats
         result_dir = os.path.join(result_root, raw_version)
@@ -115,9 +115,9 @@ if __name__ == "__main__":
     plt.ylabel("Weighted F1 Score")
     plt.title("Segment-wise F1 Scores Across Thresholds")
     plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend(loc="best", fontsize=8, title="Models")
+    plt.legend(loc="best", fontsize=8, title="Smooth Loss")
     plt.tight_layout()
-    out_file_seg = os.path.join(result_root, "DXI_models_segmentwise.png")
+    out_file_seg = os.path.join(result_root, "DXI_smooth_segmentwise.png")
     plt.savefig(out_file_seg, dpi=300)
     plt.close()
     print(f"Saved sorted segment-wise F1 plot: {out_file_seg}")
