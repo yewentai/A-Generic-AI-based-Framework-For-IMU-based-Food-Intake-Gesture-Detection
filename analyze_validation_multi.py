@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Training Result Analysis Script (Sorted Legend + Sample-wise Plot)
+IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Edited      : 2025-05-15
 Description : Plot segment-wise F1 scores at different thresholds for all versions
-              with legend sorted by average F1 score, and sample-wise F1 scores
-              across versions sorted by average sample-wise performance.
+              with legend sorted by average F1 score.
 ===============================================================================
 """
 
