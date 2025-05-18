@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-05-15
+Edited      : 2025-05-18
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original, left, and right hand-based validation modes
               2. Optional data augmentation: hand mirroring and planar rotation
@@ -49,8 +49,8 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/smooth/DXI"
-    versions = ["DXI_MSTCN_Post-processing"]
+    result_root = "results/aug/DXI"
+    versions = ["DXI_MSTCN"]
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -87,6 +87,8 @@ if __name__ == "__main__":
         dataset_mirroring_enabled = config_info.get("dataset_mirroring", False)
         planar_rotation_enabled = config_info.get("augmentation_planar_rotation", False)
         axis_permutation_enabled = config_info.get("augmentation_axis_permutation", False)
+        # planar_rotation_enabled = True
+        # axis_permutation_enabled = True
 
         # Set up device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

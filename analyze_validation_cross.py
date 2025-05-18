@@ -6,7 +6,7 @@ IMU Training Result Comparison Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-16
+Edited      : 2025-05-18
 Description : Plot segment-wise F1 scores at different thresholds for specified
               versions and evaluation modes. Used for direct comparison.
 ===============================================================================
@@ -17,6 +17,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from seaborn import color_palette
+
 
 def load_version_mode_metrics(result_root, version, mode_filter):
     result_dir = os.path.join(result_root, version)
@@ -47,19 +48,24 @@ def load_version_mode_metrics(result_root, version, mode_filter):
 
     return threshold_list, seg_metrics
 
+
 if __name__ == "__main__":
-    result_root = "results/DXI"
-    versions = [
-        "DXI_MSTCN_S-L1", 
-        "DXI_MSTCN_S-SEC_DIFF", 
-        "DXI_MSTCN_S-EMD"
+    result_root = "results/aug/DXI"
+    # List of (version, mode) combinations to compare
+    combs = [
+        # ("DXI_MSTCN", "planar_rotated"),
+        # ("DXI_MSTCN_AR", "planar_rotated"),
+        # ("DXI_MSTCN", "axis_permuted"),
+        # ("DXI_MSTCN_AP", "axis_permuted"),
+        # ("DXI_MSTCN", "original"),
+        # ("DXI_MSTCN_AS", "original"),
+        # Add more (version, mode) tuples as needed
     ]
-    mode = "original"  # or "left", "right"
 
     all_curves = {}
     thresholds = None
 
-    for version in versions:
+    for version, mode in combs:
         threshold_list, seg_metrics = load_version_mode_metrics(result_root, version, mode)
         if threshold_list is None or seg_metrics is None:
             continue
@@ -91,7 +97,9 @@ if __name__ == "__main__":
         )
     plt.xlabel("Segmentation Threshold")
     plt.ylabel("Weighted F1 Score")
-    plt.title(f"Segment-wise F1 Scores Comparison (Mode: {mode})")
+    # Format mode name for title and filename
+    mode_title = mode.replace("_", " ").title()
+    plt.title(f"Segment-wise F1 Scores Comparison (Mode: {mode_title})")
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend(loc="best", fontsize=8, title="Version")
     plt.tight_layout()
