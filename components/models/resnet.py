@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU ResNet Model Script
+IMU ResNetEncoder Model Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-14
-Description : This module defines various components of a ResNet-based model
+Edited      : 2025-05-19
+Description : This module defines various components of a ResNetEncoder-based model
               architecture, including classifiers, projection heads, residual
               blocks, and downsampling layers. These components are designed
               for tasks such as classification, feature extraction, and
@@ -48,54 +48,6 @@ def load_weights(weight_path, model, my_device="cpu", name_start_idx=2, is_dist=
 
     # 3. load the new state dict
     model.load_state_dict(model_dict)
-
-
-class Classifier(nn.Module):
-    def __init__(self, input_size=1024, output_size=2):
-        super(Classifier, self).__init__()
-        self.linear1 = torch.nn.Linear(input_size, output_size)
-
-    def forward(self, x):
-        y_pred = self.linear1(x)
-        return y_pred
-
-
-class EvaClassifier(nn.Module):
-    def __init__(self, input_size=1024, nn_size=512, output_size=2):
-        super(EvaClassifier, self).__init__()
-        self.linear1 = torch.nn.Linear(input_size, nn_size)
-        self.linear2 = torch.nn.Linear(nn_size, output_size)
-
-    def forward(self, x):
-        x = self.linear1(x)
-        x = F.relu(x)
-        x = self.linear2(x)
-        return x
-
-
-class ProjectionHead(nn.Module):
-    def __init__(self, input_size=1024, nn_size=256, encoding_size=100):
-        super(ProjectionHead, self).__init__()
-        self.linear1 = torch.nn.Linear(input_size, nn_size)
-        self.linear2 = torch.nn.Linear(nn_size, encoding_size)
-
-    def forward(self, x):
-        x = self.linear1(x)
-        x = F.relu(x)
-        x = self.linear2(x)
-        return x
-
-
-def weight_init(self, mode="fan_out", nonlinearity="relu"):
-
-    for m in self.modules():
-
-        if isinstance(m, (nn.Conv1d, nn.Linear)):
-            nn.init.kaiming_normal_(m.weight, mode=mode, nonlinearity=nonlinearity)
-
-        elif isinstance(m, (nn.BatchNorm1d)):
-            nn.init.constant_(m.weight, 1)
-            nn.init.constant_(m.bias, 0)
 
 
 class Downsample(nn.Module):
@@ -190,8 +142,8 @@ class ResBlock(nn.Module):
         return x
 
 
-class Resnet(nn.Module):
-    r"""The general form of the architecture can be described as follows:
+class ResNet(nn.Module):
+    """The general form of the architecture can be described as follows:
 
     x->[Conv-[ResBlock]^m-BN-ReLU-Down]^n->y
 
@@ -205,60 +157,17 @@ class Resnet(nn.Module):
 
     def __init__(
         self,
-        output_size=1,
         n_channels=3,
-        is_eva=False,
-        resnet_version=1,
-        epoch_len=10,
-        is_mtl=False,
-        is_simclr=False,
     ):
-        super(Resnet, self).__init__()
+        super(ResNet, self).__init__()
 
-        # Architecture definition. Each tuple defines
-        # a basic Resnet layer Conv-[ResBlock]^m]-BN-ReLU-Down
-        # isEva: change the classifier to two FC with ReLu
-        # For example, (64, 5, 1, 5, 3, 1) means:
-        # - 64 convolution filters
-        # - kernel size of 5
-        # - 1 residual block (ResBlock)
-        # - ResBlock's kernel size of 5
-        # - downsampling factor of 3
-        # - downsampling filter order of 1
-        # In the below, note that 3*3*5*5*4 = 900 (input size)
-        if resnet_version == 1:
-            if epoch_len == 5:
-                cgf = [
-                    (64, 5, 2, 5, 2, 2),
-                    (128, 5, 2, 5, 2, 2),
-                    (256, 5, 2, 5, 3, 1),
-                    (256, 5, 2, 5, 3, 1),
-                    (512, 5, 0, 5, 3, 1),
-                ]
-            elif epoch_len == 10:
-                cgf = [
-                    (64, 5, 2, 5, 2, 2),
-                    (128, 5, 2, 5, 2, 2),
-                    (256, 5, 2, 5, 5, 1),
-                    (512, 5, 2, 5, 5, 1),
-                    (1024, 5, 0, 5, 3, 1),
-                ]
-            else:
-                cgf = [
-                    (64, 5, 2, 5, 3, 1),
-                    (128, 5, 2, 5, 3, 1),
-                    (256, 5, 2, 5, 5, 1),
-                    (512, 5, 2, 5, 5, 1),
-                    (1024, 5, 0, 5, 4, 0),
-                ]
-        else:
-            cgf = [
-                (64, 5, 2, 5, 3, 1),
-                (64, 5, 2, 5, 3, 1),
-                (128, 5, 2, 5, 5, 1),
-                (128, 5, 2, 5, 5, 1),
-                (256, 5, 2, 5, 4, 0),
-            ]  # smaller resnet
+        cgf = [
+            (64, 5, 2, 5, 2, 2),
+            (128, 5, 2, 5, 2, 2),
+            (256, 5, 2, 5, 5, 1),
+            (512, 5, 2, 5, 5, 1),
+            (1024, 5, 0, 5, 3, 1),
+        ]
         in_channels = n_channels
         feature_extractor = nn.Sequential()
         for i, layer_params in enumerate(cgf):
@@ -272,7 +181,7 @@ class Resnet(nn.Module):
             ) = layer_params
             feature_extractor.add_module(
                 f"layer{i+1}",
-                Resnet.make_layer(
+                ResNet.make_layer(
                     in_channels,
                     out_channels,
                     conv_kernel_size,
@@ -285,20 +194,6 @@ class Resnet(nn.Module):
             in_channels = out_channels
 
         self.feature_extractor = feature_extractor
-        self.is_mtl = is_mtl
-
-        # Classifier input size = last out_channels in previous layer
-        if is_eva:
-            self.classifier = EvaClassifier(input_size=out_channels, output_size=output_size)
-        elif is_mtl:
-            self.aot_h = Classifier(input_size=out_channels, output_size=output_size)
-            self.scale_h = Classifier(input_size=out_channels, output_size=output_size)
-            self.permute_h = Classifier(input_size=out_channels, output_size=output_size)
-            self.time_w_h = Classifier(input_size=out_channels, output_size=output_size)
-        elif is_simclr:
-            self.classifier = ProjectionHead(input_size=out_channels, encoding_size=output_size)
-
-        weight_init(self)
 
     @staticmethod
     def make_layer(
@@ -359,42 +254,24 @@ class Resnet(nn.Module):
 
         return nn.Sequential(*modules)
 
-    def forward(self, x):
-        feats = self.feature_extractor(x)
 
-        if self.is_mtl:
-            aot_y = self.aot_h(feats.view(x.shape[0], -1))
-            scale_y = self.scale_h(feats.view(x.shape[0], -1))
-            permute_y = self.permute_h(feats.view(x.shape[0], -1))
-            time_w_h = self.time_w_h(feats.view(x.shape[0], -1))
-            return aot_y, scale_y, permute_y, time_w_h
-        else:
-            y = self.classifier(feats.view(x.shape[0], -1))
-            return y
-        return y
-
-
-class ResNet(nn.Module):
-    def __init__(self, weight_path=None, n_channels=3, class_num=2, my_device="cpu", freeze_encoder=False):
+class ResNetEncoder(nn.Module):
+    def __init__(self, weight_path=None, n_channels=3, my_device="cpu", freeze_encoder=False):
         """
-        Loads the pre-trained ResNet model, removes its classifier head, and
+        Loads the pre-trained ResNetEncoder model, removes its classifier head, and
         outputs flattened features from the feature extractor.
 
         Parameters:
             weight_path (str): Path to the pre-trained weights.
             n_channels (int): Number of input channels.
-            class_num (int): Number of classes used during pre-training (for model instantiation).
             my_device (str): Device for loading the weights.
             freeze_encoder (bool): If True, freeze encoder weights.
         """
-        super(ResNet, self).__init__()
-        # Create the ResNet model with is_eva=True to use the two-layer FC head in pre-training.
+        super(ResNetEncoder, self).__init__()
+        # Create the ResNetEncoder model with is_eva=True to use the two-layer FC head in pre-training.
         # (The classifier head will be discarded.)
-        self.resnet = Resnet(
-            output_size=class_num,
+        self.resnet = ResNet(
             n_channels=n_channels,
-            is_eva=True,
-            resnet_version=1,
         )
         # Load pre-trained weights. The load_weights function adapts the parameter names if needed.
         if weight_path is not None:
@@ -408,10 +285,6 @@ class ResNet(nn.Module):
         # Save the feature extractor, which is all layers before the classifier.
         self.feature_extractor = self.resnet.feature_extractor
 
-        # Infer the feature dimension from the last layer output channels.
-        # (Assumes the classifier head was created with in_features equal to the last out_channels.)
-        # For example, for epoch_len=10 using your configuration, the last layer defined in
-        # cgf is (1024, 5, 0, 5, 3, 1) so feature dimension is 1024.
         self.out_features = 1024
 
     def forward(self, x):

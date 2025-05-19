@@ -58,7 +58,7 @@ class ResBlock(nn.Module):
 
 class ResNetFeatureExtractor(nn.Module):
     """
-    1D ResNet feature extractor composed of repeated Conv-ResBlocks-Downsample stages.
+    1D ResNetEncoder feature extractor composed of repeated Conv-ResBlocks-Downsample stages.
     """
 
     def __init__(self, in_channels=3, config=None):
@@ -145,7 +145,7 @@ class BiLSTMHead(nn.Module):
 
 class ResNet_BiLSTM(nn.Module):
     """
-    Combines ResNet encoder with BiLSTM head for end-to-end frame-level classification.
+    Combines ResNetEncoder encoder with BiLSTM head for end-to-end frame-level classification.
     """
 
     def __init__(self, encoder, head):

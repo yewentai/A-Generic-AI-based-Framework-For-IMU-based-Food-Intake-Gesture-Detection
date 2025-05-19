@@ -6,7 +6,7 @@ IMU Training Script (Single and Distributed Combined)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-15
+Edited      : 2025-05-19
 Description : This script trains various models (CNN-LSTM, TCN, MSTCN, ResNet_BiLSTM)
               on IMU data with:
               1. Support for both single-GPU and distributed multi-GPU training
@@ -50,7 +50,7 @@ from components.datasets import (
 )
 from components.models.accnet import AccNet
 from components.models.cnnlstm import CNNLSTM
-from components.models.resnet import ResNet
+from components.models.resnet import ResNetEncoder
 from components.models.resnet_bilstm import BiLSTMHead, ResNet_BiLSTM, ResNetCopy
 from components.models.tcn import TCN, MSTCN
 from components.pre_processing import hand_mirroring
@@ -220,7 +220,7 @@ if local_rank == 0:
     logger.info(f"Training started at: {overall_start}")
 
     # Create result directory
-    version_prefix = f"{DATASET}_{MODEL}_S-{SMOOTHING}"
+    version_prefix = f"{DATASET}_{MODEL}"
     if FLAG_DATASET_MIRRORING:
         version_prefix += "_DM"
     if FLAG_AUGMENT_HAND_MIRRORING:
@@ -365,10 +365,9 @@ for fold, validate_subjects in enumerate(validate_folds):
 
         model = ResNet_BiLSTM(encoder, seq_head).to(device)
     elif MODEL in ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
-        encoder = ResNet(
+        encoder = ResNetEncoder(
             weight_path=PRETRAINED_CKPT,
             n_channels=INPUT_DIM,
-            class_num=NUM_CLASSES,
             my_device=device,
             freeze_encoder=FREEZE_ENCODER,
         ).to(device)

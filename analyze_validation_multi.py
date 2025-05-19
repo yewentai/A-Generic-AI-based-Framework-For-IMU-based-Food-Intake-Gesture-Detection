@@ -6,7 +6,7 @@ IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-15
+Edited      : 2025-05-19
 Description : Plot segment-wise F1 scores at different thresholds for all versions
               with legend sorted by average F1 score.
 ===============================================================================
@@ -20,7 +20,7 @@ from seaborn import color_palette
 
 if __name__ == "__main__":
     # Base directory for results
-    result_root = "results/smooth/DXI"
+    result_root = "results/mirror/FDI"
 
     # Find all version directories
     raw_versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]

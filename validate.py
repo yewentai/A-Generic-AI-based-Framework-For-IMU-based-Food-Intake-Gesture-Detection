@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-05-18
+Edited      : 2025-05-19
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original, left, and right hand-based validation modes
               2. Optional data augmentation: hand mirroring and planar rotation
@@ -34,7 +34,7 @@ from components.models.tcn import TCN, MSTCN
 from components.models.cnnlstm import CNNLSTM
 from components.models.accnet import AccNet
 from components.models.resnet_bilstm import ResNetCopy, BiLSTMHead, ResNet_BiLSTM
-from components.models.resnet import ResNet
+from components.models.resnet import ResNetEncoder
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
@@ -49,8 +49,8 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/aug/DXI"
-    versions = ["DXI_MSTCN"]
+    result_root = "results/FDI"
+    versions = ["FDI_MSTCN_AM"]
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -236,7 +236,7 @@ if __name__ == "__main__":
                     ).to(device)
                     model = ResNet_BiLSTM(encoder, seq_head).to(device)
                 elif model_name in ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
-                    encoder = ResNet(
+                    encoder = ResNetEncoder(
                         weight_path=pretrained_ckpt,
                         n_channels=input_dim,
                         class_num=num_classes,
