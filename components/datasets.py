@@ -6,7 +6,7 @@ IMU Dataset Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
+Edited      : 2025-05-19
 Description : This script defines multiple dataset classes for loading and preprocessing
               IMU data, including support for segment-based, balanced, sliding window,
               and unlabeled variants. It also includes helper functions for generating
@@ -25,6 +25,7 @@ from scipy.signal import resample_poly
 
 
 class IMUDataset(Dataset):
+
     def __init__(
         self,
         X,
@@ -33,6 +34,7 @@ class IMUDataset(Dataset):
         downsample_factor=None,
         stride=None,
         selected_channels=None,
+        sample_wise=True,
     ):
         """
         Initialize the IMUDataset.
@@ -45,6 +47,7 @@ class IMUDataset(Dataset):
             apply_antialias (bool): Whether to apply anti-aliasing filter (resample_poly does it internally).
             stride (int): Step size for the sliding window.
             selected_channels (list or None): Indices of channels to select; None → all channels.
+            sample_wise (bool): If True, returns label for each sample in the segment; if False, returns a single label per segment (majority vote).
         """
         self.data = []
         self.labels = []
@@ -52,6 +55,7 @@ class IMUDataset(Dataset):
         self.sequence_length = sequence_length
         self.downsample_factor = downsample_factor if downsample_factor is not None else 1
         self.stride = stride if stride is not None else sequence_length
+        self.sample_wise = sample_wise
 
         # infer channels
         if selected_channels is None:
@@ -87,7 +91,14 @@ class IMUDataset(Dataset):
                 seg_x = imu_data_ds[i : i + sequence_length]
                 seg_y = labels_ds[i : i + sequence_length]
                 self.data.append(seg_x)
-                self.labels.append(seg_y)
+                if self.sample_wise:
+                    # store full sequence of labels
+                    self.labels.append(seg_y)
+                else:
+                    # majority vote for segment label
+                    counts = np.bincount(seg_y)
+                    majority_label = counts.argmax()
+                    self.labels.append(majority_label)
                 self.subject_indices.append(subject_idx)
 
     def downsample(self, data, factor):
@@ -118,7 +129,13 @@ class IMUDataset(Dataset):
 
     def __getitem__(self, idx):
         x = torch.tensor(self.data[idx], dtype=torch.float32)
-        y = torch.tensor(self.labels[idx], dtype=torch.long)  # long for CE loss
+        raw_label = self.labels[idx]
+        if self.sample_wise:
+            # per-sample labels
+            y = torch.tensor(raw_label, dtype=torch.long)
+        else:
+            # single label per segment
+            y = torch.tensor(raw_label, dtype=torch.long)
         return x, y
 
 

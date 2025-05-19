@@ -7,11 +7,13 @@ IMU ResNetEncoder Model Script
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
 Edited      : 2025-05-19
-Description : This module defines various components of a ResNetEncoder-based model
-              architecture, including classifiers, projection heads, residual
-              blocks, and downsampling layers. These components are designed
-              for tasks such as classification, feature extraction, and
-              representation learning on IMU data.
+Description : Defines a modular ResNetEncoder architecture for IMU data. Includes:
+              - weight loading utility for checkpoints (supports distributed models)
+              - anti-aliased downsampling (1D)
+              - residual building blocks (1D)
+              - sequential stage construction (make_layer)
+              - optional feature freezing for transfer learning
+              - final Encoder wrapper that flattens extracted features
 ===============================================================================
 """
 
@@ -22,11 +24,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def load_weights(weight_path, model, my_device="cpu", name_start_idx=2, is_dist=False):
+def load_weights(weight_path, model, device="cpu", name_start_idx=2, is_dist=False):
     # only need to change weights name when the
     # model is trained in a distributed manner
 
-    pretrained_dict = torch.load(weight_path, map_location=my_device, weights_only=True)
+    pretrained_dict = torch.load(weight_path, map_location=device, weights_only=True)
     pretrained_dict_v2 = copy.deepcopy(pretrained_dict)  # v2 has the right para names
 
     if is_dist:
@@ -256,7 +258,7 @@ class ResNet(nn.Module):
 
 
 class ResNetEncoder(nn.Module):
-    def __init__(self, weight_path=None, n_channels=3, my_device="cpu", freeze_encoder=False):
+    def __init__(self, weight_path=None, n_channels=3, device="cpu", freeze=False):
         """
         Loads the pre-trained ResNetEncoder model, removes its classifier head, and
         outputs flattened features from the feature extractor.
@@ -264,8 +266,8 @@ class ResNetEncoder(nn.Module):
         Parameters:
             weight_path (str): Path to the pre-trained weights.
             n_channels (int): Number of input channels.
-            my_device (str): Device for loading the weights.
-            freeze_encoder (bool): If True, freeze encoder weights.
+            device (str): Device for loading the weights.
+            freeze (bool): If True, freeze encoder weights.
         """
         super(ResNetEncoder, self).__init__()
         # Create the ResNetEncoder model with is_eva=True to use the two-layer FC head in pre-training.
@@ -275,10 +277,10 @@ class ResNetEncoder(nn.Module):
         )
         # Load pre-trained weights. The load_weights function adapts the parameter names if needed.
         if weight_path is not None:
-            load_weights(weight_path, self.resnet, my_device=my_device, is_dist=True, name_start_idx=1)
+            load_weights(weight_path, self.resnet, device=device, is_dist=True, name_start_idx=1)
 
         # Freeze encoder parameters if requested.
-        if freeze_encoder:
+        if freeze:
             for param in self.resnet.parameters():
                 param.requires_grad = False
 
@@ -292,3 +294,16 @@ class ResNetEncoder(nn.Module):
         feats = self.feature_extractor(x)
         feats = feats.view(x.shape[0], -1)  # flatten
         return feats
+
+
+class MLPClassifier(nn.Module):
+    def __init__(self, output_size, input_size=1024, nn_size=512):
+        super(MLPClassifier, self).__init__()
+        self.linear1 = torch.nn.Linear(input_size, nn_size)
+        self.linear2 = torch.nn.Linear(nn_size, output_size)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = F.relu(x)
+        x = self.linear2(x)
+        return x

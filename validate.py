@@ -32,9 +32,8 @@ from torch.utils.data import DataLoader, Subset
 # Local imports
 from components.models.tcn import TCN, MSTCN
 from components.models.cnnlstm import CNNLSTM
-from components.models.accnet import AccNet
+from components.models.resnet import ResNetEncoder, MLPClassifier
 from components.models.resnet_bilstm import ResNetCopy, BiLSTMHead, ResNet_BiLSTM
-from components.models.resnet import ResNetEncoder
 from components.post_processing import post_process_predictions
 from components.evaluation import segment_evaluation
 from components.datasets import IMUDataset
@@ -42,15 +41,15 @@ from components.pre_processing import hand_mirroring, planar_rotation, axis_perm
 
 # --- Configurations ---
 NUM_WORKERS = 4
-SEGMENT_VALIDATION = True
+SEGMENT_VALIDATION = False
 POST_PROCESSING_SMOOTHING = True
 THRESHOLD_LIST = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/FDI"
-    versions = ["FDI_MSTCN_AM"]
+    result_root = "results/"
+    versions = ["DXI_ResNet_MLP"]
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -79,6 +78,8 @@ if __name__ == "__main__":
         model_name = config_info["model"]
         input_dim = config_info["input_dim"]
         downsample_factor = config_info["downsample_factor"]
+        stride = config_info["stride"]
+        sample_wise = config_info["sample_wise"]
         selected_channels = config_info["selected_channels"]
         sampling_freq = config_info["sampling_freq"]
         window_samples = config_info["window_samples"]
@@ -173,7 +174,9 @@ if __name__ == "__main__":
                 mode["Y"],
                 sequence_length=window_samples,
                 downsample_factor=downsample_factor,
+                stride=stride,
                 selected_channels=selected_channels,
+                sample_wise=sample_wise,
             )
             mode_stats = []
 
@@ -209,13 +212,14 @@ if __name__ == "__main__":
                         lstm_hidden=config_info["lstm_hidden"],
                         num_classes=num_classes,
                     ).to(device)
-                elif model_name == "AccNet":
-                    model = AccNet(
-                        num_classes=num_classes,
-                        input_channels=input_dim,
-                        conv_filters=config_info["conv_filters"],
-                        kernel_size=config_info["kernel_size"],
+                elif model_name == "ResNet_MLP":
+                    encoder = ResNetEncoder(
+                        weight_path=None,
+                        device=device,
+                        freeze=True,
                     ).to(device)
+                    classifier = MLPClassifier(output_size=num_classes).to(device)
+                    model = torch.nn.Sequential(encoder, classifier)
                 elif model_name == "ResNet_BiLSTM":
                     encoder = ResNetCopy(
                         in_channels=input_dim,
@@ -248,7 +252,6 @@ if __name__ == "__main__":
                         feature_dim=feature_dim, seq_length=window_samples, num_classes=num_classes, hidden_dim=128
                     ).to(device)
                     model = ResNet_BiLSTM(encoder, seq_labeler).to(device)
-
                 else:
                     logger.error(f"Invalid model: {model_name}")
                     continue

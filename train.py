@@ -31,6 +31,7 @@ from fractions import Fraction
 # Third-party imports
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.distributed as dist
 from torch.utils.data import DataLoader, DistributedSampler, Subset
 from tqdm import tqdm
@@ -48,9 +49,8 @@ from components.datasets import (
     create_balanced_subject_folds,
     load_predefined_validate_folds,
 )
-from components.models.accnet import AccNet
 from components.models.cnnlstm import CNNLSTM
-from components.models.resnet import ResNetEncoder
+from components.models.resnet import ResNetEncoder, MLPClassifier
 from components.models.resnet_bilstm import BiLSTMHead, ResNet_BiLSTM, ResNetCopy
 from components.models.tcn import TCN, MSTCN
 from components.pre_processing import hand_mirroring
@@ -79,7 +79,7 @@ parser.add_argument(
         "CNN_LSTM",
         "TCN",
         "MSTCN",
-        "AccNet",
+        "ResNet_MLP",
         "ResNet_BiLSTM",
         "ResNetBiLSTM_FTFull",
         "ResNetBiLSTM_FTHead",
@@ -122,12 +122,11 @@ elif MODEL == "MSTCN":
     DROPOUT = 0.3
     CAUSAL = False
     NUM_STAGES = 2
-elif MODEL == "AccNet":
-    KERNEL_SIZE = 3
-    CONV_FILTERS = (32, 64, 128)
 elif MODEL == "CNN_LSTM":
     CONV_FILTERS = (32, 64, 128)
     LSTM_HIDDEN = 128
+elif MODEL == "ResNet_MLP":
+    FREEZE_ENCODER = False
 elif MODEL == "ResNet_BiLSTM":
     LSTM_HIDDEN = 128
 elif MODEL in ["ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
@@ -161,7 +160,7 @@ elif DATASET == "OREBA":
 else:
     raise ValueError(f"Invalid dataset: {DATASET}")
 
-if MODEL in ["AccNet", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
+if MODEL in ["ResNet_MLP", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"]:
     INPUT_DIM = 3
     SELECTED_CHANNELS = [0, 1, 2]  # Only use accelerometer data for these models
     WINDOW_SECONDS = 10
@@ -171,8 +170,13 @@ elif MODEL in ["CNN_LSTM", "TCN", "MSTCN"]:
     SELECTED_CHANNELS = [0, 1, 2, 3, 4, 5]
     WINDOW_SECONDS = 60
     DOWNSAMPLE_FACTOR = 4
+if MODEL == "ResNet_MLP":
+    SAMPLE_WISE = False
+    STRIDE = 60
 else:
-    raise ValueError(f"Invalid model: {MODEL}")
+    SAMPLE_WISE = True
+    STRIDE = SAMPLING_FREQ_ORIGINAL * WINDOW_SECONDS // DOWNSAMPLE_FACTOR
+
 SAMPLING_FREQ = SAMPLING_FREQ_ORIGINAL // DOWNSAMPLE_FACTOR
 WINDOW_SAMPLES = SAMPLING_FREQ * WINDOW_SECONDS
 BATCH_SIZE = 64
@@ -253,7 +257,13 @@ if DATASET == "OREBA":
     with open(os.path.join(DATA_DIR, "Y.pkl"), "rb") as f:
         Y = np.array(pickle.load(f), dtype=object)
     dataset = IMUDataset(
-        X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=SELECTED_CHANNELS
+        X,
+        Y,
+        sequence_length=WINDOW_SAMPLES,
+        downsample_factor=DOWNSAMPLE_FACTOR,
+        stride=STRIDE,
+        selected_channels=SELECTED_CHANNELS,
+        sample_wise=SAMPLE_WISE,
     )
 else:
     with open(os.path.join(DATA_DIR, "X_L.pkl"), "rb") as f:
@@ -272,7 +282,13 @@ else:
     X = np.array([np.concatenate([x_l, x_r], axis=0) for x_l, x_r in zip(X_L, X_R)], dtype=object)
     Y = np.array([np.concatenate([y_l, y_r], axis=0) for y_l, y_r in zip(Y_L, Y_R)], dtype=object)
 dataset = IMUDataset(
-    X, Y, sequence_length=WINDOW_SAMPLES, downsample_factor=DOWNSAMPLE_FACTOR, selected_channels=SELECTED_CHANNELS
+    X,
+    Y,
+    sequence_length=WINDOW_SAMPLES,
+    downsample_factor=DOWNSAMPLE_FACTOR,
+    stride=STRIDE,
+    selected_channels=SELECTED_CHANNELS,
+    sample_wise=SAMPLE_WISE,
 )
 
 
@@ -303,8 +319,8 @@ for fold, validate_subjects in enumerate(validate_folds):
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
-    if MODEL in ["TCN", "MSTCN", "CNN_LSTM", "AccNet"]:
-        model = {"TCN": TCN, "MSTCN": MSTCN, "CNN_LSTM": CNNLSTM, "AccNet": AccNet}[MODEL](
+    if MODEL in ["TCN", "MSTCN", "CNN_LSTM"]:
+        model = {"TCN": TCN, "MSTCN": MSTCN, "CNN_LSTM": CNNLSTM}[MODEL](
             **(
                 {
                     "num_stages": NUM_STAGES,
@@ -333,17 +349,18 @@ for fold, validate_subjects in enumerate(validate_folds):
                             "lstm_hidden": LSTM_HIDDEN,
                             "num_classes": NUM_CLASSES,
                         }
-                        if MODEL == "CNN_LSTM"
-                        else {
-                            "num_classes": NUM_CLASSES,
-                            "input_channels": INPUT_DIM,
-                            "conv_filters": CONV_FILTERS,
-                            "kernel_size": KERNEL_SIZE,
-                        }
                     )
                 )
             )
         ).to(device)
+    elif MODEL == "ResNet_MLP":
+        encoder = ResNetEncoder(
+            weight_path=PRETRAINED_CKPT,
+            device=device,
+            freeze=FREEZE_ENCODER,
+        ).to(device)
+        classifier = MLPClassifier(output_size=NUM_CLASSES).to(device)
+        model = torch.nn.Sequential(encoder, classifier)
     elif MODEL == "ResNet_BiLSTM":
         encoder = ResNetCopy(
             in_channels=INPUT_DIM,
@@ -386,6 +403,7 @@ for fold, validate_subjects in enumerate(validate_folds):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank])
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    loss_seg = nn.CrossEntropyLoss()
     best_loss = float("inf")
 
     # Training loop over epochs
@@ -426,6 +444,9 @@ for fold, validate_subjects in enumerate(validate_folds):
                     ce_loss += ce
                     smooth_loss += smooth
                 # ce_loss, smooth_loss = MSTCN_Loss(outputs, batch_y)
+            elif MODEL == "ResNet_MLP":
+                ce_loss = loss_seg(outputs, batch_y)
+                smooth_loss = torch.tensor(0.0, device=device)
             else:
                 ce_loss, smooth_loss = loss_fn(outputs, batch_y, smoothing=SMOOTHING)
 
@@ -473,6 +494,8 @@ if local_rank == 0:
         # Dataloader Settings
         "window_seconds": WINDOW_SECONDS,
         "window_samples": WINDOW_SAMPLES,
+        "stride": STRIDE,
+        "sample_wise": SAMPLE_WISE,
         "batch_size": BATCH_SIZE,
         "num_workers": NUM_WORKERS,
         # Model Settings
