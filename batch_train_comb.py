@@ -5,7 +5,7 @@ script_path = "train.py"
 
 # === Available Options ===
 # Datasets:        "DXI", "DXII", "FDI", "FDII"
-# Models:          "CNN_LSTM", "TCN", "MSTCN", "AccNet", "ResNet_MLP", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"
+# Models:          "CNN_LSTM", "TCN", "MSTCN", "ResNet_MLP", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"
 # Augmentations:   "None", "AM", "AP", "AR", "AS", "DM"
 # Smoothing types: "MSE", "L1", "HUBER", "JS", "TV", "SEC_DIFF", "EMD"
 
