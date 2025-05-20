@@ -6,7 +6,7 @@ IMU Raw Data Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-15
+Edited      : 2025-05-21
 Description : This script analyzes raw IMU data from various datasets, performing:
               1. Subject-wise and per-label statistics and segment analysis
               2. Timeline visualization for activity labels across subjects
@@ -22,9 +22,10 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
+import matplotlib as mpl
 
 # Configuration
-DATASET = "DXI"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
+DATASET = "FDI"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"
 
 if DATASET.startswith("DX"):
     NUM_CLASSES = 2
@@ -164,6 +165,7 @@ def plot_segment_length_distribution_by_label(Y):
     Plot the distribution of segment lengths for labels 1 and 2 (if present) in a single histogram,
     using high-contrast colors and some transparency.
     Handles datasets that may only have label 1.
+    Y-axis uses integer ticks.
     """
     # Dynamically detect which labels are present (excluding 0)
     present_labels = sorted([lab for lab in np.unique(np.concatenate(Y)) if lab != 0])
@@ -204,13 +206,25 @@ def plot_segment_length_distribution_by_label(Y):
             alpha=0.6,
             label=f"Label {lab}",
         )
-    plt.title(f"Segment Length Distribution - Labels {', '.join(str(lab) for lab in present_labels)}")
+    plt.title(f"Segment Length Distribution - Dataset:{DATASET}")
     plt.xlabel("Segment Length (seconds)")
     plt.ylabel("Count")
-    plt.legend()
+    handles, labels = plt.gca().get_legend_handles_labels()
+    new_labels = []
+    for lab in labels:
+        if lab == "Label 1":
+            new_labels.append("Eating")
+        elif lab == "Label 2":
+            new_labels.append("Drinking")
+        else:
+            new_labels.append(lab)
+    plt.legend(handles, new_labels)
     plt.grid(axis="y", linestyle="--", alpha=0.7)
 
-    plt.savefig(os.path.join(SAVE_DIR, "segment_length_distribution_labels.png"), dpi=300)
+    # Set y-axis to integer ticks only
+    plt.gca().yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+
+    plt.savefig(os.path.join(SAVE_DIR, f"segment_length_distribution_labels_{DATASET}.pdf"), format="pdf", dpi=300)
     plt.close()
 
 
@@ -284,8 +298,8 @@ def plot_shortest_segments(X, Y):
             ax2.grid(True, alpha=0.3)
 
             plt.tight_layout()
-            save_path = os.path.join(save_dir, f"label{label}_shortest{idx+1}_subj{subj_idx+1}.png")
-            plt.savefig(save_path, dpi=300)
+            save_path = os.path.join(save_dir, f"label{label}_shortest{idx+1}_subj{subj_idx+1}.pdf")
+            plt.savefig(save_path, format="pdf", dpi=300)
             plt.close()
 
 
@@ -361,8 +375,8 @@ def plot_longest_segments(X, Y):
             ax2.axvspan(time_axis[0], time_axis[-1], color="red", alpha=0.2)
 
             plt.tight_layout()
-            save_path = os.path.join(save_dir, f"label{label}_top{idx+1}_subj{subj_idx+1}.png")
-            plt.savefig(save_path, dpi=300)
+            save_path = os.path.join(save_dir, f"label{label}_top{idx+1}_subj{subj_idx+1}.pdf")
+            plt.savefig(save_path, format="pdf", dpi=300)
             plt.close()
 
 
@@ -462,7 +476,7 @@ def plot_all_subjects_labels(Y, sampling_freq=SAMPLING_FREQ):
 
     plt.tight_layout()
     plt.savefig(
-        os.path.join(SAVE_DIR, "all_subjects_labels.png"),
+        os.path.join(SAVE_DIR, "all_subjects_labels.pdf"),
         dpi=300,
         bbox_inches="tight",
         facecolor=fig.get_facecolor(),
@@ -471,6 +485,7 @@ def plot_all_subjects_labels(Y, sampling_freq=SAMPLING_FREQ):
 
 
 def main():
+    mpl.rcParams.update({"font.size": 16})  # Update default font size
     # Load and analyze both sides together
     X, Y = load_data()
     # basic_statistics(Y)

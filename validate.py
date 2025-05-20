@@ -5,7 +5,7 @@
 MSTCN IMU Validation Script (DX/FD Datasets)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
-Edited      : 2025-05-19
+Edited      : 2025-05-21
 Description : This script validates MSTCN models on DX/FD IMU datasets with:
               1. Original, left, and right hand-based validation modes
               2. Optional data augmentation: hand mirroring and planar rotation
@@ -41,15 +41,15 @@ from components.pre_processing import hand_mirroring, planar_rotation, axis_perm
 
 # --- Configurations ---
 NUM_WORKERS = 4
-SEGMENT_VALIDATION = False
+SEGMENT_VALIDATION = True
 POST_PROCESSING_SMOOTHING = True
 THRESHOLD_LIST = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/"
-    versions = ["DXI_ResNet_MLP"]
+    result_root = "results/mirror/FDI"
+    versions = ["FDI_MSTCN_Augment_Mirror"]
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 
@@ -78,8 +78,8 @@ if __name__ == "__main__":
         model_name = config_info["model"]
         input_dim = config_info["input_dim"]
         downsample_factor = config_info["downsample_factor"]
-        stride = config_info["stride"]
-        sample_wise = config_info["sample_wise"]
+        stride = config_info.get("stride", None)
+        sample_wise = config_info.get("sample_wise", True)
         selected_channels = config_info["selected_channels"]
         sampling_freq = config_info["sampling_freq"]
         window_samples = config_info["window_samples"]

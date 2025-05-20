@@ -6,7 +6,7 @@ IMU Training Result Comparison Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-18
+Edited      : 2025-05-21
 Description : Plot segment-wise F1 scores at different thresholds for specified
               versions and evaluation modes. Used for direct comparison.
 ===============================================================================
@@ -17,6 +17,9 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from seaborn import color_palette
+import matplotlib as mpl
+
+mpl.rcParams.update({"font.size": 16})  # Update default font size
 
 
 def load_version_mode_metrics(result_root, version, mode_filter):
@@ -55,10 +58,8 @@ if __name__ == "__main__":
     combs = [
         # ("DXI_MSTCN", "planar_rotated"),
         # ("DXI_MSTCN_AR", "planar_rotated"),
-        # ("DXI_MSTCN", "axis_permuted"),
-        # ("DXI_MSTCN_AP", "axis_permuted"),
-        # ("DXI_MSTCN", "original"),
-        # ("DXI_MSTCN_AS", "original"),
+        ("DXI_MSTCN", "axis_permuted"),
+        ("DXI_MSTCN_AP", "axis_permuted"),
         # Add more (version, mode) tuples as needed
     ]
 
@@ -82,13 +83,24 @@ if __name__ == "__main__":
     colors = color_palette("tab10", len(all_curves))
     markers = ["o", "s", "D", "^", "v", "P", "X", "*", "h", "H", "p", "d", "8", ">", "<"]
 
+    # Map version names to descriptive labels for the legend
+    legend_labels = {
+        "DXI_MSTCN": "No augmentation",
+        "DXI_MSTCN_AR": "Augmentation Planar Rotation",
+        "DXI_MSTCN_AP": "Augmentation Axis Permutation",
+    }
+
+    # Sort all_curves by average value (descending)
+    sorted_items = sorted(all_curves.items(), key=lambda x: np.nanmean(x[1]["mean"]), reverse=True)
+
     plt.figure(figsize=(10, 6))
-    for idx, (version, vals) in enumerate(all_curves.items()):
+    for idx, (version, vals) in enumerate(sorted_items):
+        label = legend_labels.get(version, version)
         plt.errorbar(
             thresholds,
             vals["mean"],
             yerr=vals["std"],
-            label=version,
+            label=label,
             marker=markers[idx % len(markers)],
             markersize=4,
             linewidth=1.0,
@@ -99,12 +111,26 @@ if __name__ == "__main__":
     plt.ylabel("Weighted F1 Score")
     # Format mode name for title and filename
     mode_title = mode.replace("_", " ").title()
-    plt.title(f"Segment-wise F1 Scores Comparison (Mode: {mode_title})")
+    plt.title(f"Segment-wise F1 Scores Comparison (Dataset: DXI, Model: MSTCN)")
     plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend(loc="best", fontsize=8, title="Version")
+    plt.legend(loc="best", fontsize=8)
     plt.tight_layout()
 
-    out_file = os.path.join(result_root, f"DXI_smooth_compare_{mode}.png")
-    plt.savefig(out_file, dpi=300)
+    out_file = os.path.join(result_root, f"compare_{mode}_DXI.pdf")
+    plt.savefig(out_file, format="pdf", dpi=300)
     plt.close()
     print(f"Saved comparison plot: {out_file}")
+
+    # --- Save data for LaTeX table ---
+    table_data = {}
+    for version, vals in sorted_items:
+        label = legend_labels.get(version, version)
+        table_data[label] = {
+            str(t): {"mean": round(float(m), 4), "std": round(float(s), 4)}
+            for t, m, s in zip(thresholds, vals["mean"], vals["std"])
+        }
+
+    json_out_path = os.path.join(result_root, f"compare_{mode}_DXI_table.json")
+    with open(json_out_path, "w") as f:
+        json.dump(table_data, f, indent=4)
+    print(f"Saved F1 statistics for LaTeX table: {json_out_path}")

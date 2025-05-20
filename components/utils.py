@@ -4,7 +4,7 @@ Loss Functions and Temporal Smoothing Utilities
 ------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-13
+Edited      : 2025-05-21
 Description : This script provides utility functions for computing temporal smoothing losses
               for sequence models such as MSTCN. It supports various smoothing strategies
               (e.g., MSE, L1, Huber, JS, TV, etc.) and includes a deep-supervised loss
@@ -93,6 +93,11 @@ def loss_fn(outputs, targets, smoothing="L1", max_diff=16.0):
         cdf_prev = torch.cumsum(p_prev, dim=1)
         smooth_loss = (cdf_next - cdf_prev).abs().mean()
         coefficient = 15.0
+
+    elif smoothing == "None":
+        # No smoothing
+        smooth_loss = torch.tensor(0.0, device=logits.device)
+        coefficient = 0.0
 
     else:
         raise ValueError(f"Unknown smoothing type '{smoothing}'")

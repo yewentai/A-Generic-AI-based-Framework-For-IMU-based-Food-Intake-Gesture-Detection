@@ -6,7 +6,7 @@ IMU Segmentation Evaluation Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-21
 Description : This script provides evaluation functions for IMU segmentation tasks.
               It matches predicted and ground truth intervals for a target class,
               computes overlap-based metrics (e.g., precision, recall, F1), and supports
@@ -258,7 +258,12 @@ def segment_evaluation(pred, gt, class_label, threshold=0.5, debug_plot=False):
                     _plot_span(ax2, (ps, pe), "FP", "red")
 
     if debug_plot:
+        ax1.set_ylabel("Label")
+        ax2.set_xlabel("Sample")
+        ax2.set_ylabel("Label")
+        plt.suptitle(f"Ground Truth vs Prediction (threshold={threshold})")
         plt.tight_layout()
-        plt.show()
+        # plt.show()
+        plt.savefig("plots/eva2.pdf", format="pdf", dpi=300)
 
     return fn, fp, tp

@@ -6,7 +6,7 @@ IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-19
+Edited      : 2025-05-21
 Description : Plot segment-wise F1 scores at different thresholds for all versions
               with legend sorted by average F1 score.
 ===============================================================================
@@ -17,12 +17,16 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from seaborn import color_palette
+import matplotlib as mpl
+
+mpl.rcParams.update({"font.size": 16})  # Update default font size
 
 if __name__ == "__main__":
     # Base directory for results
-    result_root = "results/mirror/FDI"
+    result_root = "results/smooth/DXI"
 
     # Find all version directories
+    # raw_versions = ["DXI_MSTCN", "DXI_MSTCN_Augment_Mirror", "DXI_MSTCN_Dataset_Mirror"]
     raw_versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
     # Collect metrics per version
@@ -91,11 +95,21 @@ if __name__ == "__main__":
     # Sort versions by descending segment-wise average F1
     sorted_versions = sorted(all_version_metrics.keys(), key=lambda v: avg_segment[v], reverse=True)
 
+    # Map version names to descriptive labels for the legend
+    legend_labels = {
+        # "DXI_MSTCN": "No operations",
+        "DXI_MSTCN_Augment_Mirror": "MSTCN_Augmentation_Mirror",
+        "DXI_MSTCN_Dataset_Mirror": "MSTCN_Pre-processing_Mirror",
+    }
+
     # Plot segment-wise performance
     colors = color_palette("tab10", len(sorted_versions))
     markers = ["o", "s", "D", "^", "v", "P", "X", "*", "h", "H", "p", "d", "8", ">", "<"]
     plt.figure(figsize=(10, 6))
     for idx, version in enumerate(sorted_versions):
+        label = legend_labels.get(version, version)
+        if label.startswith("DXI_"):
+            label = label[len("DXI_") :]
         seg_vals = all_version_metrics[version]
         means = [np.nanmean(seg_vals[str(t)]) for t in thresholds]
         stds = [np.nanstd(seg_vals[str(t)]) for t in thresholds]
@@ -103,7 +117,7 @@ if __name__ == "__main__":
             thresholds,
             means,
             yerr=stds,
-            label=version,
+            label=label,
             marker=markers[idx % len(markers)],
             markersize=4,
             linewidth=1.0,
@@ -112,11 +126,42 @@ if __name__ == "__main__":
         )
     plt.xlabel("Segmentation Threshold")
     plt.ylabel("Weighted F1 Score")
-    plt.title("Segment-wise F1 Scores Across Thresholds")
+    plt.title("Segment-wise F1 Scores Comparison (Dataset: DXI)")
     plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend(loc="best", fontsize=8, title="Smooth Loss")
+    plt.legend(loc="best", fontsize=8)
     plt.tight_layout()
-    out_file_seg = os.path.join(result_root, "DXI_smooth_segmentwise.png")
-    plt.savefig(out_file_seg, dpi=300)
+    out_file_seg = os.path.join(result_root, "compare_smooth_DXI.pdf")
+    plt.savefig(out_file_seg, format="pdf", dpi=300)
     plt.close()
     print(f"Saved sorted segment-wise F1 plot: {out_file_seg}")
+
+    # --- Save data for table in LaTeX ---
+    table_data = {}
+    for version in sorted_versions:
+        label = legend_labels.get(version, version)
+        if label.startswith("DXI_"):
+            label = label[len("DXI_") :]
+        seg_vals = all_version_metrics[version]
+        # Segment-wise stats
+        seg_stats = {
+            str(t): {
+                "mean": round(float(np.nanmean(seg_vals[str(t)])), 4),
+                "std": round(float(np.nanstd(seg_vals[str(t)])), 4),
+            }
+            for t in thresholds
+        }
+        # Sample-wise stats
+        sample_vals = all_version_sample_metrics[version]
+        sample_stats = {
+            "mean": round(float(np.nanmean(sample_vals)), 4),
+            "std": round(float(np.nanstd(sample_vals)), 4),
+        }
+        table_data[label] = {
+            "segment": seg_stats,
+            "sample": sample_stats,
+        }
+
+    json_out_path = os.path.join(result_root, "compare_smooth_DXI_table.json")
+    with open(json_out_path, "w") as f:
+        json.dump(table_data, f, indent=4)
+    print(f"Saved F1 statistics for LaTeX table: {json_out_path}")

@@ -7,11 +7,11 @@ script_path = "train.py"
 # Datasets:        "DXI", "DXII", "FDI", "FDII"
 # Models:          "CNN_LSTM", "TCN", "MSTCN", "ResNet_MLP", "ResNet_BiLSTM", "ResNetBiLSTM_FTFull", "ResNetBiLSTM_FTHead"
 # Augmentations:   "None", "AM", "AP", "AR", "AS", "DM"
-# Smoothing types: "MSE", "L1", "HUBER", "JS", "TV", "SEC_DIFF", "EMD"
+# Smoothing types: "MSE", "L1", "HUBER", "JS", "TV", "SEC_DIFF", "EMD", "None"
 
 # Define only the combinations you want to run
 combinations = [
-    {"dataset": "DXI", "model": "MSTCN", "augmentation": "None", "smoothing": "L1"},
+    {"dataset": "FDI", "model": "MSTCN", "augmentation": "None", "smoothing": "None"},
     # Add more specific combos here
 ]
 

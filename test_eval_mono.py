@@ -6,7 +6,7 @@ IMU Test Evaluation Script (Binary Case)
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-02
+Edited      : 2025-05-21
 Description : This script evaluates binary segmentation predictions for IMU
               gesture recognition. It:
               1. Compares ground truth vs predicted labels
@@ -20,6 +20,9 @@ Description : This script evaluates binary segmentation predictions for IMU
 import numpy as np
 import matplotlib.pyplot as plt
 from components.evaluation import segment_evaluation
+import matplotlib as mpl
+
+mpl.rcParams.update({"font.size": 16})  # Update default font size
 
 # Ground Truth sequence
 # fmt: off
@@ -48,17 +51,18 @@ pred = np.array([
 # Plot the sequences
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
 
+
 # Plot ground truth
 ax1.step(range(len(gt)), gt, where="post", label="Ground Truth", color="blue")
-ax1.set_ylabel("State")
+ax1.set_ylabel("Label")
 ax1.set_ylim(-0.1, 1.1)
 ax1.legend()
 ax1.set_title("Ground Truth")
 
 # Plot prediction
 ax2.step(range(len(pred)), pred, where="post", label="Prediction", color="red")
-ax2.set_xlabel("Time")
-ax2.set_ylabel("State")
+ax2.set_xlabel("Sample")
+ax2.set_ylabel("Label")
 ax2.set_ylim(-0.1, 1.1)
 ax2.legend()
 ax2.set_title("Prediction")
@@ -74,12 +78,13 @@ situations = [
     "Mismatch",
 ]
 for i, situation in enumerate(situations):
-    ax1.text(i * 7 + 3, 1.15, situation, ha="center", va="center", rotation=45)
-    ax2.text(i * 7 + 3, -0.15, situation, ha="center", va="center", rotation=45)
+    # ax1.text(i * 7 + 3, -0.04, situation, ha="center", va="center", rotation=0)
+    ax2.text(i * 7 + 3, -0.05, situation, ha="center", va="center", rotation=0)
 
 plt.suptitle(f"Ground Truth vs Prediction")
 plt.tight_layout()
-plt.show()
+# plt.show()
+plt.savefig("plots/eva1.pdf", format="pdf", dpi=300)
 
 # Calculate F1 score sample-wise
 tp = np.sum(np.logical_and(pred == 1, gt == 1))
