@@ -11,7 +11,7 @@ script_path = "train.py"
 
 # Define only the combinations you want to run
 combinations = [
-    {"dataset": "DXI", "model": "ResNet_MLP", "augmentation": "None", "smoothing": "L1"},
+    {"dataset": "DXI", "model": "MSTCN", "augmentation": "None", "smoothing": "L1"},
     # Add more specific combos here
 ]
 

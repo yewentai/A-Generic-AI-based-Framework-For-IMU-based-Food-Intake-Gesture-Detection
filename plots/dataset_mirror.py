@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
 import matplotlib.patches as patches
 
 
@@ -48,37 +47,6 @@ def draw_arrow(ax, start, end, text=None, double=False, color="black"):
     if text:
         ax.text((start[0] + end[0]) / 2, (start[1] + end[1]) / 2 + 0.2, text, ha="center", fontsize=8)
 
-
-def draw_triple_arrow(ax, center, width=1.2, height=1.2, color="red", edgecolor="navy"):
-    x, y = center
-    shaft_width = 0.1
-    head_width = 0.15
-    head_length = 0.3
-
-    points = [
-        (x, y + height / 2),  # up tip
-        (x - head_width, y + height / 2 - head_length),
-        (x - shaft_width, y + height / 2 - head_length),
-        (x - shaft_width, y - height / 2 + head_length),
-        (x - head_width, y - height / 2 + head_length),
-        (x, y - height / 2),  # down tip
-        (x + head_width, y - height / 2 + head_length),
-        (x + shaft_width, y - height / 2 + head_length),
-        (x + shaft_width, y - shaft_width),
-        (x + width / 2 - head_length, y - shaft_width),
-        (x + width / 2 - head_length, y - head_width),
-        (x + width / 2, y),  # right tip
-        (x + width / 2 - head_length, y + head_width),
-        (x + width / 2 - head_length, y + shaft_width),
-        (x + shaft_width, y + shaft_width),
-        (x + shaft_width, y + height / 2 - head_length),
-        (x + head_width, y + height / 2 - head_length),
-    ]
-
-    polygon = Polygon(points, closed=True, facecolor=color, edgecolor=edgecolor, linewidth=2)
-    ax.add_patch(polygon)
-
-
 fig, ax = plt.subplots(figsize=(13, 5))
 ax.set_xlim(-1, 18)
 ax.set_ylim(-6, 5)
@@ -111,8 +79,6 @@ ax.text(6.8, 0.2, "Hand mirrored left hand", fontsize=8, ha="center")
 draw_arrow(ax, (3.8, -2), (5.3, -2), color="dodgerblue")
 ax.text(4.5, -1.9, "Mirror", fontsize=8, ha="center")
 
-# Slim triple arrow between right and mirrored
-# draw_triple_arrow(ax, center=(9.4, 0.8), width=1.5, height=1.5, color="dodgerblue")
 draw_arrow(ax, (9.2, 0.65), (10.6, 0.65), color="dodgerblue")
 ax.text(9.8, 0.8, "Concatenate", fontsize=8, ha="center")
 
@@ -124,4 +90,5 @@ draw_time_labels_1(ax, 14.3, 2.3, 4, add_final_gap=True)
 ax.text(14.2, 2.7, "Augmented", fontsize=8, ha="center")
 
 plt.tight_layout()
+# plt.show()
 plt.savefig("plots/dataset_mirror.pdf", format="pdf", dpi=300, bbox_inches="tight")
