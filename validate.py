@@ -48,8 +48,8 @@ DEBUG_PLOT = False
 
 
 if __name__ == "__main__":
-    result_root = "results/mirror/FDI"
-    versions = ["FDI_MSTCN_Augment_Mirror"]
+    result_root = "results/smooth/FDI"
+    versions = ["FDI_MSTCN_S-Post-processing"]
     # versions = [d for d in os.listdir(result_root) if os.path.isdir(os.path.join(result_root, d))]
     versions.sort()
 

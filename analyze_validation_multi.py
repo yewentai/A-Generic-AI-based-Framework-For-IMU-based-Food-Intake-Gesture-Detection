@@ -23,10 +23,10 @@ mpl.rcParams.update({"font.size": 16})  # Update default font size
 
 if __name__ == "__main__":
     # Base directory for results
-    result_root = "results/smooth/DXI"
+    result_root = "results/smooth/FDI"
 
     # Find all version directories
-    # raw_versions = ["DXI_MSTCN", "DXI_MSTCN_Augment_Mirror", "DXI_MSTCN_Dataset_Mirror"]
+    # raw_versions = ["FDI_MSTCN", "FDI_MSTCN_Augment_Mirror", "FDI_MSTCN_Dataset_Mirror"]
     raw_versions = [d for d in sorted(os.listdir(result_root)) if os.path.isdir(os.path.join(result_root, d))]
 
     # Collect metrics per version
@@ -97,19 +97,19 @@ if __name__ == "__main__":
 
     # Map version names to descriptive labels for the legend
     legend_labels = {
-        # "DXI_MSTCN": "No operations",
-        "DXI_MSTCN_Augment_Mirror": "MSTCN_Augmentation_Mirror",
-        "DXI_MSTCN_Dataset_Mirror": "MSTCN_Pre-processing_Mirror",
+        # "FDI_MSTCN": "No operations",
+        "FDI_MSTCN_Augment_Mirror": "MSTCN_Augmentation_Mirror",
+        "FDI_MSTCN_Dataset_Mirror": "MSTCN_Pre-processing_Mirror",
     }
 
     # Plot segment-wise performance
     colors = color_palette("tab10", len(sorted_versions))
     markers = ["o", "s", "D", "^", "v", "P", "X", "*", "h", "H", "p", "d", "8", ">", "<"]
     plt.figure(figsize=(10, 6))
-    for idx, version in enumerate(sorted_versions):
+    for iFD, version in enumerate(sorted_versions):
         label = legend_labels.get(version, version)
-        if label.startswith("DXI_"):
-            label = label[len("DXI_") :]
+        if label.startswith("FDI_"):
+            label = label[len("FDI_") :]
         seg_vals = all_version_metrics[version]
         means = [np.nanmean(seg_vals[str(t)]) for t in thresholds]
         stds = [np.nanstd(seg_vals[str(t)]) for t in thresholds]
@@ -118,19 +118,19 @@ if __name__ == "__main__":
             means,
             yerr=stds,
             label=label,
-            marker=markers[idx % len(markers)],
+            marker=markers[iFD % len(markers)],
             markersize=4,
             linewidth=1.0,
             alpha=0.8,
-            color=colors[idx],
+            color=colors[iFD],
         )
     plt.xlabel("Segmentation Threshold")
     plt.ylabel("Weighted F1 Score")
-    plt.title("Segment-wise F1 Scores Comparison (Dataset: DXI)")
+    plt.title("Segment-wise F1 Scores Comparison (Dataset: FDI)")
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend(loc="best", fontsize=8)
     plt.tight_layout()
-    out_file_seg = os.path.join(result_root, "compare_smooth_DXI.pdf")
+    out_file_seg = os.path.join(result_root, "compare_smooth_FDI.pdf")
     plt.savefig(out_file_seg, format="pdf", dpi=300)
     plt.close()
     print(f"Saved sorted segment-wise F1 plot: {out_file_seg}")
@@ -139,8 +139,8 @@ if __name__ == "__main__":
     table_data = {}
     for version in sorted_versions:
         label = legend_labels.get(version, version)
-        if label.startswith("DXI_"):
-            label = label[len("DXI_") :]
+        if label.startswith("FDI_"):
+            label = label[len("FDI_") :]
         seg_vals = all_version_metrics[version]
         # Segment-wise stats
         seg_stats = {
@@ -161,7 +161,7 @@ if __name__ == "__main__":
             "sample": sample_stats,
         }
 
-    json_out_path = os.path.join(result_root, "compare_smooth_DXI_table.json")
+    json_out_path = os.path.join(result_root, "compare_smooth_FDI_table.json")
     with open(json_out_path, "w") as f:
         json.dump(table_data, f, indent=4)
     print(f"Saved F1 statistics for LaTeX table: {json_out_path}")
