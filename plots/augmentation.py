@@ -11,7 +11,7 @@ def draw_block(ax, x, y, label, color="steelblue"):
 def draw_column(ax, x, y, labels, color="steelblue", alpha=1.0):
     for i, label in enumerate(labels):
         draw_block(ax, x, y - i * 0.6, label, color)
-    for p in ax.patches[-len(labels):]:
+    for p in ax.patches[-len(labels) :]:
         p.set_alpha(alpha)
 
 
@@ -31,11 +31,13 @@ def draw_time_labels(ax, x_start, y, steps, add_final_gap=False):
     offset = steps * 0.6 + (0.6 if add_final_gap else 0.0)
     ax.text(x_start + offset + 0.25, y - 3.6, "$t_n$", fontsize=6, ha="center")
 
+
 def draw_time_labels_1(ax, x_start, y, steps, add_final_gap=False):
     for i in range(steps):
         ax.text(x_start + i * 0.6 + 0.25, y - 3.6, f"$t_{{{i}}}$", fontsize=6, ha="center")
     offset = steps * 0.6 + (0.6 if add_final_gap else 0.0)
     ax.text(x_start + offset + 0.25, y - 3.6, "$t_m$", fontsize=6, ha="center")
+
 
 def draw_time_labels_2(ax, x_start, y, steps, add_final_gap=False):
     for i in range(steps):
@@ -59,7 +61,7 @@ ax.set_ylim(-6, 5)
 ax.axis("off")
 
 imu_labels = [r"$a_x$", r"$a_y$", r"$a_z$", r"$g_x$", r"$g_y$", r"$g_z$"]
-mirrored_labels = [r"$-a_x$", r"$a_y$", r"$a_z$", r"$g_x$", r"$-g_y$", r"$-g_z$"]
+mirrored_labels = [r"$a_x'$", r"$a_y'$", r"$a_z'$", r"$g_x'$", r"$g_y'$", r"$g_z'$"]
 
 # Original sequence
 draw_sequence(ax, 0, 4, imu_labels, n_steps=4, color="steelblue", add_dots=True, add_final_gap=True)
@@ -68,7 +70,7 @@ ax.text(1.7, 4.7, "Original sequence", fontsize=8, ha="center")
 
 # Arrow between original and sampled
 draw_arrow(ax, (1.7, 0.5), (1.7, 0), color="dodgerblue")
-ax.text(2.2, 0.2, "Sampling", fontsize=8, ha="center")
+ax.text(2.2, 0.2, "Sample", fontsize=8, ha="center")
 
 # Sampled sequence
 draw_sequence(ax, 0.5, -0.5, imu_labels, n_steps=2, color="steelblue", add_dots=True, add_final_gap=True)
@@ -81,10 +83,10 @@ draw_time_labels_1(ax, 6, -0.2, 2, add_final_gap=True)
 ax.text(7.2, -4.2, "Augmented samples", fontsize=8, ha="center")
 
 # Arrow between sampled and augmented
-draw_arrow(ax, (3.1, -2), (5.7, -2), color="dodgerblue", text="Augmentation")
-ax.text(4.4, -2.5, "Hand mirroring/", fontsize=7, ha="center")
-ax.text(4.4, -2.9, "Axis permutation/", fontsize=7, ha="center")
-ax.text(4.4, -3.3, "Planar rotation", fontsize=7, ha="center")
+draw_arrow(ax, (3.1, -2), (5.7, -2), color="dodgerblue", text="Augment")
+ax.text(4.4, -2.5, "Hand mirror/", fontsize=7, ha="center")
+ax.text(4.4, -2.9, "Axis permutate/", fontsize=7, ha="center")
+ax.text(4.4, -3.3, "Planar rotate", fontsize=7, ha="center")
 
 # Original sequence (full again)
 draw_sequence(ax, 5.5, 4, imu_labels, n_steps=4, color="steelblue", add_dots=True, add_final_gap=True)
