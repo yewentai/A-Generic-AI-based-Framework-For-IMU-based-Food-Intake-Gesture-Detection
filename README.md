@@ -70,6 +70,7 @@ The objective of this thesis is to design a generic AI-based framework to proces
 
 ## Repository Structure
 
+```sh
 .
 ├── LICENSE                     # License information
 ├── README.md                   # Project documentation (this file)
@@ -111,6 +112,7 @@ The objective of this thesis is to design a generic AI-based framework to proces
 ├── tl_pre_train_vae.py         # VAE pre-training script
 ├── tl_validate_finetune.py     # Transfer learning validation script
 └── update_edited_date.py       # Utility for updating file dates
+```
 
 ### Key Components
 
@@ -137,10 +139,10 @@ The objective of this thesis is to design a generic AI-based framework to proces
 
 3. Training Options:
 
-  ```sh
-  python batch_train_comb.py
-  python batch_train_iter.py
-  ```
+   ```sh
+   python batch_train_comb.py
+   python batch_train_iter.py
+   ```
 
 4. Evaluation:
 
