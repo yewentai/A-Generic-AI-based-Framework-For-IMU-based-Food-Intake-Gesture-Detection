@@ -6,18 +6,23 @@ IMU Training Result Comparison Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-21
-Description : Plot segment-wise F1 scores at different thresholds for specified
-              versions and evaluation modes. Used for direct comparison.
+Edited      : 2025-05-24
+Description : This script compares segment-wise F1 scores at different segmentation
+              thresholds for specified model versions and evaluation modes. It:
+                1. Loads validation results for each version and mode
+                2. Plots mean and standard deviation of F1 scores across folds
+                3. Outputs comparison plots and summary statistics for LaTeX tables
+              Used for direct visual and quantitative comparison of model performance
+              under different augmentation or evaluation settings.
 ===============================================================================
 """
 
-import os
 import json
-import numpy as np
-import matplotlib.pyplot as plt
-from seaborn import color_palette
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from seaborn import color_palette
 
 mpl.rcParams.update({"font.size": 16})  # Update default font size
 

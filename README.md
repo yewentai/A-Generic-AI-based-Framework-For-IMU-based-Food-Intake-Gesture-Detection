@@ -59,6 +59,10 @@ This project utilizes three distinct datasets for training and evaluation:
      - Baseline F1 (video CNN-LSTM): 0.853
    - Institutional review board approved (H-2017-0208)
 
+   dataset is available at [OREBA Dataset](https://oreba.cs.ox.ac.uk/).
+
+   the pre-trained model is available at [OREBA Pre-trained Model]
+
 Each dataset contributes unique characteristics to the research, allowing for comprehensive evaluation of the proposed framework across different scenarios and use cases.
 
 ### Thesis Objective

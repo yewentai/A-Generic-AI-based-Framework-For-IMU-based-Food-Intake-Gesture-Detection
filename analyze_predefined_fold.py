@@ -2,22 +2,23 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================================
-Event-based Segmentation GAN Training Script
+FD-I Dataset Fold-wise Label Distribution Analysis
 ------------------------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-12
-Description : This script analyzes the fold-wise and global label distributions in the FD-I
-              dataset used for event-based IMU segmentation. It loads preprocessed label data
-              for both left and right hands, applies predefined validation folds, and computes
-              detailed statistics on sample counts and class distributions across folds.
+Edited      : 2025-05-24
+Description : This script analyzes the label distributions in the FD-I dataset for event-based
+              IMU segmentation. It loads preprocessed label data for both left and right hands,
+              applies predefined validation folds, and computes detailed statistics on sample
+              counts and class distributions for each fold and globally. The output helps assess
+              the balance and representativeness of validation splits for model evaluation.
 ================================================================================================
 """
 
-
+import numpy as np
 import os
 import pickle
-import numpy as np
+
 from components.datasets import load_predefined_validate_folds
 
 # Dataset Configuration

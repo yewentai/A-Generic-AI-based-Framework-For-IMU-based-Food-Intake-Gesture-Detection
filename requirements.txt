@@ -3,3 +3,4 @@ torch
 scipy
 matplotlib
 tqdm
+tabulate

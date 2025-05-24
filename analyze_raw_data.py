@@ -6,23 +6,27 @@ IMU Raw Data Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-21
-Description : This script analyzes raw IMU data from various datasets, performing:
-              1. Subject-wise and per-label statistics and segment analysis
-              2. Timeline visualization for activity labels across subjects
-              3. Histogram plots of segment lengths for key labels
-              4. Extraction and visualization of shortest and longest gesture segments
-              5. Compatibility with combined or separate left/right IMU data formats
+Edited      : 2025-05-24
+Description : This script provides comprehensive analysis and visualization tools
+              for raw IMU data across multiple datasets. Key functionalities include:
+                1. Computing subject-wise and per-label statistics, including segment counts
+                2. Visualizing activity label timelines for all subjects
+                3. Plotting histograms of segment lengths for each activity label
+                4. Extracting and visualizing the shortest and longest gesture segments
+                5. Supporting both combined and separate left/right IMU data formats
+              The outputs facilitate understanding of dataset structure, label balance,
+              and gesture characteristics for downstream modeling and evaluation.
 ===============================================================================
 """
 
 
 import os
 import pickle
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
+
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import Patch
 
 # Configuration
 DATASET = "FDI"  # Options: "DXI", "DXII", "FDI", "FDII", "FDIII", "Clemson", "Oreba"

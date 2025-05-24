@@ -6,19 +6,23 @@ IMU Training Result Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-20
-Description : This script analyzes training results:
-              1. Comparative analysis of segment-wise and sample-wise metrics
-              2. Support for multiple validation modes (original, mirrored, rotated)
-              3. Per-class performance analysis
-              4. Cross-validation fold analysis
+Edited      : 2025-05-24
+Description : This script analyzes IMU segmentation training results for a single
+              model version. Main functionalities include:
+                1. Comparative analysis of segment-wise and sample-wise metrics
+                2. Support for multiple validation modes (e.g., original, mirrored, rotated)
+                3. Per-class and per-fold performance analysis
+                4. Visualization of F1 scores across cross-validation folds
+              The outputs help assess model performance and the effect of different
+              validation strategies for a given experiment.
 ===============================================================================
 """
 
-import os
 import json
-import numpy as np
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
 from seaborn import color_palette
 
 if __name__ == "__main__":

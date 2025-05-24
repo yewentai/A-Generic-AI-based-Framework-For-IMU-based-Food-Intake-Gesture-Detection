@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+"""
+===============================================================================
+IMU Segmentation Batch Training Launcher
+-------------------------------------------------------------------------------
+Author      : Joseph Yep
+Email       : yewentai126@gmail.com
+Edited      : 2025-05-24
+Description : This script automates batch training for IMU segmentation experiments.
+              It allows specification of dataset, model, augmentation, and smoothing
+              combinations to run multiple experiments sequentially. Each configuration
+              is executed by calling train.py with the appropriate arguments.
+===============================================================================
+"""
+
 import subprocess
 
 script_path = "train.py"

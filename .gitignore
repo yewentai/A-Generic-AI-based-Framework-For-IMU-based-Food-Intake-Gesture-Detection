@@ -9,7 +9,6 @@ __pycache__/
 
 # folders
 analysis/
-failed/
 dataset/
 results/
 logs_hpc/

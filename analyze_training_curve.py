@@ -6,18 +6,20 @@ IMU Training Loss Curve Plotter
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-13
-Description : This script plots fold-wise training loss curves (total, cross-entropy,
-              and smooth losses) for a specified experiment version. It loads training
-              statistics from a .npy file and generates log-scale plots for visual
-              inspection of training behavior across epochs.
+Edited      : 2025-05-24
+Description : This script visualizes and summarizes training loss statistics for
+              IMU segmentation experiments. It provides:
+                1. Fold-wise training loss curve plots (total, cross-entropy, smooth loss)
+                2. Log-scale visualization of loss trends across epochs
+                3. Quantitative summary comparing cross-entropy and smooth loss across versions
+              The script loads per-version training statistics from .npy files and
+              outputs plots and tabulated summaries to facilitate model evaluation.
 ===============================================================================
 """
-
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from tabulate import tabulate  # make sure to install with: pip install tabulate
+from tabulate import tabulate
 
 
 def plot_loss_curves(result_root):

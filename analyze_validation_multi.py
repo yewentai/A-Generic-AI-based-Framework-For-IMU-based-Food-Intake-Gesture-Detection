@@ -2,22 +2,30 @@
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-IMU Training Result Analysis Script
+IMU Validation Result Multi-Version Analysis Script
 -------------------------------------------------------------------------------
 Author      : Joseph Yep
 Email       : yewentai126@gmail.com
-Edited      : 2025-05-21
-Description : Plot segment-wise F1 scores at different thresholds for all versions
-              with legend sorted by average F1 score.
+Edited      : 2025-05-24
+Description : This script analyzes and compares segment-wise F1 scores at different
+              segmentation thresholds for all model versions in a given results
+              directory. It:
+                1. Loads validation results for each version
+                2. Plots mean and standard deviation of segment-wise F1 scores across folds
+                3. Sorts the legend by average F1 score for clear comparison
+                4. Saves summary statistics for LaTeX tables, including sample-wise F1
+              Useful for benchmarking and visualizing the effect of different
+              augmentation or training strategies across multiple model versions.
 ===============================================================================
 """
 
-import os
 import json
-import numpy as np
-import matplotlib.pyplot as plt
-from seaborn import color_palette
+import os
+
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+from seaborn import color_palette
 
 mpl.rcParams.update({"font.size": 16})  # Update default font size
 
