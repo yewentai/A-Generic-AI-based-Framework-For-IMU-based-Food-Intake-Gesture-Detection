@@ -32,6 +32,8 @@ This project utilizes three distinct datasets for training and evaluation:
    - Sampling frequency: 64 Hz
    - Binary classification: drinking gestures (1) vs. null activities (0)
 
+   - The dataset is available at [DX Dataset](https://rdr.kuleuven.be/dataset.xhtml?persistentId=doi:10.48804/W0H2A4).
+
 2. **FD Dataset**
    - A comprehensive dataset containing IMU data from both left and right hands
    - Includes three variants:
@@ -49,19 +51,11 @@ This project utilizes three distinct datasets for training and evaluation:
    - Sampling frequency: 64 Hz
    - Ternary classification: eating gestures (1), drinking gestures (2), and others (0)
 
-3. **OREBA Dataset**
-   - Objectively Recognizing Eating Behavior and Associated Intake
-   - Used OREBA-DIS sub-corpus in this work:
-     - 100 participants (up to 4 per table)
-     - Discrete-dish meals: lasagna, bread, yoghurt, water, butter
-     - 6,786 intake gestures
-     - Video @ 24 fps, IMU @ 64 Hz (both hands)
-     - Baseline F1 (video CNN-LSTM): 0.853
-   - Institutional review board approved (H-2017-0208)
+   - The dataset is available at [FD Dataset](https://rdr.kuleuven.be/dataset.xhtml?persistentId=doi:10.48804/CN8VBB).
 
-   dataset is available at [OREBA Dataset](https://oreba.cs.ox.ac.uk/).
+3. **UK Biobank Pre-trained Model**
 
-   the pre-trained model is available at [OREBA Pre-trained Model]
+   - the pre-trained model is available at [UK Biobank Pre-trained Model](https://github.com/OxWearables/ssl-wearables/tree/main/model_check_point).
 
 Each dataset contributes unique characteristics to the research, allowing for comprehensive evaluation of the proposed framework across different scenarios and use cases.
 
@@ -76,51 +70,47 @@ The objective of this thesis is to design a generic AI-based framework to proces
 
 ## Repository Structure
 
-```sh
 .
 ├── LICENSE                     # License information
 ├── README.md                   # Project documentation (this file)
 ├── requirements.txt            # Python dependencies
-├── .gitignore                 # Git ignore rules
-├── components/                # Core components and utilities
-├── analysis/                  # Analysis scripts and tools
-├── dataset/                   # Contains the datasets used in the project
-│   ├── DX/                    # Dataset variant DX
-│   │   ├── 00_ReadMe.txt      # Description of DX dataset
-│   │   ├── DX-I/              # DX-I dataset
-│   │   │   ├── X_L.pkl        # IMU data for left hand
-│   │   │   ├── X_R.pkl        # IMU data for right hand
-│   │   │   ├── Y_L.pkl        # Labels for left hand
-│   │   │   ├── Y_R.pkl        # Labels for right hand
-│   │   └── DX-II/             # DX-II dataset
-│   ├── FD/                    # Dataset variant FD
-│   │   ├── 00_ReadMe.txt      # Description of FD dataset
-│   │   ├── FD-I/              # FD-I dataset
-│   │   ├── FD-II/             # FD-II dataset
-│   │   └── MO/                # MO dataset
-├── logs/                      # Log files from model training runs
-├── result/                    # Directory to store results
-├── slurm_a100.sh              # SLURM script for training on A100 GPU
-├── slurm_h100.sh              # SLURM script for training on H100 GPU
-├── sync.ffs_db                # Synchronization metadata
-
-# Analysis and Training Scripts
-├── analyze_predefined_fold.py # Script for analyzing predefined folds
-├── analyze_raw_data.py        # Script for analyzing raw IMU data
-├── analyze_training_curve.py  # Script for analyzing training curves
-├── clean.py                   # Data cleaning utilities
-├── dl_analyze.py              # Deep learning analysis utilities
-├── dl_train.py                # Deep learning training script
-├── dl_validate.py             # Deep learning validation script
-├── test_dataset.py            # Dataset testing utilities
-├── test_eval_mono.py          # Evaluation script for monocular data
-├── test_eval_tri.py           # Evaluation script for ternary classification
-├── tl_fine_tune.py            # Transfer learning fine-tuning script
-├── tl_pre_train_simclr.py     # SimCLR pre-training script
-├── tl_pre_train_vae.py        # VAE pre-training script
-├── tl_validate_finetune.py    # Transfer learning validation script
-├── update_edited_date.py      # Utility for updating file dates
-```
+├── .gitignore                  # Git ignore rules
+├── components/                 # Core components and utilities
+├── analysis/                   # Analysis scripts and tools
+├── dataset/                    # Contains the datasets used in the project
+│   ├── DX/                     # Dataset variant DX
+│   │   ├── 00_ReadMe.txt       # Description of DX dataset
+│   │   ├── DX-I/               # DX-I dataset
+│   │   │   ├── X_L.pkl         # IMU data for left hand
+│   │   │   ├── X_R.pkl         # IMU data for right hand
+│   │   │   ├── Y_L.pkl         # Labels for left hand
+│   │   │   └── Y_R.pkl         # Labels for right hand
+│   │   └── DX-II/              # DX-II dataset
+│   ├── FD/                     # Dataset variant FD
+│   │   ├── 00_ReadMe.txt       # Description of FD dataset
+│   │   ├── FD-I/               # FD-I dataset
+│   │   ├── FD-II/              # FD-II dataset
+│   │   └── MO/                 # MO dataset
+├── logs/                       # Log files from model training runs
+├── result/                     # Directory to store results
+├── slurm_a100.sh               # SLURM script for training on A100 GPU
+├── slurm_h100.sh               # SLURM script for training on H100 GPU
+├── sync.ffs_db                 # Synchronization metadata
+├── analyze_predefined_fold.py  # Script for analyzing predefined folds
+├── analyze_raw_data.py         # Script for analyzing raw IMU data
+├── analyze_training_curve.py   # Script for analyzing training curves
+├── clean.py                    # Data cleaning utilities
+├── dl_analyze.py               # Deep learning analysis utilities
+├── dl_train.py                 # Deep learning training script
+├── dl_validate.py              # Deep learning validation script
+├── test_dataset.py             # Dataset testing utilities
+├── test_eval_mono.py           # Evaluation script for monocular data
+├── test_eval_tri.py            # Evaluation script for ternary classification
+├── tl_fine_tune.py             # Transfer learning fine-tuning script
+├── tl_pre_train_simclr.py      # SimCLR pre-training script
+├── tl_pre_train_vae.py         # VAE pre-training script
+├── tl_validate_finetune.py     # Transfer learning validation script
+└── update_edited_date.py       # Utility for updating file dates
 
 ### Key Components
 
@@ -136,8 +126,7 @@ The objective of this thesis is to design a generic AI-based framework to proces
 1. Clone the repository:
 
    ```sh
-   git clone https://github.com/your-repo-link.git
-   cd your-repo-link
+   git clone https://github.com/yewentai/A-Generic-AI-based-Framework-For-IMU-based-Food-Intake-Gesture-Detection
    ```
 
 2. Install dependencies:
@@ -148,22 +137,21 @@ The objective of this thesis is to design a generic AI-based framework to proces
 
 3. Training Options:
 
-   - For deep learning training:
-
-     ```sh
-     python dl_train.py
-     ```
-
-   - For transfer learning:
-
-     ```sh
-     python tl_pre_train_simclr.py  # Pre-train with SimCLR
-     python tl_fine_tune.py         # Fine-tune the model
-     ```
+  ```sh
+  python batch_train_comb.py
+  python batch_train_iter.py
+  ```
 
 4. Evaluation:
 
    ```sh
-   python dl_validate.py           # Validate deep learning models
-   python tl_validate_finetune.py  # Validate transfer learning models
+   python validate.py
    ```
+
+5. Analysis:
+
+   ```sh
+    python analyze_validation_cross.py
+    python analyze_validation_multi.py
+    python analyze_validation_solo.py
+    ```
